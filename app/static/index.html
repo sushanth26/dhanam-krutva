@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dhanam Krutva</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="topbar">
+        <div>
+          <p class="eyebrow">Webull connection lab</p>
+          <h1>Dhanam Krutva</h1>
+        </div>
+        <button id="refresh" type="button">Refresh</button>
+      </section>
+
+      <section class="status-grid">
+        <article class="panel">
+          <span>Configuration</span>
+          <strong id="configured">Checking</strong>
+        </article>
+        <article class="panel">
+          <span>Environment</span>
+          <strong id="environment">-</strong>
+          <em id="data-mode" class="mode-badge">-</em>
+        </article>
+        <article class="panel">
+          <span>Endpoint</span>
+          <strong id="endpoint">-</strong>
+        </article>
+      </section>
+
+      <section class="workspace">
+        <aside class="sidebar">
+          <div class="section-heading">
+            <h2>Accounts</h2>
+            <span id="account-count">0</span>
+          </div>
+          <div id="accounts" class="account-list"></div>
+        </aside>
+
+        <section class="content">
+          <div class="section-heading">
+            <h2>Strategy Console</h2>
+            <span id="selected-account">No account selected</span>
+          </div>
+
+          <div id="alert" class="alert hidden"></div>
+          <p class="muted">Account values, positions, and orders are hidden. Use the dry-run scanner below to evaluate strategy signals without placing trades.</p>
+        </section>
+      </section>
+
+      <section class="strategy-panel">
+        <div class="section-heading">
+          <div>
+            <h2>Ready To Trade</h2>
+            <p class="muted">10m EMA clouds 5/12 above 34/50, pullback touch into 34/50 cloud, 1 share per trade, max 3 trades/day.</p>
+          </div>
+          <button id="scan-strategy" type="button">Scan Watchlist</button>
+        </div>
+
+        <div id="strategy-alert" class="alert hidden"></div>
+
+        <div class="metric-grid">
+          <article class="metric">
+            <span>Mode</span>
+            <strong>Dry Run</strong>
+          </article>
+          <article class="metric">
+            <span>Watchlist</span>
+            <strong id="strategy-symbols">34</strong>
+          </article>
+          <article class="metric">
+            <span>Signals</span>
+            <strong id="strategy-signals">-</strong>
+          </article>
+          <article class="metric">
+            <span>Status</span>
+            <strong id="strategy-status">Not scanned</strong>
+          </article>
+          <article class="metric">
+            <span>Auto Scan</span>
+            <strong id="strategy-auto">Every 2 min</strong>
+          </article>
+        </div>
+
+        <div id="strategy-results" class="orders-table"></div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
