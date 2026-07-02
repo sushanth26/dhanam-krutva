@@ -28,6 +28,35 @@ For Webull UAT testing, Webull publishes shared test credentials in the official
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
+## Railway Personal Deploy
+
+This app is safe to start as a personal Railway deploy because Webull credentials
+stay server-side and the browser only calls this FastAPI backend.
+
+1. Create a Railway project from this GitHub repo.
+2. Add a persistent volume mounted at `/data` if you want the Webull SDK token
+   cache to survive restarts.
+3. Set these Railway variables:
+
+```text
+WEBULL_APP_KEY=...
+WEBULL_APP_SECRET=...
+WEBULL_ENV=prod
+WEBULL_REGION=us
+WEBULL_TOKEN_DIR=/data/.webull-token
+APP_USERNAME=sushanth
+APP_PASSWORD=<strong private password>
+```
+
+Railway will use `Procfile` to run:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+The `/health` endpoint is intentionally public for Railway health checks. All
+other routes are protected with HTTP Basic Auth when `APP_PASSWORD` is set.
+
 ## What It Checks
 
 - SDK client initialization and Webull authentication.
@@ -39,4 +68,6 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
 - Credentials stay on the server and are never sent to the browser.
 - `.env`, SDK token cache, virtualenvs, and Webull SDK logs are ignored by Git.
-- Trading endpoints are not exposed in this version.
+- Set `APP_PASSWORD` before deploying publicly.
+- Trading endpoints are still server-side and should only be used behind your
+  private app login.

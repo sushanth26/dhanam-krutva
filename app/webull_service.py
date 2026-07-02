@@ -33,6 +33,7 @@ class WebullService:
             "region": self.settings.region,
             "endpoint": self.settings.endpoint,
             "data_mode": "live" if self.settings.environment == "prod" else "test",
+            "auth_enabled": self.settings.auth_enabled,
         }
 
     def account_list(self) -> dict[str, Any]:

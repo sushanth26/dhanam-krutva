@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
+import base64
+import secrets
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from webull.data.common.category import Category
@@ -53,9 +55,30 @@ def service() -> WebullService:
     return WebullService(get_settings())
 
 
+@app.middleware("http")
+async def require_app_auth(request: Request, call_next):
+    settings = get_settings()
+    if not settings.auth_enabled or request.url.path == "/health":
+        return await call_next(request)
+
+    if is_authorized(request, settings.app_username, settings.app_password or ""):
+        return await call_next(request)
+
+    return JSONResponse(
+        {"detail": "Authentication required."},
+        status_code=401,
+        headers={"WWW-Authenticate": 'Basic realm="Dhanam Krutva"'},
+    )
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse("app/static/index.html")
+
+
+@app.get("/health")
+def health():
+    return {"ok": True}
 
 
 @app.get("/api/status")
@@ -197,6 +220,24 @@ def parse_symbols(symbols: str) -> list[str]:
     if len(selected_symbols) > 25:
         raise HTTPException(status_code=400, detail="Use 25 symbols or fewer.")
     return selected_symbols
+
+
+def is_authorized(request: Request, username: str, password: str) -> bool:
+    authorization = request.headers.get("authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "basic" or not token:
+        return False
+    try:
+        decoded = base64.b64decode(token).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return False
+    supplied_username, separator, supplied_password = decoded.partition(":")
+    if not separator:
+        return False
+    return secrets.compare_digest(supplied_username, username) and secrets.compare_digest(
+        supplied_password,
+        password,
+    )
 
 
 def batch_bar_map(data: Any) -> dict[str, list[Any]]:
