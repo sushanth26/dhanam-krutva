@@ -56,7 +56,14 @@ class WebullService:
             )
         )
 
-    def history_bars(self, symbol: str, category: str, timespan: str, count: str = "200") -> dict[str, Any]:
+    def history_bars(
+        self,
+        symbol: str,
+        category: str,
+        timespan: str,
+        count: str = "200",
+        trading_sessions: list[str] | str | None = None,
+    ) -> dict[str, Any]:
         return self._call(
             lambda: self._market_data_client().market_data.get_history_bar(
                 symbol=symbol,
@@ -64,7 +71,27 @@ class WebullService:
                 timespan=timespan,
                 count=count,
                 real_time_required=True,
-                trading_sessions=["RTH"],
+                trading_sessions=trading_sessions or ["RTH"],
+            )
+        )
+
+    def batch_history_bars(
+        self,
+        symbols: list[str],
+        category: str,
+        timespan: str,
+        count: str = "200",
+        real_time_required: bool | None = True,
+        trading_sessions: list[str] | str | None = None,
+    ) -> dict[str, Any]:
+        return self._call(
+            lambda: self._market_data_client().market_data.get_batch_history_bar(
+                symbols=symbols,
+                category=category,
+                timespan=timespan,
+                count=count,
+                real_time_required=real_time_required,
+                trading_sessions=trading_sessions or ["RTH"],
             )
         )
 
@@ -77,6 +104,41 @@ class WebullService:
                 overnight_required=False,
             )
         )
+
+    def market_quote(self, symbol: str, category: str) -> dict[str, Any]:
+        return self._call(
+            lambda: self._market_data_client().market_data.get_quotes(
+                symbol=symbol,
+                category=category,
+                depth=1,
+                overnight_required=False,
+            )
+        )
+
+    def live_quote(self, symbol: str, category: str) -> dict[str, Any]:
+        symbol = symbol.strip().upper()
+        snapshot = self.market_snapshot(symbol, category)
+        quote = self.market_quote(symbol, category)
+        snapshot_item = self._first_mapping(snapshot.get("data"))
+        quote_item = quote.get("data") if isinstance(quote.get("data"), dict) else None
+
+        return {
+            "ok": bool(snapshot.get("ok")),
+            "symbol": symbol,
+            "source": "webull",
+            "category": category,
+            "price": self._snapshot_price(snapshot_item),
+            "bid": self._first_depth_price(quote_item, "bids") or self._to_float(snapshot_item.get("bid") if snapshot_item else None),
+            "bid_size": self._first_depth_size(quote_item, "bids") or self._to_float(snapshot_item.get("bid_size") if snapshot_item else None),
+            "ask": self._first_depth_price(quote_item, "asks") or self._to_float(snapshot_item.get("ask") if snapshot_item else None),
+            "ask_size": self._first_depth_size(quote_item, "asks") or self._to_float(snapshot_item.get("ask_size") if snapshot_item else None),
+            "last_trade_time": self._parse_epoch_ms(snapshot_item.get("last_trade_time") if snapshot_item else None),
+            "quote_time": self._parse_epoch_ms(
+                (quote_item or {}).get("quote_time") or (snapshot_item or {}).get("quote_time")
+            ),
+            "snapshot": snapshot,
+            "quote": quote,
+        }
 
     def buy_one_market_order(self, account_id: str, symbol: str) -> dict[str, Any]:
         symbol = symbol.strip().upper()
@@ -250,6 +312,39 @@ class WebullService:
                 if parsed is not None:
                     return parsed
         return None
+
+    @classmethod
+    def _first_mapping(cls, data: Any) -> dict[str, Any] | None:
+        if isinstance(data, dict):
+            return data
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    return item
+        return None
+
+    @classmethod
+    def _first_depth_price(cls, data: dict[str, Any] | None, side: str) -> float | None:
+        levels = data.get(side) if data else None
+        if isinstance(levels, list) and levels and isinstance(levels[0], dict):
+            return cls._to_float(levels[0].get("price"))
+        return None
+
+    @classmethod
+    def _first_depth_size(cls, data: dict[str, Any] | None, side: str) -> float | None:
+        levels = data.get(side) if data else None
+        if isinstance(levels, list) and levels and isinstance(levels[0], dict):
+            return cls._to_float(levels[0].get("size"))
+        return None
+
+    @staticmethod
+    def _parse_epoch_ms(value: Any) -> str | None:
+        parsed = WebullService._to_float(value)
+        if parsed is None:
+            return str(value) if value else None
+        if parsed > 10_000_000_000:
+            parsed = parsed / 1000
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(parsed))
 
     @staticmethod
     def _to_float(value: Any) -> float | None:

@@ -4,44 +4,50 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dhanam Krutva</title>
-    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260702-mtf-alert-demo" />
   </head>
   <body>
+    <div id="mtf-toast" class="mtf-toast hidden" aria-live="polite"></div>
     <main class="shell">
-      <section class="topbar">
-        <div>
-          <p class="eyebrow">Webull connection lab</p>
-          <h1>Dhanam Krutva</h1>
-        </div>
-        <button id="refresh" type="button">Refresh</button>
-      </section>
-
-      <section class="status-grid">
-        <article class="panel">
-          <span>Configuration</span>
-          <strong id="configured">Checking</strong>
-        </article>
-        <article class="panel">
-          <span>Environment</span>
-          <strong id="environment">-</strong>
-          <em id="data-mode" class="mode-badge">-</em>
-        </article>
-        <article class="panel">
-          <span>Endpoint</span>
-          <strong id="endpoint">-</strong>
-        </article>
-      </section>
-
-      <section class="workspace">
-        <aside class="sidebar">
-          <div class="section-heading">
-            <h2>Accounts</h2>
-            <span id="account-count">0</span>
+      <header class="app-header">
+        <section class="topbar">
+          <div>
+            <p class="eyebrow">Webull connection lab</p>
+            <h1>Dhanam Krutva</h1>
           </div>
-          <div id="accounts" class="account-list"></div>
-        </aside>
+          <div class="top-actions">
+            <button id="start-live-prices" type="button">Start Webull</button>
+            <button id="stop-live-prices" class="secondary-button" type="button">Stop Webull</button>
+            <button id="refresh" type="button">Refresh</button>
+          </div>
+        </section>
 
-        <section class="content">
+        <section class="header-grid">
+          <article class="panel">
+            <span>Configuration</span>
+            <strong id="configured">Checking</strong>
+          </article>
+          <article class="panel">
+            <span>Environment</span>
+            <strong id="environment">-</strong>
+            <em id="data-mode" class="mode-badge">-</em>
+          </article>
+          <article class="panel">
+            <span>Endpoint</span>
+            <strong id="endpoint">-</strong>
+          </article>
+          <article class="panel header-accounts">
+            <div class="section-heading">
+              <h2>Accounts</h2>
+              <span id="account-count">0</span>
+            </div>
+            <div id="accounts" class="account-list"></div>
+          </article>
+        </section>
+      </header>
+
+      <section class="workspace hidden">
+        <section class="content hidden">
           <div class="section-heading">
             <h2>Strategy Console</h2>
             <span id="selected-account">No account selected</span>
@@ -52,7 +58,116 @@
         </section>
       </section>
 
-      <section class="strategy-panel">
+      <section class="live-prices-panel">
+        <div class="section-heading">
+          <div>
+            <h2>Webull Live Prices</h2>
+            <p class="muted">Live Webull prices with clock-aligned 10m EMA levels.</p>
+          </div>
+          <div class="live-price-actions">
+            <button id="test-mtf-toast" class="secondary-button" type="button">Test Alert</button>
+            <button id="refresh-live-prices" type="button">Refresh Prices</button>
+          </div>
+        </div>
+
+        <div id="live-prices-alert" class="alert hidden"></div>
+
+        <section class="price-bucket mtf-bucket">
+          <div class="bucket-heading">
+            <h3>MTFs</h3>
+            <span id="mtf-count">0</span>
+          </div>
+          <div class="live-price-table-wrap">
+            <table class="live-price-table">
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>On EMA</th>
+                  <th class="price-col">Last</th>
+                  <th class="change-col">Change</th>
+                </tr>
+              </thead>
+              <tbody id="mtf-prices">
+                <tr>
+                  <td colspan="4">Loading prices...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="split-price-grid">
+          <section class="price-bucket">
+            <div class="bucket-heading">
+              <h3>Green</h3>
+              <span id="green-count">0</span>
+            </div>
+            <div class="live-price-table-wrap">
+              <table class="live-price-table">
+                <thead>
+                  <tr>
+                    <th>Symbol</th>
+                    <th>10m 5/12 vs 34/50</th>
+                    <th class="price-col">Last</th>
+                    <th class="change-col">Change</th>
+                  </tr>
+                </thead>
+                <tbody id="green-prices">
+                  <tr>
+                    <td colspan="4">Loading prices...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="price-bucket">
+            <div class="bucket-heading">
+              <h3>Red</h3>
+              <span id="red-count">0</span>
+            </div>
+            <div class="live-price-table-wrap">
+              <table class="live-price-table">
+                <thead>
+                  <tr>
+                    <th>Symbol</th>
+                    <th>10m 5/12 vs 34/50</th>
+                    <th class="price-col">Last</th>
+                    <th class="change-col">Change</th>
+                  </tr>
+                </thead>
+                <tbody id="red-prices">
+                  <tr>
+                    <td colspan="4">Loading prices...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <div class="live-price-table-wrap hidden">
+          <table class="live-price-table">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Last</th>
+                <th>Change</th>
+                <th>10m 5/12 vs 34/50</th>
+                <th>1h 34 vs 50</th>
+              </tr>
+            </thead>
+            <tbody id="live-prices">
+              <tr>
+                <td colspan="5">Loading prices...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p id="live-prices-updated" class="muted">-</p>
+      </section>
+
+      <section class="strategy-panel hidden">
         <div class="section-heading">
           <div>
             <h2>Ready To Trade</h2>
@@ -88,8 +203,71 @@
 
         <div id="strategy-results" class="orders-table"></div>
       </section>
+
+      <section class="tradingview-panel hidden">
+        <div class="section-heading">
+          <div>
+            <h2>TradingView MCP</h2>
+            <p class="muted">Read-only technical analysis through the project MCP server.</p>
+          </div>
+          <button id="run-tradingview" type="button">Analyze</button>
+        </div>
+
+        <div class="tradingview-controls">
+          <label>
+            <span>Symbol</span>
+            <input id="tv-symbol" type="text" value="AAPL" maxlength="16" />
+          </label>
+          <label>
+            <span>Exchange</span>
+            <select id="tv-exchange">
+              <option>NASDAQ</option>
+              <option>NYSE</option>
+              <option>BINANCE</option>
+              <option>KUCOIN</option>
+              <option>BYBIT</option>
+              <option>MEXC</option>
+            </select>
+          </label>
+          <label>
+            <span>Timeframe</span>
+            <select id="tv-timeframe">
+              <option>1D</option>
+              <option>4h</option>
+              <option>1h</option>
+              <option>15m</option>
+              <option>5m</option>
+              <option>1W</option>
+              <option>1M</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="tradingview-alert" class="alert hidden"></div>
+
+        <div class="metric-grid">
+          <article class="metric">
+            <span>MCP Server</span>
+            <strong id="tv-server">Not run</strong>
+          </article>
+          <article class="metric">
+            <span>Signal</span>
+            <strong id="tv-signal">-</strong>
+          </article>
+          <article class="metric">
+            <span>Price</span>
+            <strong id="tv-price">-</strong>
+          </article>
+          <article class="metric">
+            <span>Trend</span>
+            <strong id="tv-trend">-</strong>
+          </article>
+        </div>
+
+        <div id="tradingview-results" class="tradingview-results"></div>
+      </section>
     </main>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=20260702-mtf-alert-demo"></script>
   </body>
 </html>
