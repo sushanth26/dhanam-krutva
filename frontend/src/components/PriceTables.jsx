@@ -91,15 +91,14 @@ function MtfRow({ quote }) {
 function PriceRow({ quote }) {
   const tenMinuteStatus = cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
   return (
-    <BaseRow quote={quote}>
+    <BaseRow quote={quote} trend={tenMinuteStatus}>
       <td><CloudTag status={tenMinuteStatus} /></td>
     </BaseRow>
   );
 }
 
-function BaseRow({ quote, children }) {
-  const change = Number(quote.change);
-  const rowClass = Number.isFinite(change) ? (change < 0 ? "day-red" : change > 0 ? "day-green" : "") : "";
+function BaseRow({ quote, children, trend = "" }) {
+  const rowClass = trend ? `trend-${String(trend).toLowerCase()}` : "";
   const tooltip = emaTooltip(quote);
   return (
     <tr className={`stock-row ${rowClass}`} title={tooltip} data-ema-tooltip={tooltip}>

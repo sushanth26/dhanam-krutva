@@ -368,10 +368,10 @@ select {
   justify-content: flex-end;
 }
 
-.split-price-grid {
+.trend-price-grid {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .price-bucket {
@@ -475,12 +475,16 @@ select {
 .sector-storage td { background: #f1f0e7; }
 .sector-other td { background: #eef2f5; }
 
-.live-price-table tr.day-green td {
+.live-price-table tr.trend-bullish td {
   background: #edf8f1;
 }
 
-.live-price-table tr.day-red td {
+.live-price-table tr.trend-bearish td {
   background: #fff0f0;
+}
+
+.live-price-table tr.trend-chop td {
+  background: #f3f2ff;
 }
 
 .stock-row {
@@ -668,7 +672,7 @@ pre {
   .data-grid,
   .metric-grid,
   .tradingview-controls,
-  .split-price-grid {
+  .trend-price-grid {
     grid-template-columns: 1fr;
   }
 
@@ -716,7 +720,7 @@ pre {
 
 .topbar,
 .header-grid,
-.split-price-grid {
+.trend-price-grid {
   grid-template-columns: 1fr;
 }
 
@@ -806,8 +810,8 @@ h1 {
     grid-template-columns: minmax(150px, 0.85fr) minmax(190px, 1fr) minmax(220px, 1.25fr) minmax(300px, 1.7fr);
   }
 
-  .split-price-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .trend-price-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .section-heading {
