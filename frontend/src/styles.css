@@ -358,7 +358,8 @@ select {
 }
 
 .live-price-table-wrap {
-  overflow-x: auto;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 .live-price-actions {
@@ -401,7 +402,8 @@ select {
 
 .live-price-table {
   border-collapse: collapse;
-  min-width: 520px;
+  min-width: 0;
+  table-layout: fixed;
   width: 100%;
 }
 
@@ -410,7 +412,8 @@ select {
   border-bottom: 1px solid #dbe2d8;
   padding: 12px 10px;
   text-align: left;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .live-price-table th {
@@ -434,6 +437,11 @@ select {
   text-align: left;
   text-transform: inherit;
   width: 100%;
+}
+
+.sort-button span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .sort-button:hover,
@@ -758,7 +766,7 @@ h1 {
 }
 
 .live-price-table-wrap {
-  overflow-x: visible;
+  overflow-x: hidden;
 }
 
 .live-price-table {
@@ -768,7 +776,7 @@ h1 {
 
 .live-price-table th,
 .live-price-table td {
-  padding: 11px 8px;
+  padding: 10px 7px;
 }
 
 .price-col,
@@ -848,17 +856,12 @@ h1 {
   }
 
   .live-price-table-wrap {
-    overflow-x: auto;
+    overflow-x: hidden;
   }
 
   .live-price-table {
-    min-width: 520px;
-    table-layout: auto;
-  }
-
-  .price-col,
-  .price-cell {
-    display: table-cell;
+    min-width: 0;
+    table-layout: fixed;
   }
 
   .live-price-table th:first-child,
