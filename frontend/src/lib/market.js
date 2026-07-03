@@ -4,12 +4,6 @@ export function formatPrice(value) {
   return parsed.toFixed(2);
 }
 
-export function formatPercent(value) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return "-";
-  return `${(parsed * 100).toFixed(2)}%`;
-}
-
 export function findAccountId(value) {
   if (!value) return null;
   if (Array.isArray(value)) {
@@ -50,9 +44,9 @@ export function cloudStatus(emaSet, fastKeys, slowKeys) {
   const slowBottom = Math.min(...slowValues);
   const slowTop = Math.max(...slowValues);
 
-  if (fastBottom > slowTop) return "Above";
-  if (fastTop < slowBottom) return "Below";
-  return "Together";
+  if (fastBottom > slowTop) return "Bullish";
+  if (fastTop < slowBottom) return "Bearish";
+  return "Chop";
 }
 
 export function emaTooltip(quote) {
@@ -101,12 +95,7 @@ export function mtfSignature(quotes) {
 }
 
 export function groupBySector(quotes) {
-  const sorted = [...quotes].sort((a, b) => {
-    const sectorCompare = String(a.sector || "Other").localeCompare(String(b.sector || "Other"));
-    if (sectorCompare !== 0) return sectorCompare;
-    return String(a.symbol).localeCompare(String(b.symbol));
-  });
-  return sorted.reduce((groups, quote) => {
+  return quotes.reduce((groups, quote) => {
     const sector = quote.sector || "Other";
     groups[sector] = groups[sector] || [];
     groups[sector].push(quote);
