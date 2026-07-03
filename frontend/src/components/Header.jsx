@@ -9,7 +9,10 @@ export function Header({
   onStart,
   onStop,
   onSelectAccount,
+  notificationState,
+  onEnableNotifications,
 }) {
+  const notificationLabel = notificationButtonLabel(notificationState);
   return (
     <header className="app-header">
       <section className="topbar">
@@ -23,6 +26,14 @@ export function Header({
           </button>
           <button type="button" className="secondary-button" onClick={onStop} disabled={!liveRefreshActive}>
             Stop Webull
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={onEnableNotifications}
+            disabled={!notificationState.supported || notificationState.permission === "granted"}
+          >
+            {notificationLabel}
           </button>
           <button type="button" onClick={onRefresh}>Refresh</button>
         </div>
@@ -72,4 +83,12 @@ function StatusCard({ label, value }) {
       <strong>{value}</strong>
     </article>
   );
+}
+
+function notificationButtonLabel(state) {
+  if (!state?.supported) return "No Notifications";
+  if (state.permission === "granted" && state.webPushConfigured && state.subscribed) return "Push Enabled";
+  if (state.permission === "granted") return "Notify Enabled";
+  if (state.permission === "denied") return "Notifications Blocked";
+  return "Enable Notifications";
 }

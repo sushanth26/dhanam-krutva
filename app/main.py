@@ -6,7 +6,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app.auth import is_authorized
 from app.config import get_settings
-from app.routers import accounts, strategy, trade, tradingview, webull
+from app.notifications import MtfPushMonitor
+from app.routers import accounts, notifications, strategy, trade, tradingview, webull
 
 
 STATIC_DIR = Path("app/static")
@@ -16,10 +17,24 @@ INDEX_FILE = STATIC_DIR / "index.html"
 app = FastAPI(title="Dhanam Krutva Webull Dashboard")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.include_router(accounts.router)
+app.include_router(notifications.router)
 app.include_router(webull.router)
 app.include_router(strategy.router)
 app.include_router(tradingview.router)
 app.include_router(trade.router)
+
+
+@app.on_event("startup")
+async def start_mtf_push_monitor():
+    app.state.mtf_push_monitor = MtfPushMonitor(get_settings())
+    app.state.mtf_push_monitor.start()
+
+
+@app.on_event("shutdown")
+async def stop_mtf_push_monitor():
+    monitor = getattr(app.state, "mtf_push_monitor", None)
+    if monitor:
+        await monitor.stop()
 
 
 @app.middleware("http")

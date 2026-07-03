@@ -6,3 +6,4 @@ __pycache__/
 .DS_Store
 webull_trade_sdk.log*
 .webull-token/
+.web-push-subscriptions.json
