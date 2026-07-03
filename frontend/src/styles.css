@@ -452,7 +452,7 @@ select {
 
 .sort-button b {
   color: #8a9690;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 900;
   text-transform: none;
 }
@@ -779,14 +779,15 @@ h1 {
   padding: 10px 7px;
 }
 
-.price-col,
-.price-cell {
-  display: none;
-}
-
 .live-price-table th:first-child,
 .live-price-table td:first-child {
-  width: 92px;
+  width: 72px;
+}
+
+.live-price-table .price-col,
+.live-price-table .price-cell {
+  text-align: right;
+  width: 76px;
 }
 
 .mtf-tags {
@@ -798,6 +799,14 @@ h1 {
   font-size: 11px;
   min-height: 28px;
   padding: 5px 8px;
+}
+
+.price-col .sort-button {
+  justify-content: flex-end;
+}
+
+.price-col .sort-button b {
+  display: none;
 }
 
 @media (min-width: 760px) {
@@ -866,7 +875,7 @@ h1 {
 
   .live-price-table th:first-child,
   .live-price-table td:first-child {
-    width: auto;
+    width: 72px;
   }
 
   .mtf-toast {
