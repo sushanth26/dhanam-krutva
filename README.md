@@ -7,6 +7,7 @@ Read-only Webull account dashboard for connection testing. This first version do
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+npm --prefix frontend install
 cp .env.example .env
 ```
 
@@ -22,11 +23,54 @@ For Webull UAT testing, Webull publishes shared test credentials in the official
 
 ## Run
 
+Production-style local run serves the built React app from FastAPI:
+
 ```bash
+npm --prefix frontend run build
 .venv/bin/uvicorn app.main:app --reload --port 8000
 ```
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+
+For frontend development, run FastAPI and Vite in separate terminals:
+
+```bash
+.venv/bin/uvicorn app.main:app --reload --port 8000
+npm --prefix frontend run dev
+```
+
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite proxies `/api`
+requests to FastAPI.
+
+## Railway Personal Deploy
+
+This app is safe to start as a personal Railway deploy because Webull credentials
+stay server-side and the browser only calls this FastAPI backend.
+
+1. Create a Railway project from this GitHub repo.
+2. Add a persistent volume mounted at `/data` if you want the Webull SDK token
+   cache to survive restarts.
+3. Set these Railway variables:
+
+```text
+WEBULL_APP_KEY=...
+WEBULL_APP_SECRET=...
+WEBULL_ENV=prod
+WEBULL_REGION=us
+WEBULL_TOKEN_DIR=/data/.webull-token
+APP_USERNAME=sushanth
+APP_PASSWORD=<strong private password>
+```
+
+Railway uses `nixpacks.toml` to install Python dependencies, install the React
+frontend with `npm ci`, build React into `app/static`, and run:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+The `/health` endpoint is intentionally public for Railway health checks. All
+other routes are protected with HTTP Basic Auth when `APP_PASSWORD` is set.
 
 ## What It Checks
 
@@ -39,4 +83,6 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
 - Credentials stay on the server and are never sent to the browser.
 - `.env`, SDK token cache, virtualenvs, and Webull SDK logs are ignored by Git.
-- Trading endpoints are not exposed in this version.
+- Set `APP_PASSWORD` before deploying publicly.
+- Trading endpoints are still server-side and should only be used behind your
+  private app login.
