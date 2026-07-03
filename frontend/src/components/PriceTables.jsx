@@ -50,7 +50,7 @@ export function PriceBucket({ title, quotes, kind }) {
           <thead>
             <tr>
               <SortableHeader label="Symbol" sortKey="symbol" sort={sort} onSort={setSort} />
-              <SortableHeader label="Trend - 10m 5/12 vs 34/50" sortKey="trend" sort={sort} onSort={setSort} />
+              <SortableHeader label="Trend" sortKey="trend" sort={sort} onSort={setSort} />
               <SortableHeader label="Last" sortKey="price" sort={sort} onSort={setSort} className="price-col" />
             </tr>
           </thead>
