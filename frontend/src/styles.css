@@ -423,40 +423,6 @@ select {
   text-transform: uppercase;
 }
 
-.sort-button {
-  align-items: center;
-  background: transparent;
-  color: inherit;
-  display: inline-flex;
-  font-size: inherit;
-  font-weight: inherit;
-  gap: 6px;
-  justify-content: flex-start;
-  min-height: auto;
-  padding: 0;
-  text-align: left;
-  text-transform: inherit;
-  width: 100%;
-}
-
-.sort-button span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.sort-button:hover,
-.sort-button.active {
-  background: transparent;
-  color: #12664f;
-}
-
-.sort-button b {
-  color: #8a9690;
-  font-size: 9px;
-  font-weight: 900;
-  text-transform: none;
-}
-
 .live-price-table td {
   font-size: 14px;
   font-weight: 700;
@@ -497,24 +463,6 @@ select {
 
 .stock-row {
   position: relative;
-}
-
-.stock-row:hover::after {
-  background: #101614;
-  border-radius: 6px;
-  box-shadow: 0 10px 24px rgba(25, 33, 31, 0.18);
-  color: #d7f6e7;
-  content: attr(data-ema-tooltip);
-  font-size: 12px;
-  font-weight: 800;
-  left: 12px;
-  line-height: 1.55;
-  min-width: 190px;
-  padding: 10px 12px;
-  position: absolute;
-  top: calc(100% - 4px);
-  white-space: pre-line;
-  z-index: 20;
 }
 
 .quote-size {
@@ -799,14 +747,6 @@ h1 {
   font-size: 11px;
   min-height: 28px;
   padding: 5px 8px;
-}
-
-.price-col .sort-button {
-  justify-content: flex-end;
-}
-
-.price-col .sort-button b {
-  display: none;
 }
 
 @media (min-width: 760px) {

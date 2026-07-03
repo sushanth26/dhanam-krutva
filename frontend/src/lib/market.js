@@ -49,27 +49,6 @@ export function cloudStatus(emaSet, fastKeys, slowKeys) {
   return "Chop";
 }
 
-export function emaTooltip(quote) {
-  const e10 = quote.ema_10m || {};
-  const e1h = quote.ema_1h || {};
-  const daily = quote.ema_daily || {};
-  return [
-    `10m EMA 5: ${formatPrice(e10["5"])}`,
-    `10m EMA 12: ${formatPrice(e10["12"])}`,
-    `10m EMA 34: ${formatPrice(e10["34"])}`,
-    `10m EMA 50: ${formatPrice(e10["50"])}`,
-    `1h EMA 20: ${formatPrice(e1h["20"])}`,
-    `1h EMA 21: ${formatPrice(e1h["21"])}`,
-    `1h EMA 34: ${formatPrice(e1h["34"])}`,
-    `1h EMA 50: ${formatPrice(e1h["50"])}`,
-    `1h EMA 55: ${formatPrice(e1h["55"])}`,
-    `Daily EMA 20: ${formatPrice(daily["20"])}`,
-    `Daily EMA 21: ${formatPrice(daily["21"])}`,
-    `Daily EMA 50: ${formatPrice(daily["50"])}`,
-    `Daily EMA 55: ${formatPrice(daily["55"])}`,
-  ].join("\n");
-}
-
 export function mtfTagClass(label) {
   const normalized = String(label || "").toLowerCase();
   if (normalized.includes("hourly")) return "hourly";

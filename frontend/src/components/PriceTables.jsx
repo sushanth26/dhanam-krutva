@@ -1,14 +1,7 @@
-import { useMemo, useState } from "react";
-
 import { CloudTag, MtfTag } from "./Tags";
-import { cloudStatus, emaTooltip, formatPrice, groupBySector, sectorSlug } from "../lib/market";
-
-const DEFAULT_SORT = { key: "symbol", direction: "asc" };
+import { cloudStatus, formatPrice, groupBySector, sectorSlug } from "../lib/market";
 
 export function MtfTable({ quotes }) {
-  const [sort, setSort] = useState(DEFAULT_SORT);
-  const sortedQuotes = useMemo(() => sortQuotes(quotes, sort, "mtf"), [quotes, sort]);
-
   return (
     <section className="price-bucket mtf-bucket">
       <div className="bucket-heading">
@@ -19,13 +12,13 @@ export function MtfTable({ quotes }) {
         <table className="live-price-table">
           <thead>
             <tr>
-              <SortableHeader label="Symbol" sortKey="symbol" sort={sort} onSort={setSort} />
-              <SortableHeader label="On EMA" sortKey="mtf" sort={sort} onSort={setSort} />
-              <SortableHeader label="Last" sortKey="price" sort={sort} onSort={setSort} className="price-col" />
+              <th>Symbol</th>
+              <th>On EMA</th>
+              <th className="price-col">Last</th>
             </tr>
           </thead>
           <tbody>
-            {sortedQuotes.length ? sortedQuotes.map((quote) => <MtfRow key={quote.symbol} quote={quote} />) : (
+            {quotes.length ? quotes.map((quote) => <MtfRow key={quote.symbol} quote={quote} />) : (
               <tr><td colSpan="3">No stocks are on hourly or daily EMA clouds right now.</td></tr>
             )}
           </tbody>
@@ -36,9 +29,7 @@ export function MtfTable({ quotes }) {
 }
 
 export function PriceBucket({ title, quotes, kind }) {
-  const [sort, setSort] = useState(DEFAULT_SORT);
-  const sortedQuotes = useMemo(() => sortQuotes(quotes, sort, "trend"), [quotes, sort]);
-  const grouped = groupBySector(sortedQuotes);
+  const grouped = groupBySector(quotes);
   return (
     <section className="price-bucket">
       <div className="bucket-heading">
@@ -49,9 +40,9 @@ export function PriceBucket({ title, quotes, kind }) {
         <table className="live-price-table">
           <thead>
             <tr>
-              <SortableHeader label="Symbol" sortKey="symbol" sort={sort} onSort={setSort} />
-              <SortableHeader label="Trend" sortKey="trend" sort={sort} onSort={setSort} />
-              <SortableHeader label="Last" sortKey="price" sort={sort} onSort={setSort} className="price-col" />
+              <th>Symbol</th>
+              <th>Trend</th>
+              <th className="price-col">Last</th>
             </tr>
           </thead>
           <tbody>
@@ -99,61 +90,11 @@ function PriceRow({ quote }) {
 
 function BaseRow({ quote, children, trend = "" }) {
   const rowClass = trend ? `trend-${String(trend).toLowerCase()}` : "";
-  const tooltip = emaTooltip(quote);
   return (
-    <tr className={`stock-row ${rowClass}`} title={tooltip} data-ema-tooltip={tooltip}>
+    <tr className={`stock-row ${rowClass}`}>
       <td><strong>{quote.symbol}</strong></td>
       {children}
       <td className="price-cell">{formatPrice(quote.price)}</td>
     </tr>
   );
-}
-
-function SortableHeader({ label, sortKey, sort, onSort, className = "" }) {
-  const active = sort.key === sortKey;
-  const direction = active ? sort.direction : "none";
-  return (
-    <th className={className}>
-      <button
-        className={`sort-button ${active ? "active" : ""}`}
-        type="button"
-        aria-sort={direction === "none" ? "none" : direction === "asc" ? "ascending" : "descending"}
-        onClick={() => onSort(nextSort(sort, sortKey))}
-      >
-        <span>{label}</span>
-        <b>{active ? (sort.direction === "asc" ? "Asc" : "Desc") : "Sort"}</b>
-      </button>
-    </th>
-  );
-}
-
-function nextSort(current, key) {
-  if (current.key !== key) return { key, direction: "asc" };
-  return { key, direction: current.direction === "asc" ? "desc" : "asc" };
-}
-
-function sortQuotes(quotes, sort, mode) {
-  const direction = sort.direction === "asc" ? 1 : -1;
-  return [...quotes].sort((a, b) => {
-    const result = compareValues(sortValue(a, sort.key, mode), sortValue(b, sort.key, mode));
-    if (result !== 0) return result * direction;
-    return String(a.symbol).localeCompare(String(b.symbol));
-  });
-}
-
-function sortValue(quote, key, mode) {
-  if (key === "price") return Number(quote.price);
-  if (key === "trend") return cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
-  if (key === "mtf") return (quote.mtf_matches || []).map((match) => match.label).join(" + ");
-  if (mode === "mtf" && key === "symbol") return quote.symbol;
-  return quote.symbol;
-}
-
-function compareValues(left, right) {
-  const leftNumber = Number(left);
-  const rightNumber = Number(right);
-  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
-    return leftNumber - rightNumber;
-  }
-  return String(left || "").localeCompare(String(right || ""));
 }
