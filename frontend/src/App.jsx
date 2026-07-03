@@ -5,7 +5,7 @@ import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
 import { MtfToast } from "./components/MtfToast";
 import { getJson } from "./lib/api";
-import { describeMtfMatches, findAccountId, flattenAccounts, isMarketRefreshWindow, mtfSignature } from "./lib/market";
+import { cloudStatus, describeMtfMatches, findAccountId, flattenAccounts, isMarketRefreshWindow, mtfSignature } from "./lib/market";
 import { enableNotifications, loadNotificationState, sendTestPush, showDeviceNotification } from "./lib/notifications";
 
 const MARKET_REFRESH_INTERVAL_MS = 15000;
@@ -32,8 +32,18 @@ export default function App() {
   const toastTimer = useRef(null);
   const lastMtfSignature = useRef(null);
 
-  const green = useMemo(() => quotes.filter((quote) => Number(quote.change) > 0), [quotes]);
-  const red = useMemo(() => quotes.filter((quote) => Number(quote.change) < 0), [quotes]);
+  const trendBuckets = useMemo(() => {
+    return quotes.reduce(
+      (buckets, quote) => {
+        const trend = cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
+        if (trend === "Bullish") buckets.bullish.push(quote);
+        else if (trend === "Bearish") buckets.bearish.push(quote);
+        else if (trend === "Chop") buckets.chop.push(quote);
+        return buckets;
+      },
+      { bullish: [], bearish: [], chop: [] },
+    );
+  }, [quotes]);
   const mtfs = useMemo(() => quotes.filter((quote) => quote.mtf_matches?.length), [quotes]);
 
   async function refreshShell() {
@@ -202,9 +212,10 @@ export default function App() {
           {liveAlert ? <div className="alert">{liveAlert}</div> : null}
 
           <MtfTable quotes={mtfs} />
-          <div className="split-price-grid">
-            <PriceBucket title="Green" quotes={green} kind="green" />
-            <PriceBucket title="Red" quotes={red} kind="red" />
+          <div className="trend-price-grid">
+            <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" />
+            <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" />
+            <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" />
           </div>
           <p className="muted">{updatedText}</p>
         </section>

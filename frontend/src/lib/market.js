@@ -4,12 +4,6 @@ export function formatPrice(value) {
   return parsed.toFixed(2);
 }
 
-export function formatPercent(value) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return "-";
-  return `${(parsed * 100).toFixed(2)}%`;
-}
-
 export function findAccountId(value) {
   if (!value) return null;
   if (Array.isArray(value)) {
@@ -50,30 +44,9 @@ export function cloudStatus(emaSet, fastKeys, slowKeys) {
   const slowBottom = Math.min(...slowValues);
   const slowTop = Math.max(...slowValues);
 
-  if (fastBottom > slowTop) return "Above";
-  if (fastTop < slowBottom) return "Below";
-  return "Together";
-}
-
-export function emaTooltip(quote) {
-  const e10 = quote.ema_10m || {};
-  const e1h = quote.ema_1h || {};
-  const daily = quote.ema_daily || {};
-  return [
-    `10m EMA 5: ${formatPrice(e10["5"])}`,
-    `10m EMA 12: ${formatPrice(e10["12"])}`,
-    `10m EMA 34: ${formatPrice(e10["34"])}`,
-    `10m EMA 50: ${formatPrice(e10["50"])}`,
-    `1h EMA 20: ${formatPrice(e1h["20"])}`,
-    `1h EMA 21: ${formatPrice(e1h["21"])}`,
-    `1h EMA 34: ${formatPrice(e1h["34"])}`,
-    `1h EMA 50: ${formatPrice(e1h["50"])}`,
-    `1h EMA 55: ${formatPrice(e1h["55"])}`,
-    `Daily EMA 20: ${formatPrice(daily["20"])}`,
-    `Daily EMA 21: ${formatPrice(daily["21"])}`,
-    `Daily EMA 50: ${formatPrice(daily["50"])}`,
-    `Daily EMA 55: ${formatPrice(daily["55"])}`,
-  ].join("\n");
+  if (fastBottom > slowTop) return "Bullish";
+  if (fastTop < slowBottom) return "Bearish";
+  return "Chop";
 }
 
 export function mtfTagClass(label) {
@@ -101,12 +74,7 @@ export function mtfSignature(quotes) {
 }
 
 export function groupBySector(quotes) {
-  const sorted = [...quotes].sort((a, b) => {
-    const sectorCompare = String(a.sector || "Other").localeCompare(String(b.sector || "Other"));
-    if (sectorCompare !== 0) return sectorCompare;
-    return String(a.symbol).localeCompare(String(b.symbol));
-  });
-  return sorted.reduce((groups, quote) => {
+  return quotes.reduce((groups, quote) => {
     const sector = quote.sector || "Other";
     groups[sector] = groups[sector] || [];
     groups[sector].push(quote);

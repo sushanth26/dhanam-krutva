@@ -358,7 +358,8 @@ select {
 }
 
 .live-price-table-wrap {
-  overflow-x: auto;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 .live-price-actions {
@@ -368,10 +369,10 @@ select {
   justify-content: flex-end;
 }
 
-.split-price-grid {
+.trend-price-grid {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .price-bucket {
@@ -401,7 +402,8 @@ select {
 
 .live-price-table {
   border-collapse: collapse;
-  min-width: 520px;
+  min-width: 0;
+  table-layout: fixed;
   width: 100%;
 }
 
@@ -410,7 +412,8 @@ select {
   border-bottom: 1px solid #dbe2d8;
   padding: 12px 10px;
   text-align: left;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .live-price-table th {
@@ -446,34 +449,20 @@ select {
 .sector-storage td { background: #f1f0e7; }
 .sector-other td { background: #eef2f5; }
 
-.live-price-table tr.day-green td {
+.live-price-table tr.trend-bullish td {
   background: #edf8f1;
 }
 
-.live-price-table tr.day-red td {
+.live-price-table tr.trend-bearish td {
   background: #fff0f0;
+}
+
+.live-price-table tr.trend-chop td {
+  background: #f3f2ff;
 }
 
 .stock-row {
   position: relative;
-}
-
-.stock-row:hover::after {
-  background: #101614;
-  border-radius: 6px;
-  box-shadow: 0 10px 24px rgba(25, 33, 31, 0.18);
-  color: #d7f6e7;
-  content: attr(data-ema-tooltip);
-  font-size: 12px;
-  font-weight: 800;
-  left: 12px;
-  line-height: 1.55;
-  min-width: 190px;
-  padding: 10px 12px;
-  position: absolute;
-  top: calc(100% - 4px);
-  white-space: pre-line;
-  z-index: 20;
 }
 
 .quote-size {
@@ -492,17 +481,17 @@ select {
   padding: 4px 9px;
 }
 
-.cloud-tag.above {
+.cloud-tag.bullish {
   background: #dff4e9;
   color: #0d513f;
 }
 
-.cloud-tag.below {
+.cloud-tag.bearish {
   background: #ffe1e1;
   color: #8a2424;
 }
 
-.cloud-tag.together {
+.cloud-tag.chop {
   background: #e8e6ff;
   color: #343083;
 }
@@ -639,7 +628,7 @@ pre {
   .data-grid,
   .metric-grid,
   .tradingview-controls,
-  .split-price-grid {
+  .trend-price-grid {
     grid-template-columns: 1fr;
   }
 
@@ -687,7 +676,7 @@ pre {
 
 .topbar,
 .header-grid,
-.split-price-grid {
+.trend-price-grid {
   grid-template-columns: 1fr;
 }
 
@@ -725,7 +714,7 @@ h1 {
 }
 
 .live-price-table-wrap {
-  overflow-x: visible;
+  overflow-x: hidden;
 }
 
 .live-price-table {
@@ -735,19 +724,18 @@ h1 {
 
 .live-price-table th,
 .live-price-table td {
-  padding: 11px 8px;
-}
-
-.price-col,
-.change-col,
-.price-cell,
-.change-cell {
-  display: none;
+  padding: 10px 7px;
 }
 
 .live-price-table th:first-child,
 .live-price-table td:first-child {
-  width: 92px;
+  width: 72px;
+}
+
+.live-price-table .price-col,
+.live-price-table .price-cell {
+  text-align: right;
+  width: 76px;
 }
 
 .mtf-tags {
@@ -779,8 +767,8 @@ h1 {
     grid-template-columns: minmax(150px, 0.85fr) minmax(190px, 1fr) minmax(220px, 1.25fr) minmax(300px, 1.7fr);
   }
 
-  .split-price-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .trend-price-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .section-heading {
@@ -817,24 +805,17 @@ h1 {
   }
 
   .live-price-table-wrap {
-    overflow-x: auto;
+    overflow-x: hidden;
   }
 
   .live-price-table {
-    min-width: 520px;
-    table-layout: auto;
-  }
-
-  .price-col,
-  .change-col,
-  .price-cell,
-  .change-cell {
-    display: table-cell;
+    min-width: 0;
+    table-layout: fixed;
   }
 
   .live-price-table th:first-child,
   .live-price-table td:first-child {
-    width: auto;
+    width: 72px;
   }
 
   .mtf-toast {

@@ -1,5 +1,5 @@
 import { CloudTag, MtfTag } from "./Tags";
-import { cloudStatus, emaTooltip, formatPercent, formatPrice, groupBySector, sectorSlug } from "../lib/market";
+import { cloudStatus, formatPrice, groupBySector, sectorSlug } from "../lib/market";
 
 export function MtfTable({ quotes }) {
   return (
@@ -15,12 +15,11 @@ export function MtfTable({ quotes }) {
               <th>Symbol</th>
               <th>On EMA</th>
               <th className="price-col">Last</th>
-              <th className="change-col">Change</th>
             </tr>
           </thead>
           <tbody>
             {quotes.length ? quotes.map((quote) => <MtfRow key={quote.symbol} quote={quote} />) : (
-              <tr><td colSpan="4">No stocks are on hourly or daily EMA clouds right now.</td></tr>
+              <tr><td colSpan="3">No stocks are on hourly or daily EMA clouds right now.</td></tr>
             )}
           </tbody>
         </table>
@@ -42,16 +41,15 @@ export function PriceBucket({ title, quotes, kind }) {
           <thead>
             <tr>
               <th>Symbol</th>
-              <th>10m 5/12 vs 34/50</th>
+              <th>Trend</th>
               <th className="price-col">Last</th>
-              <th className="change-col">Change</th>
             </tr>
           </thead>
           <tbody>
             {quotes.length ? Object.entries(grouped).map(([sector, sectorQuotes]) => (
               <SectorRows key={sector} sector={sector} quotes={sectorQuotes} />
             )) : (
-              <tr><td colSpan="4">No {kind} stocks right now.</td></tr>
+              <tr><td colSpan="3">No {kind} stocks right now.</td></tr>
             )}
           </tbody>
         </table>
@@ -64,7 +62,7 @@ function SectorRows({ sector, quotes }) {
   return (
     <>
       <tr className={`sector-row sector-${sectorSlug(sector)}`}>
-        <td colSpan="4">{sector}</td>
+        <td colSpan="3">{sector}</td>
       </tr>
       {quotes.map((quote) => <PriceRow key={quote.symbol} quote={quote} />)}
     </>
@@ -84,24 +82,19 @@ function MtfRow({ quote }) {
 function PriceRow({ quote }) {
   const tenMinuteStatus = cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
   return (
-    <BaseRow quote={quote}>
+    <BaseRow quote={quote} trend={tenMinuteStatus}>
       <td><CloudTag status={tenMinuteStatus} /></td>
     </BaseRow>
   );
 }
 
-function BaseRow({ quote, children }) {
-  const change = Number(quote.change);
-  const rowClass = Number.isFinite(change) ? (change < 0 ? "day-red" : change > 0 ? "day-green" : "") : "";
-  const tooltip = emaTooltip(quote);
+function BaseRow({ quote, children, trend = "" }) {
+  const rowClass = trend ? `trend-${String(trend).toLowerCase()}` : "";
   return (
-    <tr className={`stock-row ${rowClass}`} title={tooltip} data-ema-tooltip={tooltip}>
+    <tr className={`stock-row ${rowClass}`}>
       <td><strong>{quote.symbol}</strong></td>
       {children}
       <td className="price-cell">{formatPrice(quote.price)}</td>
-      <td className="change-cell">
-        {formatPrice(quote.change)} <span className="quote-size">{formatPercent(quote.change_ratio)}</span>
-      </td>
     </tr>
   );
 }
