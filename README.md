@@ -62,6 +62,27 @@ APP_USERNAME=sushanth
 APP_PASSWORD=<strong private password>
 ```
 
+For phone app-style MTF push notifications, generate VAPID keys once:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Then add these Railway variables:
+
+```text
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_SUBJECT=mailto:you@example.com
+PUSH_SUBSCRIPTION_FILE=/data/push-subscriptions.json
+MTF_PUSH_POLL_SECONDS=60
+MTF_PUSH_TIMEZONE=America/Chicago
+```
+
+After deploy, open the installed phone app, sign in, and tap
+`Enable Notifications`. The backend will poll Webull during the configured
+market refresh window and send a push notification when the MTF table changes.
+
 Railway uses `nixpacks.toml` to install Python dependencies, install the React
 frontend with `npm ci`, build React into `app/static`, and run:
 

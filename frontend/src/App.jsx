@@ -6,9 +6,11 @@ import { MtfTable, PriceBucket } from "./components/PriceTables";
 import { MtfToast } from "./components/MtfToast";
 import { getJson } from "./lib/api";
 import { describeMtfMatches, findAccountId, flattenAccounts, isMarketRefreshWindow, mtfSignature } from "./lib/market";
+import { enableNotifications, loadNotificationState, sendTestPush, showDeviceNotification } from "./lib/notifications";
 
 const MARKET_REFRESH_INTERVAL_MS = 15000;
 const DUMMY_MTF_MESSAGE = "MTFs changed: ASTS Hourly 34/50 • AMD Daily 20/21 • BE Daily 50/55 • LLY Hourly 34/50 + Daily 20/21";
+const DUMMY_MTF_BODY = "ASTS Hourly 34/50 | AMD Daily 20/21 | BE Daily 50/55 | LLY Hourly 34/50 + Daily 20/21";
 
 export default function App() {
   const [status, setStatus] = useState(null);
@@ -19,6 +21,12 @@ export default function App() {
   const [alert, setAlert] = useState("");
   const [liveAlert, setLiveAlert] = useState("");
   const [liveRefreshActive, setLiveRefreshActive] = useState(false);
+  const [notificationState, setNotificationState] = useState({
+    supported: false,
+    permission: "default",
+    webPushConfigured: false,
+    subscribed: false,
+  });
   const [toast, setToast] = useState({ message: "", changed: false });
   const liveTimer = useRef(null);
   const toastTimer = useRef(null);
@@ -82,12 +90,53 @@ export default function App() {
       changed ? `MTFs changed: ${matches || "no matches"}` : `MTFs updated ${updatedAt}: ${matches || "no matches"}`,
       changed,
     );
+    if (changed) {
+      showMtfDeviceNotification(matches || "No symbols are on MTF clouds now.");
+    }
   }
 
   function showToast(message, changed = false) {
     setToast({ message, changed });
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast({ message: "", changed: false }), changed ? 14000 : 10000);
+  }
+
+  function showMtfDeviceNotification(body) {
+    showDeviceNotification({
+      title: "MTFs changed",
+      body,
+      tag: "mtf-update",
+      url: "/",
+    }).catch((error) => setLiveAlert(error.message));
+  }
+
+  async function enableAppNotifications() {
+    try {
+      const nextState = await enableNotifications();
+      setNotificationState(nextState);
+      if (nextState.permission === "granted") {
+        showToast(
+          nextState.webPushConfigured && nextState.subscribed
+            ? "App notifications enabled. Railway can send MTF push alerts."
+            : "Device notifications enabled. Add VAPID keys for closed-app push alerts.",
+          true,
+        );
+      }
+    } catch (error) {
+      setLiveAlert(error.message);
+    }
+  }
+
+  async function testMtfNotification() {
+    showToast(DUMMY_MTF_MESSAGE, true);
+    showMtfDeviceNotification(DUMMY_MTF_BODY);
+    if (notificationState.webPushConfigured && notificationState.subscribed) {
+      try {
+        await sendTestPush();
+      } catch (error) {
+        setLiveAlert(error.message);
+      }
+    }
   }
 
   function startLiveRefresh() {
@@ -106,6 +155,11 @@ export default function App() {
 
   useEffect(() => {
     refreshShell();
+    loadNotificationState()
+      .then(setNotificationState)
+      .catch(() => {
+        setNotificationState((current) => ({ ...current, supported: false }));
+      });
     return () => {
       if (liveTimer.current) clearInterval(liveTimer.current);
       if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -125,6 +179,8 @@ export default function App() {
           onStart={startLiveRefresh}
           onStop={stopLiveRefresh}
           onSelectAccount={setSelectedAccountId}
+          notificationState={notificationState}
+          onEnableNotifications={enableAppNotifications}
         />
 
         {alert ? <div className="alert app-alert">{alert}</div> : null}
@@ -136,7 +192,7 @@ export default function App() {
               <p className="muted">Live Webull prices with clock-aligned EMA levels.</p>
             </div>
             <div className="live-price-actions">
-              <button className="secondary-button" type="button" onClick={() => showToast(DUMMY_MTF_MESSAGE, true)}>
+              <button className="secondary-button" type="button" onClick={testMtfNotification}>
                 Test Alert
               </button>
               <button type="button" onClick={() => loadLivePrices({ manual: true })}>Refresh Prices</button>

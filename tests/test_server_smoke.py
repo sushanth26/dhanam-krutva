@@ -97,6 +97,12 @@ def test_uvicorn_serves_react_shell_and_protected_api():
             assert response.status == 200
             assert payload["configured"] is False
             assert payload["auth_enabled"] is True
+
+        with request("/api/notifications/config", auth_header()) as response:
+            payload = json.loads(response.read())
+            assert response.status == 200
+            assert payload["web_push_configured"] is False
+            assert payload["vapid_public_key"] is None
     finally:
         process.terminate()
         try:
