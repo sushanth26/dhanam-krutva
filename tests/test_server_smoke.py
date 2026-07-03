@@ -1,0 +1,105 @@
+import json
+import os
+import subprocess
+import sys
+import time
+from base64 import b64encode
+from pathlib import Path
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
+
+
+ROOT = Path(__file__).resolve().parents[1]
+PORT = 8123
+BASE_URL = f"http://127.0.0.1:{PORT}"
+
+
+def auth_header(username: str = "tester", password: str = "secret") -> str:
+    token = b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+    return f"Basic {token}"
+
+
+def request(path: str, authorization: str | None = None):
+    headers = {"Authorization": authorization} if authorization else {}
+    return urlopen(Request(f"{BASE_URL}{path}", headers=headers), timeout=5)
+
+
+def wait_for_server(process: subprocess.Popen):
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        if process.poll() is not None:
+            raise AssertionError(f"server exited early with {process.returncode}")
+        try:
+            with request("/health") as response:
+                if response.status == 200:
+                    return
+        except OSError:
+            time.sleep(0.2)
+    raise AssertionError("server did not become ready")
+
+
+def test_uvicorn_serves_react_shell_and_protected_api():
+    env = {
+        **os.environ,
+        "APP_USERNAME": "tester",
+        "APP_PASSWORD": "secret",
+        "WEBULL_APP_KEY": "",
+        "WEBULL_APP_SECRET": "",
+        "WEBULL_ACCESS_TOKEN": "",
+        "WEBULL_TOKEN_DIR": "",
+        "PORT": str(PORT),
+    }
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "app.main:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(PORT),
+        ],
+        cwd=ROOT,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        wait_for_server(process)
+
+        with request("/health") as response:
+            assert response.status == 200
+            assert json.loads(response.read()) == {"ok": True}
+
+        try:
+            request("/")
+        except HTTPError as error:
+            assert error.code == 401
+            assert error.headers["www-authenticate"] == 'Basic realm="Dhanam Krutva"'
+        else:
+            raise AssertionError("unauthenticated app shell request should fail")
+
+        with request("/", auth_header()) as response:
+            html = response.read().decode("utf-8")
+            assert response.status == 200
+            assert '<div id="root"></div>' in html
+            assert "/static/assets/" in html
+
+        asset_path = html.split('src="')[1].split('"')[0]
+        with request(asset_path, auth_header()) as response:
+            assert response.status == 200
+            assert len(response.read()) > 1000
+
+        with request("/api/status", auth_header()) as response:
+            payload = json.loads(response.read())
+            assert response.status == 200
+            assert payload["configured"] is False
+            assert payload["auth_enabled"] is True
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
