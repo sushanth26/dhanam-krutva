@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
-import { AlarmPanel } from "./components/AlarmPanel";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
 import { getJson } from "./lib/api";
 import { cloudStatus, describeMtfMatches, findAccountId, flattenAccounts, isMarketRefreshWindow, mtfSignature } from "./lib/market";
@@ -11,6 +10,7 @@ import { enableNotifications, loadNotificationState, sendTestPush, showDeviceNot
 const MARKET_REFRESH_INTERVAL_MS = 15000;
 const DUMMY_MTF_MESSAGE = "MTFs changed: ASTS Hourly 34/50 • AMD Daily 20/21 • BE Daily 50/55 • LLY Hourly 34/50 + Daily 20/21";
 const DUMMY_MTF_BODY = "ASTS Hourly 34/50 | AMD Daily 20/21 | BE Daily 50/55 | LLY Hourly 34/50 + Daily 20/21";
+const MAX_NOTIFICATIONS = 20;
 
 export default function App() {
   const [status, setStatus] = useState(null);
@@ -27,9 +27,8 @@ export default function App() {
     webPushConfigured: false,
     subscribed: false,
   });
-  const [alarm, setAlarm] = useState({ message: "", changed: false });
+  const [notifications, setNotifications] = useState([]);
   const liveTimer = useRef(null);
-  const alarmTimer = useRef(null);
   const lastMtfSignature = useRef(null);
 
   const trendBuckets = useMemo(() => {
@@ -96,19 +95,32 @@ export default function App() {
     const changed = lastMtfSignature.current !== null && signature !== lastMtfSignature.current;
     lastMtfSignature.current = signature;
     const matches = describeMtfMatches(nextMtfs);
-    showAlarm(
-      changed ? `MTFs changed: ${matches || "no matches"}` : `MTFs updated ${updatedAt}: ${matches || "no matches"}`,
-      changed,
-    );
+    addNotification({
+      title: changed ? "MTFs changed" : "MTFs updated",
+      message: changed ? matches || "No matches" : `${updatedAt}: ${matches || "No matches"}`,
+      kind: changed ? "changed" : "update",
+    });
     if (changed) {
       showMtfDeviceNotification(matches || "No symbols are on MTF clouds now.");
     }
   }
 
-  function showAlarm(message, changed = false) {
-    setAlarm({ message, changed });
-    if (alarmTimer.current) clearTimeout(alarmTimer.current);
-    alarmTimer.current = setTimeout(() => setAlarm({ message: "", changed: false }), changed ? 14000 : 10000);
+  function addNotification({ title, message, kind = "update" }) {
+    setNotifications((current) => [
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        title,
+        message,
+        kind,
+        read: false,
+        createdAt: new Date().toISOString(),
+      },
+      ...current,
+    ].slice(0, MAX_NOTIFICATIONS));
+  }
+
+  function markNotificationsRead() {
+    setNotifications((current) => current.map((item) => ({ ...item, read: true })));
   }
 
   function showMtfDeviceNotification(body) {
@@ -125,12 +137,13 @@ export default function App() {
       const nextState = await enableNotifications();
       setNotificationState(nextState);
       if (nextState.permission === "granted") {
-        showAlarm(
-          nextState.webPushConfigured && nextState.subscribed
-            ? "App notifications enabled. Railway can send MTF push alerts."
-            : "Device notifications enabled. Add VAPID keys for closed-app push alerts.",
-          true,
-        );
+        addNotification({
+          title: "Push notifications enabled",
+          message: nextState.webPushConfigured && nextState.subscribed
+            ? "Railway can send MTF push alerts."
+            : "Device notifications are enabled. Add VAPID keys for closed-app push alerts.",
+          kind: "system",
+        });
       }
     } catch (error) {
       setLiveAlert(error.message);
@@ -138,7 +151,7 @@ export default function App() {
   }
 
   async function testMtfNotification() {
-    showAlarm(DUMMY_MTF_MESSAGE, true);
+    addNotification({ title: "MTF notification test", message: DUMMY_MTF_BODY, kind: "changed" });
     showMtfDeviceNotification(DUMMY_MTF_BODY);
     if (notificationState.webPushConfigured && notificationState.subscribed) {
       try {
@@ -172,7 +185,6 @@ export default function App() {
       });
     return () => {
       if (liveTimer.current) clearInterval(liveTimer.current);
-      if (alarmTimer.current) clearTimeout(alarmTimer.current);
     };
   }, []);
 
@@ -190,10 +202,10 @@ export default function App() {
         notificationState={notificationState}
         onEnableNotifications={enableAppNotifications}
         onTestNotification={testMtfNotification}
+        notifications={notifications}
+        onMarkNotificationsRead={markNotificationsRead}
       />
       <main className="shell">
-        <AlarmPanel message={alarm.message} changed={alarm.changed} />
-
         {alert ? <div className="alert app-alert">{alert}</div> : null}
 
         <section className="live-prices-panel">
