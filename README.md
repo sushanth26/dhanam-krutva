@@ -79,8 +79,11 @@ MTF_PUSH_POLL_SECONDS=60
 MTF_PUSH_TIMEZONE=America/Chicago
 ```
 
-After deploy, open the installed phone app, sign in, and tap
-`Enable Notifications`. The backend will poll Webull during the configured
+After the first deploy, open the installed phone app, sign in, and tap
+`Enable Notifications` once. Keep the same VAPID keys in Railway and keep
+`PUSH_SUBSCRIPTION_FILE` on the `/data` volume. On later deploys, the phone app
+automatically re-registers its service worker and re-syncs the push subscription
+with Railway when it opens. The backend will poll Webull during the configured
 market refresh window and send a push notification when the MTF table changes.
 
 Railway uses `nixpacks.toml` to install Python dependencies, install the React

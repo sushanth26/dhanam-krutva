@@ -33,31 +33,32 @@ button:hover {
 .shell {
   margin: 0 auto;
   max-width: 1280px;
-  padding: 32px;
+  padding: 18px 32px 32px;
 }
 
 .app-header {
   background: #ffffff;
-  border: 1px solid #dbe2d8;
-  border-radius: 8px;
-  box-shadow: 0 8px 28px rgba(25, 33, 31, 0.06);
+  border: 0;
+  border-bottom: 1px solid #dbe2d8;
+  border-radius: 0;
+  box-shadow: 0 4px 16px rgba(25, 33, 31, 0.05);
   display: grid;
-  gap: 18px;
-  padding: 18px;
+  gap: 8px;
+  padding: 10px 18px;
+  width: 100%;
 }
 
 .topbar,
 .workspace,
 .section-heading,
 .status-grid,
-.header-grid,
 .data-grid {
   display: grid;
   gap: 16px;
 }
 
 .topbar {
-  align-items: end;
+  align-items: center;
   grid-template-columns: 1fr auto;
 }
 
@@ -65,8 +66,274 @@ button:hover {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   justify-content: flex-end;
+}
+
+.icon-button {
+  align-items: center;
+  display: inline-flex;
+  font-size: 15px;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 38px;
+  padding: 0;
+}
+
+.notification-anchor {
+  position: relative;
+}
+
+.notification-button {
+  position: relative;
+}
+
+.notification-button b {
+  align-items: center;
+  background: #d72f2f;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 900;
+  height: 18px;
+  justify-content: center;
+  line-height: 1;
+  min-width: 18px;
+  padding: 0 4px;
+  position: absolute;
+  right: -5px;
+  top: -6px;
+}
+
+.notification-drawer {
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(25, 33, 31, 0.22);
+  color: #19211f;
+  max-height: min(620px, calc(100vh - 92px));
+  overflow: hidden;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 12px);
+  width: min(430px, calc(100vw - 24px));
+  z-index: 200;
+}
+
+.notification-drawer-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 18px;
+}
+
+.notification-drawer-header h2 {
+  color: #184d36;
+  font-size: 22px;
+}
+
+.notification-drawer-header button,
+.push-row button {
+  background: transparent;
+  color: #c89b39;
+  min-height: auto;
+  padding: 0;
+}
+
+.push-row {
+  align-items: center;
+  background: #f3faf6;
+  border-bottom: 1px solid #dbe2d8;
+  border-top: 1px solid #dbe2d8;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto 1fr auto;
+  padding: 12px 18px;
+}
+
+.push-row > span {
+  font-size: 20px;
+}
+
+.push-row p {
+  color: #4d5a55;
+  font-weight: 800;
+}
+
+.push-row strong {
+  color: #184d36;
+}
+
+.push-row button {
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 6px;
+  color: #4d5a55;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.notification-list {
+  max-height: min(490px, calc(100vh - 220px));
+  overflow-y: auto;
+}
+
+.notification-item {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 42px 1fr;
+  padding: 16px 20px 16px 18px;
+}
+
+.notification-item.unread {
+  background: #f4fbf7;
+  border-left: 4px solid #184d36;
+}
+
+.notification-item.read {
+  border-left: 4px solid transparent;
+}
+
+.notification-icon {
+  align-items: center;
+  background: #fff8df;
+  border-radius: 999px;
+  color: #184d36;
+  display: inline-flex;
+  font-weight: 900;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.notification-item h3 {
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.notification-item p {
+  color: #4d5a55;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.notification-item time {
+  color: #9aa39e;
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 8px;
+}
+
+.notification-empty {
+  display: grid;
+  gap: 5px;
+  padding: 22px 18px;
+}
+
+.notification-empty span {
+  color: #68766c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.account-menu-anchor {
+  position: relative;
+}
+
+.account-menu-button {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.account-menu-button span {
+  font-size: 13px;
+}
+
+.account-menu-button b {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 999px;
+  color: #12664f;
+  display: inline-flex;
+  font-size: 11px;
+  height: 20px;
+  justify-content: center;
+  min-width: 20px;
+  padding: 0 6px;
+}
+
+.account-menu {
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(25, 33, 31, 0.2);
+  color: #19211f;
+  display: grid;
+  overflow: hidden;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 12px);
+  width: min(430px, calc(100vw - 24px));
+  z-index: 190;
+}
+
+.account-menu-header {
+  background: #f8faf7;
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+}
+
+.account-menu-header span,
+.account-menu-list > span,
+.account-meta-line span {
+  color: #68766c;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.account-menu-header strong {
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.account-menu-status {
+  border-bottom: 1px solid #edf1eb;
+  border-top: 1px solid #edf1eb;
+  display: grid;
+}
+
+.account-meta-line {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 82px minmax(0, 1fr) auto;
+  padding: 10px 16px;
+}
+
+.account-meta-line + .account-meta-line {
+  border-top: 1px solid #edf1eb;
+}
+
+.account-meta-line strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.account-menu-list {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px 16px;
 }
 
 .secondary-button {
@@ -115,10 +382,6 @@ h3 {
 .status-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 16px;
-}
-
-.header-grid {
-  grid-template-columns: minmax(150px, 0.85fr) minmax(190px, 1fr) minmax(220px, 1.25fr) minmax(300px, 1.7fr);
 }
 
 .workspace {
@@ -172,11 +435,6 @@ h3 {
   padding: 18px;
 }
 
-.app-header .panel {
-  box-shadow: none;
-  padding: 14px;
-}
-
 .panel span,
 .section-heading span {
   color: #68766c;
@@ -194,11 +452,11 @@ h3 {
 .mode-badge {
   border-radius: 999px;
   display: inline-block;
-  font-size: 12px;
+  font-size: 11px;
   font-style: normal;
   font-weight: 900;
-  margin-top: 10px;
-  padding: 5px 9px;
+  margin-top: 0;
+  padding: 4px 8px;
 }
 
 .mode-badge.test {
@@ -227,6 +485,41 @@ h3 {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 16px;
+}
+
+.account-chip {
+  background: #f8faf7;
+  border: 1px solid #dbe2d8;
+  color: #19211f;
+  display: grid;
+  gap: 2px;
+  line-height: 1.1;
+  min-height: 38px;
+  min-width: 112px;
+  padding: 7px 10px;
+  text-align: left;
+}
+
+.account-chip:hover,
+.account-chip.active {
+  background: #e8f2ec;
+  border-color: #12664f;
+  color: #19211f;
+}
+
+.account-chip b,
+.account-chip small {
+  display: block;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-chip small {
+  color: #68766c;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .account {
@@ -623,7 +916,6 @@ pre {
   }
 
   .status-grid,
-  .header-grid,
   .workspace,
   .data-grid,
   .metric-grid,
@@ -641,56 +933,62 @@ pre {
   }
 }
 
-.mtf-toast {
-  background: #101614;
-  border: 1px solid #2f453d;
-  border-radius: 8px;
-  box-shadow: 0 12px 28px rgba(25, 33, 31, 0.22);
-  color: #d7f6e7;
-  font-size: 14px;
-  font-weight: 900;
-  left: 12px;
-  max-width: calc(100vw - 24px);
-  padding: 12px 14px;
-  position: fixed;
-  right: 12px;
-  top: 12px;
-  z-index: 100;
-}
-
-.mtf-toast.changed {
-  background: #fff8bd;
-  border-color: #d5b600;
-  color: #5f4d00;
-}
-
 /* Mobile-first trading view */
 .shell {
   padding: 12px;
 }
 
 .app-header {
-  gap: 12px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px 12px;
 }
 
 .topbar,
-.header-grid,
 .trend-price-grid {
   grid-template-columns: 1fr;
 }
 
 .top-actions {
-  justify-content: stretch;
+  justify-content: flex-start;
 }
 
 .top-actions button {
-  flex: 1 1 120px;
+  flex: 0 0 auto;
   padding: 0 10px;
+}
+
+.top-actions .icon-button {
+  padding: 0;
+}
+
+.notification-anchor {
+  position: static;
+}
+
+.account-menu-anchor {
+  position: static;
+}
+
+.account-menu {
+  left: 12px;
+  right: 12px;
+  top: 70px;
+  width: auto;
+}
+
+.notification-drawer {
+  left: 12px;
+  right: 12px;
+  top: 70px;
+  width: auto;
 }
 
 h1 {
   font-size: 28px;
+}
+
+.app-header h1 {
+  font-size: 26px;
 }
 
 .live-prices-panel {
@@ -755,16 +1053,12 @@ h1 {
   }
 
   .app-header {
-    gap: 18px;
-    padding: 18px;
+    gap: 8px;
+    padding: 10px 24px;
   }
 
   .topbar {
     grid-template-columns: 1fr auto;
-  }
-
-  .header-grid {
-    grid-template-columns: minmax(150px, 0.85fr) minmax(190px, 1fr) minmax(220px, 1.25fr) minmax(300px, 1.7fr);
   }
 
   .trend-price-grid {
@@ -796,8 +1090,38 @@ h1 {
     padding: 0 18px;
   }
 
+  .top-actions .icon-button {
+    padding: 0;
+  }
+
+  .notification-anchor {
+    position: relative;
+  }
+
+  .account-menu-anchor {
+    position: relative;
+  }
+
+  .account-menu {
+    left: auto;
+    right: 0;
+    top: calc(100% + 12px);
+    width: min(430px, calc(100vw - 24px));
+  }
+
+  .notification-drawer {
+    left: auto;
+    right: 0;
+    top: calc(100% + 12px);
+    width: min(430px, calc(100vw - 24px));
+  }
+
   h1 {
     font-size: 38px;
+  }
+
+  .app-header h1 {
+    font-size: 30px;
   }
 
   .live-prices-panel {
@@ -818,10 +1142,4 @@ h1 {
     width: 72px;
   }
 
-  .mtf-toast {
-    left: auto;
-    max-width: 360px;
-    right: 24px;
-    top: 24px;
-  }
 }

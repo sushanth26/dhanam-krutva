@@ -18,7 +18,9 @@ export async function loadNotificationState() {
 
   const config = await getJson("/api/notifications/config");
   const registration = await registerNotificationWorker();
-  const subscription = support.push ? await registration.pushManager.getSubscription() : null;
+  const subscription = support.push
+    ? await syncExistingSubscription(registration, config, Notification.permission)
+    : null;
   return {
     supported: true,
     permission: Notification.permission,
@@ -41,24 +43,13 @@ export async function enableNotifications() {
 
   const config = await getJson("/api/notifications/config");
   const registration = await registerNotificationWorker();
-  let subscribed = false;
-  if (support.push && config.web_push_configured && config.vapid_public_key) {
-    let subscription = await registration.pushManager.getSubscription();
-    if (!subscription) {
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(config.vapid_public_key),
-      });
-    }
-    await postJson("/api/notifications/subscribe", { subscription: subscription.toJSON() });
-    subscribed = true;
-  }
+  const subscription = support.push ? await ensureServerSubscription(registration, config) : null;
 
   return {
     supported: true,
     permission,
     webPushConfigured: Boolean(config.web_push_configured && config.vapid_public_key),
-    subscribed,
+    subscribed: Boolean(subscription),
   };
 }
 
@@ -79,12 +70,43 @@ export async function showDeviceNotification(payload) {
   return true;
 }
 
-export async function sendTestPush() {
-  return postJson("/api/notifications/test", {});
+async function registerNotificationWorker() {
+  const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, { scope: "/static/" });
+  registration.update().catch(() => {});
+  return registration;
 }
 
-async function registerNotificationWorker() {
-  return navigator.serviceWorker.register(SERVICE_WORKER_URL, { scope: "/static/" });
+async function syncExistingSubscription(registration, config, permission) {
+  const existing = await registration.pushManager.getSubscription();
+  if (permission !== "granted" || !config.web_push_configured || !config.vapid_public_key) {
+    return existing;
+  }
+  return ensureServerSubscription(registration, config, existing);
+}
+
+async function ensureServerSubscription(registration, config, currentSubscription = null) {
+  if (!config.web_push_configured || !config.vapid_public_key) return currentSubscription;
+  if (currentSubscription && !subscriptionMatchesKey(currentSubscription, config.vapid_public_key)) {
+    await currentSubscription.unsubscribe();
+    currentSubscription = null;
+  }
+  const subscription = currentSubscription || await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(config.vapid_public_key),
+  });
+  await postJson("/api/notifications/subscribe", { subscription: subscription.toJSON() });
+  return subscription;
+}
+
+function subscriptionMatchesKey(subscription, vapidPublicKey) {
+  const key = subscription.options?.applicationServerKey;
+  if (!key) return true;
+  return arrayBufferToUrlBase64(key) === vapidPublicKey;
+}
+
+function arrayBufferToUrlBase64(buffer) {
+  const raw = String.fromCharCode(...new Uint8Array(buffer));
+  return window.btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 function urlBase64ToUint8Array(value) {
