@@ -52,7 +52,6 @@ button:hover {
 .workspace,
 .section-heading,
 .status-grid,
-.header-meta,
 .data-grid {
   display: grid;
   gap: 16px;
@@ -242,6 +241,101 @@ button:hover {
   font-weight: 700;
 }
 
+.account-menu-anchor {
+  position: relative;
+}
+
+.account-menu-button {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.account-menu-button span {
+  font-size: 13px;
+}
+
+.account-menu-button b {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 999px;
+  color: #12664f;
+  display: inline-flex;
+  font-size: 11px;
+  height: 20px;
+  justify-content: center;
+  min-width: 20px;
+  padding: 0 6px;
+}
+
+.account-menu {
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(25, 33, 31, 0.2);
+  color: #19211f;
+  display: grid;
+  overflow: hidden;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 12px);
+  width: min(430px, calc(100vw - 24px));
+  z-index: 190;
+}
+
+.account-menu-header {
+  background: #f8faf7;
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+}
+
+.account-menu-header span,
+.account-menu-list > span,
+.account-meta-line span {
+  color: #68766c;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.account-menu-header strong {
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.account-menu-status {
+  border-bottom: 1px solid #edf1eb;
+  border-top: 1px solid #edf1eb;
+  display: grid;
+}
+
+.account-meta-line {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 82px minmax(0, 1fr) auto;
+  padding: 10px 16px;
+}
+
+.account-meta-line + .account-meta-line {
+  border-top: 1px solid #edf1eb;
+}
+
+.account-meta-line strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.account-menu-list {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px 16px;
+}
+
 .secondary-button {
   background: #eef2f5;
   color: #19211f;
@@ -288,14 +382,6 @@ h3 {
 .status-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 16px;
-}
-
-.header-meta {
-  align-items: center;
-  border-top: 1px solid #edf1eb;
-  gap: 8px 16px;
-  grid-template-columns: auto auto minmax(160px, 1fr) minmax(260px, auto);
-  padding-top: 8px;
 }
 
 .workspace {
@@ -350,27 +436,10 @@ h3 {
 }
 
 .panel span,
-.section-heading span,
-.meta-item span,
-.meta-accounts > span {
+.section-heading span {
   color: #68766c;
   font-size: 13px;
   font-weight: 700;
-}
-
-.meta-item,
-.meta-accounts {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  min-width: 0;
-}
-
-.meta-item strong,
-.meta-accounts strong {
-  font-size: 14px;
-  font-weight: 900;
-  overflow-wrap: anywhere;
 }
 
 .panel strong {
@@ -416,10 +485,6 @@ h3 {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 16px;
-}
-
-.meta-accounts {
-  justify-content: flex-end;
 }
 
 .account-chip {
@@ -851,7 +916,6 @@ pre {
   }
 
   .status-grid,
-  .header-meta,
   .workspace,
   .data-grid,
   .metric-grid,
@@ -880,23 +944,8 @@ pre {
 }
 
 .topbar,
-.header-meta,
 .trend-price-grid {
   grid-template-columns: 1fr;
-}
-
-.header-meta {
-  align-items: stretch;
-}
-
-.meta-item,
-.meta-accounts {
-  align-items: flex-start;
-  flex-wrap: wrap;
-}
-
-.meta-accounts {
-  justify-content: flex-start;
 }
 
 .top-actions {
@@ -914,6 +963,17 @@ pre {
 
 .notification-anchor {
   position: static;
+}
+
+.account-menu-anchor {
+  position: static;
+}
+
+.account-menu {
+  left: 12px;
+  right: 12px;
+  top: 70px;
+  width: auto;
 }
 
 .notification-drawer {
@@ -1001,21 +1061,6 @@ h1 {
     grid-template-columns: 1fr auto;
   }
 
-  .header-meta {
-    align-items: center;
-    grid-template-columns: auto auto minmax(160px, 1fr) minmax(260px, auto);
-  }
-
-  .meta-item,
-  .meta-accounts {
-    align-items: center;
-    flex-wrap: nowrap;
-  }
-
-  .meta-accounts {
-    justify-content: flex-end;
-  }
-
   .trend-price-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1051,6 +1096,17 @@ h1 {
 
   .notification-anchor {
     position: relative;
+  }
+
+  .account-menu-anchor {
+    position: relative;
+  }
+
+  .account-menu {
+    left: auto;
+    right: 0;
+    top: calc(100% + 12px);
+    width: min(430px, calc(100vw - 24px));
   }
 
   .notification-drawer {

@@ -17,10 +17,13 @@ export function Header({
   onMarkNotificationsRead,
 }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const notificationLabel = notificationButtonLabel(notificationState);
   const environmentText = status ? `${status.environment.toUpperCase()} / ${status.region.toUpperCase()}` : "-";
   const unreadCount = notifications.filter((item) => !item.read).length;
   const pushEnabled = notificationState.permission === "granted";
+  const selectedAccount = accounts.find((account) => findAccountId(account) === selectedAccountId);
+  const selectedAccountLabel = findAccountId(selectedAccount) || `${accounts.length} accounts`;
   return (
     <header className="app-header">
       <section className="topbar">
@@ -49,6 +52,31 @@ export function Header({
           >
             <span aria-hidden="true">■</span>
           </button>
+          <div className="account-menu-anchor">
+            <button
+              type="button"
+              className="account-menu-button secondary-button"
+              onClick={() => setAccountMenuOpen((open) => !open)}
+              aria-label="Open account menu"
+              title="Accounts"
+            >
+              <span>Accounts</span>
+              <b>{accounts.length}</b>
+            </button>
+            {accountMenuOpen ? (
+              <AccountMenu
+                accounts={accounts}
+                environmentText={environmentText}
+                onSelectAccount={(accountId) => {
+                  onSelectAccount(accountId);
+                  setAccountMenuOpen(false);
+                }}
+                selectedAccountId={selectedAccountId}
+                selectedAccountLabel={selectedAccountLabel}
+                status={status}
+              />
+            ) : null}
+          </div>
           <div className="notification-anchor">
             <button
               type="button"
@@ -75,42 +103,62 @@ export function Header({
           </button>
         </div>
       </section>
-
-      <section className="header-meta">
-        <div className="meta-item">
-          <span>Config</span>
-          <strong>{status?.configured ? "Ready" : "Missing .env"}</strong>
-        </div>
-        <div className="meta-item">
-          <span>Env</span>
-          <strong>{environmentText}</strong>
-          <em className={`mode-badge ${status?.data_mode === "live" ? "live" : "test"}`}>
-            {status?.data_mode === "live" ? "LIVE DATA" : "TEST DATA"}
-          </em>
-        </div>
-        <div className="meta-item endpoint-item">
-          <span>Endpoint</span>
-          <strong>{status?.endpoint || "-"}</strong>
-        </div>
-        <div className="meta-accounts">
-          <span>Accounts {accounts.length}</span>
-          {accounts.length ? accounts.map((account, index) => {
-            const accountId = findAccountId(account);
-            return (
-              <button
-                key={accountId || index}
-                className={`account-chip ${accountId === selectedAccountId ? "active" : ""}`}
-                type="button"
-                onClick={() => onSelectAccount(accountId)}
-              >
-                <b>{accountId || "Unknown account"}</b>
-                <small>{account.account_type || account.accountType || account.broker || "Webull"}</small>
-              </button>
-            );
-          }) : <strong>-</strong>}
-        </div>
-      </section>
     </header>
+  );
+}
+
+function AccountMenu({
+  accounts,
+  environmentText,
+  onSelectAccount,
+  selectedAccountId,
+  selectedAccountLabel,
+  status,
+}) {
+  return (
+    <section className="account-menu" aria-label="Account menu">
+      <div className="account-menu-header">
+        <span>Selected</span>
+        <strong>{selectedAccountLabel}</strong>
+      </div>
+      <div className="account-menu-status">
+        <MetaLine label="Config" value={status?.configured ? "Ready" : "Missing .env"} />
+        <MetaLine
+          label="Env"
+          value={environmentText}
+          badge={status?.data_mode === "live" ? "LIVE DATA" : "TEST DATA"}
+          badgeKind={status?.data_mode === "live" ? "live" : "test"}
+        />
+        <MetaLine label="Endpoint" value={status?.endpoint || "-"} />
+      </div>
+      <div className="account-menu-list">
+        <span>Accounts {accounts.length}</span>
+        {accounts.length ? accounts.map((account, index) => {
+          const accountId = findAccountId(account);
+          return (
+            <button
+              key={accountId || index}
+              className={`account-chip ${accountId === selectedAccountId ? "active" : ""}`}
+              type="button"
+              onClick={() => onSelectAccount(accountId)}
+            >
+              <b>{accountId || "Unknown account"}</b>
+              <small>{account.account_type || account.accountType || account.broker || "Webull"}</small>
+            </button>
+          );
+        }) : <strong>-</strong>}
+      </div>
+    </section>
+  );
+}
+
+function MetaLine({ badge, badgeKind = "test", label, value }) {
+  return (
+    <div className="account-meta-line">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {badge ? <em className={`mode-badge ${badgeKind}`}>{badge}</em> : null}
+    </div>
   );
 }
 
