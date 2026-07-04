@@ -126,6 +126,8 @@ def mtf_notification_payload(quotes: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "title": "MTFs changed",
         "body": matches or "No symbols are on MTF clouds now.",
+        "badgeCount": len(quotes),
+        "badge_count": len(quotes),
         "tag": "mtf-update",
         "url": "/",
         "matches": [

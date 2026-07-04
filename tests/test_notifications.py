@@ -23,6 +23,8 @@ def test_mtf_notification_payload_lists_symbols_and_clouds():
 
     assert payload["title"] == "MTFs changed"
     assert payload["body"] == "BE Hourly 34/50 | LLY Daily 20/21 + Daily 50/55"
+    assert payload["badgeCount"] == 2
+    assert payload["badge_count"] == 2
     assert payload["matches"][1]["labels"] == ["Daily 20/21", "Daily 50/55"]
     assert describe_mtf_matches(quotes) in payload["body"]
     assert mtf_signature(list(reversed(quotes))) == mtf_signature(quotes)

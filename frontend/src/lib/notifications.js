@@ -70,6 +70,19 @@ export async function showDeviceNotification(payload) {
   return true;
 }
 
+export async function setAppBadgeCount(count) {
+  const badgeCount = Number(count) || 0;
+  if (badgeCount > 0 && "setAppBadge" in navigator) {
+    await navigator.setAppBadge(badgeCount);
+    return true;
+  }
+  if (badgeCount <= 0 && "clearAppBadge" in navigator) {
+    await navigator.clearAppBadge();
+    return true;
+  }
+  return false;
+}
+
 async function registerNotificationWorker() {
   const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, { scope: "/static/" });
   registration.update().catch(() => {});
