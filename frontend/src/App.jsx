@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
+import { AlarmPanel } from "./components/AlarmPanel";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
-import { MtfToast } from "./components/MtfToast";
 import { getJson } from "./lib/api";
 import { cloudStatus, describeMtfMatches, findAccountId, flattenAccounts, isMarketRefreshWindow, mtfSignature } from "./lib/market";
 import { enableNotifications, loadNotificationState, sendTestPush, showDeviceNotification } from "./lib/notifications";
@@ -27,9 +27,9 @@ export default function App() {
     webPushConfigured: false,
     subscribed: false,
   });
-  const [toast, setToast] = useState({ message: "", changed: false });
+  const [alarm, setAlarm] = useState({ message: "", changed: false });
   const liveTimer = useRef(null);
-  const toastTimer = useRef(null);
+  const alarmTimer = useRef(null);
   const lastMtfSignature = useRef(null);
 
   const trendBuckets = useMemo(() => {
@@ -96,7 +96,7 @@ export default function App() {
     const changed = lastMtfSignature.current !== null && signature !== lastMtfSignature.current;
     lastMtfSignature.current = signature;
     const matches = describeMtfMatches(nextMtfs);
-    showToast(
+    showAlarm(
       changed ? `MTFs changed: ${matches || "no matches"}` : `MTFs updated ${updatedAt}: ${matches || "no matches"}`,
       changed,
     );
@@ -105,10 +105,10 @@ export default function App() {
     }
   }
 
-  function showToast(message, changed = false) {
-    setToast({ message, changed });
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast({ message: "", changed: false }), changed ? 14000 : 10000);
+  function showAlarm(message, changed = false) {
+    setAlarm({ message, changed });
+    if (alarmTimer.current) clearTimeout(alarmTimer.current);
+    alarmTimer.current = setTimeout(() => setAlarm({ message: "", changed: false }), changed ? 14000 : 10000);
   }
 
   function showMtfDeviceNotification(body) {
@@ -125,7 +125,7 @@ export default function App() {
       const nextState = await enableNotifications();
       setNotificationState(nextState);
       if (nextState.permission === "granted") {
-        showToast(
+        showAlarm(
           nextState.webPushConfigured && nextState.subscribed
             ? "App notifications enabled. Railway can send MTF push alerts."
             : "Device notifications enabled. Add VAPID keys for closed-app push alerts.",
@@ -138,7 +138,7 @@ export default function App() {
   }
 
   async function testMtfNotification() {
-    showToast(DUMMY_MTF_MESSAGE, true);
+    showAlarm(DUMMY_MTF_MESSAGE, true);
     showMtfDeviceNotification(DUMMY_MTF_BODY);
     if (notificationState.webPushConfigured && notificationState.subscribed) {
       try {
@@ -172,26 +172,27 @@ export default function App() {
       });
     return () => {
       if (liveTimer.current) clearInterval(liveTimer.current);
-      if (toastTimer.current) clearTimeout(toastTimer.current);
+      if (alarmTimer.current) clearTimeout(alarmTimer.current);
     };
   }, []);
 
   return (
     <>
-      <MtfToast message={toast.message} changed={toast.changed} />
+      <Header
+        status={status}
+        accounts={accounts}
+        selectedAccountId={selectedAccountId}
+        liveRefreshActive={liveRefreshActive}
+        onRefresh={refreshShell}
+        onStart={startLiveRefresh}
+        onStop={stopLiveRefresh}
+        onSelectAccount={setSelectedAccountId}
+        notificationState={notificationState}
+        onEnableNotifications={enableAppNotifications}
+        onTestNotification={testMtfNotification}
+      />
       <main className="shell">
-        <Header
-          status={status}
-          accounts={accounts}
-          selectedAccountId={selectedAccountId}
-          liveRefreshActive={liveRefreshActive}
-          onRefresh={refreshShell}
-          onStart={startLiveRefresh}
-          onStop={stopLiveRefresh}
-          onSelectAccount={setSelectedAccountId}
-          notificationState={notificationState}
-          onEnableNotifications={enableAppNotifications}
-        />
+        <AlarmPanel message={alarm.message} changed={alarm.changed} />
 
         {alert ? <div className="alert app-alert">{alert}</div> : null}
 
@@ -202,9 +203,6 @@ export default function App() {
               <p className="muted">Live Webull prices with clock-aligned EMA levels.</p>
             </div>
             <div className="live-price-actions">
-              <button className="secondary-button" type="button" onClick={testMtfNotification}>
-                Test Alert
-              </button>
               <button type="button" onClick={() => loadLivePrices({ manual: true })}>Refresh Prices</button>
             </div>
           </div>

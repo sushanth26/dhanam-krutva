@@ -11,6 +11,7 @@ export function Header({
   onSelectAccount,
   notificationState,
   onEnableNotifications,
+  onTestNotification,
 }) {
   const notificationLabel = notificationButtonLabel(notificationState);
   const environmentText = status ? `${status.environment.toUpperCase()} / ${status.region.toUpperCase()}` : "-";
@@ -22,21 +23,48 @@ export function Header({
           <h1>Dhanam Krutva</h1>
         </div>
         <div className="top-actions">
-          <button type="button" onClick={onStart} disabled={liveRefreshActive}>
-            {liveRefreshActive ? "Webull Running" : "Start Webull"}
-          </button>
-          <button type="button" className="secondary-button" onClick={onStop} disabled={!liveRefreshActive}>
-            Stop Webull
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onStart}
+            disabled={liveRefreshActive}
+            aria-label={liveRefreshActive ? "Webull running" : "Start Webull"}
+            title={liveRefreshActive ? "Webull running" : "Start Webull"}
+          >
+            <span aria-hidden="true">{liveRefreshActive ? "ON" : "▶"}</span>
           </button>
           <button
             type="button"
-            className="secondary-button"
+            className="icon-button secondary-button"
+            onClick={onStop}
+            disabled={!liveRefreshActive}
+            aria-label="Stop Webull"
+            title="Stop Webull"
+          >
+            <span aria-hidden="true">■</span>
+          </button>
+          <button
+            type="button"
+            className="icon-button secondary-button"
             onClick={onEnableNotifications}
             disabled={!notificationState.supported || notificationState.permission === "granted"}
+            aria-label={notificationLabel}
+            title={notificationLabel}
           >
-            {notificationLabel}
+            <span aria-hidden="true">{notificationState.permission === "granted" ? "🔔" : "!"}</span>
           </button>
-          <button type="button" onClick={onRefresh}>Refresh</button>
+          <button
+            type="button"
+            className="icon-button secondary-button"
+            onClick={onTestNotification}
+            aria-label="Test notification alarm"
+            title="Test notification alarm"
+          >
+            <span aria-hidden="true">⚠</span>
+          </button>
+          <button type="button" className="icon-button" onClick={onRefresh} aria-label="Refresh" title="Refresh">
+            <span aria-hidden="true">↻</span>
+          </button>
         </div>
       </section>
 
