@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from app.market_data import aggregate_by_minutes, ema_values, mtf_matches, parse_symbols
+from app.market_data import aggregate_by_minutes, ema_touch_matches, ema_values, mtf_matches, parse_symbols
 
 
 def candle(index: int, close: float) -> dict:
@@ -31,6 +31,7 @@ def test_aggregate_by_minutes_rolls_5m_bars_into_10m_buckets():
     assert aggregated[0]["high"] == 12
     assert aggregated[0]["low"] == 9
     assert aggregated[0]["volume"] == 201
+    assert aggregated[0]["source_count"] == 2
 
 
 def test_ema_values_returns_latest_values_by_period():
@@ -51,3 +52,49 @@ def test_mtf_matches_detects_price_inside_cloud_ranges():
     )
 
     assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 50/55"]
+
+
+def test_ema_touch_matches_alerts_when_10m_candle_closes_back_above_tracked_emas():
+    candles = [
+        {"low": 93, "close": 97},
+        {"low": 99, "close": 103},
+    ]
+
+    matches = ema_touch_matches(
+        candles,
+        {"5": 101, "12": 102, "34": 100, "50": 110},
+        {"34": 98, "50": 101},
+        {"20": 102, "21": 103, "50": 104, "55": 105},
+    )
+
+    assert [match["label"] for match in matches] == [
+        "10m touch 34",
+        "10m touch Hourly 50",
+        "10m touch Daily 20",
+    ]
+    assert all(match["type"] == "10m_touch" for match in matches)
+
+
+def test_ema_touch_matches_ignores_5_and_12_emas():
+    matches = ema_touch_matches(
+        [{"low": 99, "close": 103}],
+        {"5": 100, "12": 101, "34": 110, "50": 111},
+        {"34": 112, "50": 113},
+        {"20": 114, "21": 115, "50": 116, "55": 117},
+    )
+
+    assert matches == []
+
+
+def test_ema_touch_matches_uses_latest_complete_10m_candle():
+    matches = ema_touch_matches(
+        [
+            {"low": 99, "close": 103, "source_count": 2},
+            {"low": 89, "close": 93, "source_count": 1},
+        ],
+        {"34": 100, "50": 110},
+        {"34": 111, "50": 112},
+        {"20": 113, "21": 114, "50": 115, "55": 116},
+    )
+
+    assert [match["label"] for match in matches] == ["10m touch 34"]

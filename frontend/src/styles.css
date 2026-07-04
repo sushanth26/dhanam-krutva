@@ -829,6 +829,12 @@ select {
   --mtf-color: #123f7d;
 }
 
+.mtf-tag.touch {
+  --mtf-bg: #dff8f3;
+  --mtf-border: #25a184;
+  --mtf-color: #075747;
+}
+
 .wide {
   min-width: 0;
 }

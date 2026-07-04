@@ -51,6 +51,7 @@ export function cloudStatus(emaSet, fastKeys, slowKeys) {
 
 export function mtfTagClass(label) {
   const normalized = String(label || "").toLowerCase();
+  if (normalized.includes("10m touch")) return "touch";
   if (normalized.includes("hourly")) return "hourly";
   if (normalized.includes("daily 20/21")) return "daily-fast";
   if (normalized.includes("daily 50/55")) return "daily-slow";

@@ -78,6 +78,7 @@ def build_live_prices(webull: WebullService, symbols: str) -> dict[str, Any]:
         price = snapshot_price(snapshot_map.get(symbol))
         ema_1h = ema_values(h1_candles, [20, 21, 34, 50, 55])
         ema_daily = ema_values(daily_candles, [20, 21, 50, 55])
+        ten_minute_ema = ema_values(ten_minute_candles, [5, 12, 34, 50])
         quotes.append(
             {
                 "symbol": symbol,
@@ -85,10 +86,13 @@ def build_live_prices(webull: WebullService, symbols: str) -> dict[str, Any]:
                 "price": price,
                 "change": snapshot_change(snapshot_map.get(symbol)),
                 "change_ratio": snapshot_change_ratio(snapshot_map.get(symbol)),
-                "ema_10m": ema_values(ten_minute_candles, [5, 12, 34, 50]),
+                "ema_10m": ten_minute_ema,
                 "ema_1h": ema_1h,
                 "ema_daily": ema_daily,
-                "mtf_matches": mtf_matches(price, ema_1h, ema_daily),
+                "mtf_matches": [
+                    *mtf_matches(price, ema_1h, ema_daily),
+                    *ema_touch_matches(ten_minute_candles, ten_minute_ema, ema_1h, ema_daily),
+                ],
             }
         )
 
@@ -192,6 +196,57 @@ def mtf_matches(price: float | None, ema_1h: dict[str, float | None], ema_daily:
     return matches
 
 
+def ema_touch_matches(
+    ten_minute_candles: list[dict[str, Any]],
+    ema_10m: dict[str, float | None],
+    ema_1h: dict[str, float | None],
+    ema_daily: dict[str, float | None],
+) -> list[dict[str, Any]]:
+    candle = latest_complete_candle(ten_minute_candles)
+    if not candle:
+        return []
+
+    close = candle.get("close")
+    low = candle.get("low")
+    if close is None or low is None:
+        return []
+
+    checks = [
+        ("10m touch 34", ema_10m.get("34"), "10m"),
+        ("10m touch 50", ema_10m.get("50"), "10m"),
+        ("10m touch Hourly 34", ema_1h.get("34"), "hourly"),
+        ("10m touch Hourly 50", ema_1h.get("50"), "hourly"),
+        ("10m touch Daily 20", ema_daily.get("20"), "daily"),
+        ("10m touch Daily 21", ema_daily.get("21"), "daily"),
+        ("10m touch Daily 50", ema_daily.get("50"), "daily"),
+        ("10m touch Daily 55", ema_daily.get("55"), "daily"),
+    ]
+    matches = []
+    for label, value, timeframe in checks:
+        if value is None:
+            continue
+        if low <= value and close > value:
+            matches.append(
+                {
+                    "label": label,
+                    "timeframe": timeframe,
+                    "ema": round(value, 4),
+                    "candle_low": round(low, 4),
+                    "candle_close": round(close, 4),
+                    "type": "10m_touch",
+                }
+            )
+    return matches
+
+
+def latest_complete_candle(candles: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for candle in reversed(candles):
+        source_count = candle.get("source_count")
+        if source_count is None or source_count >= 2:
+            return candle
+    return None
+
+
 def aggregate_by_minutes(candles: list[dict[str, Any]], minutes: int) -> list[dict[str, Any]]:
     buckets: dict[datetime, dict[str, Any]] = {}
     for candle in candles:
@@ -214,12 +269,14 @@ def aggregate_by_minutes(candles: list[dict[str, Any]], minutes: int) -> list[di
                 "low": candle["low"],
                 "close": candle["close"],
                 "volume": candle.get("volume", 0),
+                "source_count": 1,
             }
             continue
         bucket["high"] = max(bucket["high"], candle["high"])
         bucket["low"] = min(bucket["low"], candle["low"])
         bucket["close"] = candle["close"]
         bucket["volume"] += candle.get("volume", 0)
+        bucket["source_count"] += 1
     return [buckets[key] for key in sorted(buckets)]
 
 
