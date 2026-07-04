@@ -5,7 +5,7 @@ import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
 import { getJson } from "./lib/api";
 import { cloudStatus, describeMtfMatches, findAccountId, flattenAccounts, isMarketRefreshWindow, mtfSignature } from "./lib/market";
-import { enableNotifications, loadNotificationState, showDeviceNotification } from "./lib/notifications";
+import { enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification } from "./lib/notifications";
 
 const MARKET_REFRESH_INTERVAL_MS = 15000;
 const MAX_NOTIFICATIONS = 20;
@@ -42,6 +42,7 @@ export default function App() {
     );
   }, [quotes]);
   const mtfs = useMemo(() => quotes.filter((quote) => quote.mtf_matches?.length), [quotes]);
+  const unreadNotificationCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
 
   async function refreshShell() {
     try {
@@ -99,7 +100,7 @@ export default function App() {
       kind: changed ? "changed" : "update",
     });
     if (changed) {
-      showMtfDeviceNotification(matches || "No symbols are on MTF clouds now.");
+      showMtfDeviceNotification(matches || "No symbols are on MTF clouds now.", nextMtfs.length);
     }
   }
 
@@ -121,10 +122,11 @@ export default function App() {
     setNotifications((current) => current.map((item) => ({ ...item, read: true })));
   }
 
-  function showMtfDeviceNotification(body) {
+  function showMtfDeviceNotification(body, badgeCount) {
     showDeviceNotification({
       title: "MTFs changed",
       body,
+      badgeCount,
       tag: "mtf-update",
       url: "/",
     }).catch((error) => setLiveAlert(error.message));
@@ -173,6 +175,10 @@ export default function App() {
       if (liveTimer.current) clearInterval(liveTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    setAppBadgeCount(unreadNotificationCount).catch(() => {});
+  }, [unreadNotificationCount]);
 
   return (
     <>
