@@ -13,6 +13,7 @@ export function Header({
   onEnableNotifications,
 }) {
   const notificationLabel = notificationButtonLabel(notificationState);
+  const environmentText = status ? `${status.environment.toUpperCase()} / ${status.region.toUpperCase()}` : "-";
   return (
     <header className="app-header">
       <section className="topbar">
@@ -39,49 +40,41 @@ export function Header({
         </div>
       </section>
 
-      <section className="header-grid">
-        <StatusCard label="Configuration" value={status?.configured ? "Ready" : "Missing .env"} />
-        <article className="panel">
-          <span>Environment</span>
-          <strong>{status ? `${status.environment.toUpperCase()} / ${status.region.toUpperCase()}` : "-"}</strong>
+      <section className="header-meta">
+        <div className="meta-item">
+          <span>Config</span>
+          <strong>{status?.configured ? "Ready" : "Missing .env"}</strong>
+        </div>
+        <div className="meta-item">
+          <span>Env</span>
+          <strong>{environmentText}</strong>
           <em className={`mode-badge ${status?.data_mode === "live" ? "live" : "test"}`}>
             {status?.data_mode === "live" ? "LIVE DATA" : "TEST DATA"}
           </em>
-        </article>
-        <StatusCard label="Endpoint" value={status?.endpoint || "-"} />
-        <article className="panel header-accounts">
-          <div className="section-heading">
-            <h2>Accounts</h2>
-            <span>{accounts.length}</span>
-          </div>
-          <div className="account-list">
-            {accounts.length ? accounts.map((account, index) => {
-              const accountId = findAccountId(account);
-              return (
-                <button
-                  key={accountId || index}
-                  className={`account ${accountId === selectedAccountId ? "active" : ""}`}
-                  type="button"
-                  onClick={() => onSelectAccount(accountId)}
-                >
-                  <b>{accountId || "Unknown account"}</b>
-                  <small>{account.account_type || account.accountType || account.broker || "Webull account"}</small>
-                </button>
-              );
-            }) : <p className="muted">No accounts loaded yet.</p>}
-          </div>
-        </article>
+        </div>
+        <div className="meta-item endpoint-item">
+          <span>Endpoint</span>
+          <strong>{status?.endpoint || "-"}</strong>
+        </div>
+        <div className="meta-accounts">
+          <span>Accounts {accounts.length}</span>
+          {accounts.length ? accounts.map((account, index) => {
+            const accountId = findAccountId(account);
+            return (
+              <button
+                key={accountId || index}
+                className={`account-chip ${accountId === selectedAccountId ? "active" : ""}`}
+                type="button"
+                onClick={() => onSelectAccount(accountId)}
+              >
+                <b>{accountId || "Unknown account"}</b>
+                <small>{account.account_type || account.accountType || account.broker || "Webull"}</small>
+              </button>
+            );
+          }) : <strong>-</strong>}
+        </div>
       </section>
     </header>
-  );
-}
-
-function StatusCard({ label, value }) {
-  return (
-    <article className="panel">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </article>
   );
 }
 
