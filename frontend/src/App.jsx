@@ -5,11 +5,9 @@ import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
 import { getJson } from "./lib/api";
 import { cloudStatus, describeMtfMatches, findAccountId, flattenAccounts, isMarketRefreshWindow, mtfSignature } from "./lib/market";
-import { enableNotifications, loadNotificationState, sendTestPush, showDeviceNotification } from "./lib/notifications";
+import { enableNotifications, loadNotificationState, showDeviceNotification } from "./lib/notifications";
 
 const MARKET_REFRESH_INTERVAL_MS = 15000;
-const DUMMY_MTF_MESSAGE = "MTFs changed: ASTS Hourly 34/50 • AMD Daily 20/21 • BE Daily 50/55 • LLY Hourly 34/50 + Daily 20/21";
-const DUMMY_MTF_BODY = "ASTS Hourly 34/50 | AMD Daily 20/21 | BE Daily 50/55 | LLY Hourly 34/50 + Daily 20/21";
 const MAX_NOTIFICATIONS = 20;
 
 export default function App() {
@@ -150,18 +148,6 @@ export default function App() {
     }
   }
 
-  async function testMtfNotification() {
-    addNotification({ title: "MTF notification test", message: DUMMY_MTF_BODY, kind: "changed" });
-    showMtfDeviceNotification(DUMMY_MTF_BODY);
-    if (notificationState.webPushConfigured && notificationState.subscribed) {
-      try {
-        await sendTestPush();
-      } catch (error) {
-        setLiveAlert(error.message);
-      }
-    }
-  }
-
   function startLiveRefresh() {
     if (liveTimer.current) clearInterval(liveTimer.current);
     setLiveRefreshActive(true);
@@ -201,7 +187,6 @@ export default function App() {
         onSelectAccount={setSelectedAccountId}
         notificationState={notificationState}
         onEnableNotifications={enableAppNotifications}
-        onTestNotification={testMtfNotification}
         notifications={notifications}
         onMarkNotificationsRead={markNotificationsRead}
       />

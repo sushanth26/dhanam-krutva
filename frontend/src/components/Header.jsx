@@ -13,7 +13,6 @@ export function Header({
   onSelectAccount,
   notificationState,
   onEnableNotifications,
-  onTestNotification,
   notifications,
   onMarkNotificationsRead,
 }) {
@@ -49,15 +48,6 @@ export function Header({
             title="Stop Webull"
           >
             <span aria-hidden="true">■</span>
-          </button>
-          <button
-            type="button"
-            className="icon-button secondary-button"
-            onClick={onTestNotification}
-            aria-label="Test notification alarm"
-            title="Test notification alarm"
-          >
-            <span aria-hidden="true">!</span>
           </button>
           <div className="notification-anchor">
             <button

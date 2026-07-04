@@ -79,10 +79,6 @@ export async function showDeviceNotification(payload) {
   return true;
 }
 
-export async function sendTestPush() {
-  return postJson("/api/notifications/test", {});
-}
-
 async function registerNotificationWorker() {
   return navigator.serviceWorker.register(SERVICE_WORKER_URL, { scope: "/static/" });
 }
