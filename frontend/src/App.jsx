@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { AlertStrategies } from "./components/AlertStrategies";
 import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
 import { getJson } from "./lib/api";
+import { filterQuotesByStrategy, loadStrategyState, saveStrategyState } from "./lib/alertStrategies";
 import { cloudStatus, describeMtfMatches, findAccountId, flattenAccounts, isMarketRefreshWindow, mtfSignature } from "./lib/market";
-import { enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification } from "./lib/notifications";
+import { enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
 const MARKET_REFRESH_INTERVAL_MS = 15000;
 const MAX_NOTIFICATIONS = 20;
@@ -26,8 +28,10 @@ export default function App() {
     subscribed: false,
   });
   const [notifications, setNotifications] = useState([]);
+  const [strategyState, setStrategyState] = useState(loadStrategyState);
   const liveTimer = useRef(null);
   const lastMtfSignature = useRef(null);
+  const strategyStateRef = useRef(strategyState);
 
   const trendBuckets = useMemo(() => {
     return quotes.reduce(
@@ -41,7 +45,9 @@ export default function App() {
       { bullish: [], bearish: [], chop: [] },
     );
   }, [quotes]);
-  const mtfs = useMemo(() => quotes.filter((quote) => quote.mtf_matches?.length), [quotes]);
+  const mtfs = useMemo(() => {
+    return filterQuotesByStrategy(quotes.filter((quote) => quote.mtf_matches?.length), strategyState);
+  }, [quotes, strategyState]);
   const unreadNotificationCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
 
   async function refreshShell() {
@@ -79,7 +85,7 @@ export default function App() {
       const updatedAt = new Date().toLocaleTimeString();
       setQuotes(nextQuotes);
       setUpdatedText(`Updated ${updatedAt} from ${payload.source || "webull"}`);
-      notifyMtfUpdate(nextQuotes.filter((quote) => quote.mtf_matches?.length), updatedAt);
+      notifyMtfUpdate(filterQuotesByStrategy(nextQuotes.filter((quote) => quote.mtf_matches?.length), strategyStateRef.current), updatedAt);
 
       if (payload.errors?.length) {
         setLiveAlert(`Some data failed: ${payload.errors.map((item) => item.source).join(", ")}`);
@@ -122,6 +128,15 @@ export default function App() {
     setNotifications((current) => current.map((item) => ({ ...item, read: true })));
   }
 
+  function toggleStrategy(strategyId) {
+    setStrategyState((current) => {
+      const next = { ...current, [strategyId]: current[strategyId] === false };
+      saveStrategyState(next);
+      return next;
+    });
+    lastMtfSignature.current = null;
+  }
+
   function showMtfDeviceNotification(body, badgeCount) {
     showDeviceNotification({
       title: "MTFs changed",
@@ -134,7 +149,7 @@ export default function App() {
 
   async function enableAppNotifications() {
     try {
-      const nextState = await enableNotifications();
+      const nextState = await enableNotifications(strategyState);
       setNotificationState(nextState);
       if (nextState.permission === "granted") {
         addNotification({
@@ -180,6 +195,14 @@ export default function App() {
     setAppBadgeCount(unreadNotificationCount).catch(() => {});
   }, [unreadNotificationCount]);
 
+  useEffect(() => {
+    strategyStateRef.current = strategyState;
+  }, [strategyState]);
+
+  useEffect(() => {
+    syncNotificationPreferences(strategyState).catch(() => {});
+  }, [strategyState]);
+
   return (
     <>
       <Header
@@ -212,6 +235,7 @@ export default function App() {
 
           {liveAlert ? <div className="alert">{liveAlert}</div> : null}
 
+          <AlertStrategies strategyState={strategyState} onToggleStrategy={toggleStrategy} />
           <MtfTable quotes={mtfs} />
           <div className="trend-price-grid">
             <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" />

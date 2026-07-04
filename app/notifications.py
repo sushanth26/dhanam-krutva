@@ -12,6 +12,14 @@ from app.dependencies import service
 from app.market_data import LIVE_WATCHLIST, build_live_prices
 
 
+DEFAULT_ALERT_STRATEGIES = {
+    "hourly-cloud": True,
+    "daily-fast-cloud": True,
+    "daily-slow-cloud": True,
+    "ten-minute-touch": True,
+}
+
+
 class PushSubscriptionStore:
     def __init__(self, path: Path):
         self.path = path
@@ -95,10 +103,13 @@ class MtfPushMonitor:
         sent = 0
         removed = 0
         for subscription in self.store.all():
+            subscription_payload = filter_payload_by_strategies(payload, subscription.get("alert_strategies", {}))
+            if not subscription_payload:
+                continue
             try:
                 webpush(
-                    subscription_info=subscription,
-                    data=json.dumps(payload),
+                    subscription_info=webpush_subscription_info(subscription),
+                    data=json.dumps(subscription_payload),
                     vapid_private_key=self.settings.vapid_private_key,
                     vapid_claims={"sub": self.settings.vapid_subject},
                 )
@@ -119,6 +130,13 @@ def is_market_refresh_window(timezone_name: str) -> bool:
         return False
     minutes = now.hour * 60 + now.minute
     return 3 * 60 <= minutes < 15 * 60
+
+
+def webpush_subscription_info(subscription: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "endpoint": subscription.get("endpoint"),
+        "keys": subscription.get("keys", {}),
+    }
 
 
 def mtf_notification_payload(quotes: list[dict[str, Any]]) -> dict[str, Any]:
@@ -156,3 +174,56 @@ def mtf_signature(quotes: list[dict[str, Any]]) -> str:
             for quote in quotes
         )
     )
+
+
+def strategy_id_for_label(label: str) -> str:
+    if label.startswith("10m touch"):
+        return "ten-minute-touch"
+    if "Hourly 34/50" in label:
+        return "hourly-cloud"
+    if "Daily 20/21" in label:
+        return "daily-fast-cloud"
+    if "Daily 50/55" in label:
+        return "daily-slow-cloud"
+    return "unknown"
+
+
+def normalize_strategy_state(strategy_state: dict[str, Any] | None) -> dict[str, bool]:
+    normalized = DEFAULT_ALERT_STRATEGIES.copy()
+    if isinstance(strategy_state, dict):
+        for key in normalized:
+            if key in strategy_state:
+                normalized[key] = bool(strategy_state[key])
+    return normalized
+
+
+def filter_payload_by_strategies(payload: dict[str, Any], strategy_state: dict[str, Any] | None) -> dict[str, Any] | None:
+    if "matches" not in payload:
+        return payload
+
+    strategies = normalize_strategy_state(strategy_state)
+    filtered_matches = []
+    for item in payload.get("matches", []):
+        labels = []
+        for label in item.get("labels", []):
+            label_text = str(label or "")
+            if label_text and strategies.get(strategy_id_for_label(label_text), True):
+                labels.append(label_text)
+        if labels:
+            filtered_matches.append({"symbol": item.get("symbol"), "labels": labels})
+
+    if not filtered_matches:
+        return None
+
+    body = " | ".join(
+        f"{item.get('symbol')} {' + '.join(item.get('labels', []))}"
+        for item in filtered_matches
+        if item.get("labels")
+    )
+    return {
+        **payload,
+        "body": body or payload.get("body", "MTFs changed"),
+        "badgeCount": len(filtered_matches),
+        "badge_count": len(filtered_matches),
+        "matches": filtered_matches,
+    }
