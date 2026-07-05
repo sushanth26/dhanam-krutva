@@ -32,8 +32,9 @@ button:hover {
 
 .shell {
   margin: 0 auto;
-  max-width: 1280px;
+  max-width: none;
   padding: 18px 32px 32px;
+  width: 100%;
 }
 
 .app-header {
@@ -476,8 +477,11 @@ h3 {
 .strategy-toggle input {
   appearance: none;
   background: #d9e0dc;
+  border: 0;
   border-radius: 999px;
+  flex: none;
   height: 24px;
+  min-height: 24px;
   position: relative;
   width: 42px;
 }
@@ -716,6 +720,19 @@ select {
   width: 100%;
 }
 
+.strategy-toggle input[type="checkbox"] {
+  background: #d9e0dc;
+  border: 0;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  width: 42px;
+}
+
+.strategy-toggle input[type="checkbox"]:checked {
+  background: #126b4d;
+}
+
 .tradingview-results {
   display: grid;
   gap: 12px;
@@ -775,13 +792,26 @@ select {
   background: #eef2f5;
   border: 1px solid #dbe2d8;
   border-radius: 8px;
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 4px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   padding: 4px;
 }
 
-.watchlist-tabs button {
+.watchlist-tab {
+  align-items: center;
+  border-radius: 6px;
+  display: inline-flex;
+  min-width: 0;
+}
+
+.watchlist-tab.active {
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(25, 33, 31, 0.12);
+  color: #184d36;
+}
+
+.watchlist-tab > button {
   align-items: center;
   background: transparent;
   color: #4d5a55;
@@ -789,16 +819,14 @@ select {
   gap: 6px;
   justify-content: center;
   min-height: 36px;
-  padding: 0 10px;
+  padding: 0 9px;
 }
 
-.watchlist-tabs button.active {
-  background: #ffffff;
-  box-shadow: 0 1px 4px rgba(25, 33, 31, 0.12);
+.watchlist-tab.active > button {
   color: #184d36;
 }
 
-.watchlist-tabs span {
+.watchlist-tab b {
   align-items: center;
   background: #dff4e9;
   border-radius: 999px;
@@ -809,6 +837,34 @@ select {
   justify-content: center;
   min-width: 20px;
   padding: 0 6px;
+}
+
+.watchlist-tab .watchlist-delete {
+  color: #8a2424;
+  font-size: 12px;
+  min-height: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+
+.watchlist-add-tab {
+  align-items: center;
+  background: #ffffff;
+  border: 1px dashed #9aa39e;
+  color: #184d36;
+  display: inline-flex;
+  font-size: 20px;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 38px;
+  padding: 0;
+}
+
+.watchlist-refresh-all {
+  background: #12664f;
+  color: #ffffff;
+  min-height: 36px;
+  padding: 0 12px;
 }
 
 .daily-list-editor {
@@ -871,6 +927,90 @@ select {
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.homepage-market-grid {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 1fr;
+}
+
+.active-watchlist-tables {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.global-mtf-panel {
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(25, 33, 31, 0.06);
+  margin-top: 16px;
+  min-width: 0;
+  order: -1;
+  padding: 18px;
+}
+
+.global-mtf-panel .mtf-bucket {
+  margin-bottom: 0;
+}
+
+.global-mtf-panel .global-mtf-table {
+  display: block;
+}
+
+.global-mtf-panel .global-mtf-table thead {
+  display: none;
+}
+
+.global-mtf-panel .global-mtf-table tbody {
+  display: grid;
+}
+
+.global-mtf-panel .global-mtf-table .stock-row {
+  align-items: center;
+  display: grid;
+  gap: 3px 10px;
+  grid-template-areas:
+    "symbol list price"
+    "symbol tags price"
+    "symbol time price";
+  grid-template-columns: 72px minmax(0, 1fr) 76px;
+  padding: 12px 0;
+}
+
+.global-mtf-panel .global-mtf-table td {
+  border-bottom: 0;
+  padding: 0;
+}
+
+.global-mtf-panel .global-mtf-table .stock-row + .stock-row {
+  border-top: 1px solid #dbe2d8;
+}
+
+.global-mtf-panel .global-mtf-table .stock-row > td:first-child {
+  grid-area: symbol;
+  width: auto;
+}
+
+.global-mtf-panel .global-mtf-table .watchlist-cell {
+  grid-area: list;
+}
+
+.global-mtf-panel .global-mtf-table .mtf-tags {
+  grid-area: tags;
+}
+
+.global-mtf-panel .global-mtf-table .trigger-time {
+  grid-area: time;
+}
+
+.global-mtf-panel .global-mtf-table .price-cell {
+  grid-area: price;
+  text-align: right;
+  width: auto;
 }
 
 .price-bucket {
@@ -966,6 +1106,12 @@ select {
   position: relative;
 }
 
+.watchlist-cell {
+  color: #4d5a55;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .trigger-time {
   color: #4d5a55;
   font-size: 12px;
@@ -1013,6 +1159,7 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
 }
 
 .mtf-tag {
@@ -1024,12 +1171,16 @@ select {
   font-size: 12px;
   font-weight: 900;
   padding: 4px 8px;
+  overflow-wrap: normal;
+  white-space: nowrap;
+  word-break: normal;
 }
 
 .mtf-tag-group {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
+  max-width: 100%;
 }
 
 .mtf-tag.hourly {
@@ -1383,4 +1534,16 @@ h1 {
     width: 72px;
   }
 
+}
+
+@media (min-width: 1120px) {
+  .homepage-market-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
+  }
+
+  .global-mtf-panel {
+    order: 0;
+    position: sticky;
+    top: 72px;
+  }
 }
