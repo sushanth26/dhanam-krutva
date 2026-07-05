@@ -107,6 +107,7 @@ def test_ema_cloud_bounce_matches_alerts_when_10m_candle_closes_back_above_cloud
     ]
     assert all(match["type"] == "10m_cloud_bounce" for match in matches)
     assert matches[0]["trend"] == "Chop"
+    assert matches[0]["candle_time"] is None
 
 
 def test_ema_cloud_bounce_matches_ignores_5_and_12_cloud():
@@ -147,8 +148,8 @@ def test_ema_cloud_bounce_marks_10m_34_50_bearish_trend():
 def test_ema_cloud_bounce_matches_uses_latest_complete_10m_candle():
     matches = ema_cloud_bounce_matches(
         [
-            {"low": 99, "close": 113, "source_count": 2},
-            {"low": 89, "close": 93, "source_count": 1},
+            {"low": 99, "close": 113, "source_count": 2, "time": "2026-07-02T09:40:00"},
+            {"low": 89, "close": 93, "source_count": 1, "time": "2026-07-02T09:50:00"},
         ],
         {"34": 100, "50": 110},
         {"34": 120, "50": 121},
@@ -156,6 +157,7 @@ def test_ema_cloud_bounce_matches_uses_latest_complete_10m_candle():
     )
 
     assert [match["label"] for match in matches] == ["10m bounce 34/50"]
+    assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
 
 
 def test_ema_cloud_bounce_requires_close_above_entire_cloud():

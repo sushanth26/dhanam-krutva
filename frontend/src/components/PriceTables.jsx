@@ -14,12 +14,13 @@ export function MtfTable({ quotes }) {
             <tr>
               <th>Symbol</th>
               <th>On EMA</th>
+              <th>Time</th>
               <th className="price-col">Last</th>
             </tr>
           </thead>
           <tbody>
             {quotes.length ? quotes.map((quote) => <MtfRow key={quote.symbol} quote={quote} />) : (
-              <tr><td colSpan="3">No stocks are on hourly or daily EMA clouds right now.</td></tr>
+              <tr><td colSpan="4">No stocks are on hourly or daily EMA clouds right now.</td></tr>
             )}
           </tbody>
         </table>
@@ -70,6 +71,7 @@ function SectorRows({ sector, quotes }) {
 }
 
 function MtfRow({ quote }) {
+  const triggerTime = mtfTriggerTime(quote.mtf_matches);
   return (
     <BaseRow quote={quote}>
       <td className="mtf-tags">
@@ -80,6 +82,7 @@ function MtfRow({ quote }) {
           </span>
         ))}
       </td>
+      <td className="trigger-time">{triggerTime}</td>
     </BaseRow>
   );
 }
@@ -102,4 +105,12 @@ function BaseRow({ quote, children, trend = "" }) {
       <td className="price-cell">{formatPrice(quote.price)}</td>
     </tr>
   );
+}
+
+function mtfTriggerTime(matches) {
+  const match = (matches || []).find((item) => item.candle_time);
+  if (!match) return "-";
+  const parsed = new Date(match.candle_time);
+  if (Number.isNaN(parsed.getTime())) return String(match.candle_time);
+  return parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }

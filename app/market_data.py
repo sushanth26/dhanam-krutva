@@ -232,6 +232,7 @@ def ema_cloud_bounce_matches(
     low = candle.get("low")
     if close is None or low is None:
         return []
+    candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
 
     checks = [
         ("10m bounce 34/50", ema_10m.get("34"), ema_10m.get("50"), "10m", cloud_status(ema_10m, ["5", "12"], ["34", "50"])),
@@ -255,6 +256,7 @@ def ema_cloud_bounce_matches(
                     "cloud_high": round(cloud_high, 4),
                     "candle_low": round(low, 4),
                     "candle_close": round(close, 4),
+                    "candle_time": candle_time,
                     "type": "10m_cloud_bounce",
                     **({"trend": trend[0]} if trend and trend[0] != "-" else {}),
                 }

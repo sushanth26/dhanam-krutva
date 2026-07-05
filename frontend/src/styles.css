@@ -966,6 +966,13 @@ select {
   position: relative;
 }
 
+.trigger-time {
+  color: #4d5a55;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
 .quote-size {
   color: #68766c;
   font-size: 12px;
