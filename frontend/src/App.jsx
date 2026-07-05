@@ -85,7 +85,7 @@ export default function App() {
       const updatedAt = new Date().toLocaleTimeString();
       setQuotes(nextQuotes);
       setUpdatedText(`Updated ${updatedAt} from ${payload.source || "webull"}`);
-      notifyMtfUpdate(filterQuotesByStrategy(nextQuotes.filter((quote) => quote.mtf_matches?.length), strategyStateRef.current), updatedAt);
+      notifyMtfUpdate(filterQuotesByStrategy(nextQuotes.filter((quote) => quote.mtf_matches?.length), strategyStateRef.current));
 
       if (payload.errors?.length) {
         setLiveAlert(`Some data failed: ${payload.errors.map((item) => item.source).join(", ")}`);
@@ -95,19 +95,20 @@ export default function App() {
     }
   }
 
-  function notifyMtfUpdate(nextMtfs, updatedAt) {
+  function notifyMtfUpdate(nextMtfs) {
     const signature = mtfSignature(nextMtfs);
     const changed = lastMtfSignature.current !== null && signature !== lastMtfSignature.current;
     lastMtfSignature.current = signature;
+    if (!changed) return;
+
     const matches = describeMtfMatches(nextMtfs);
+    const message = matches || "No symbols are on MTF clouds now.";
     addNotification({
-      title: changed ? "MTFs changed" : "MTFs updated",
-      message: changed ? matches || "No matches" : `${updatedAt}: ${matches || "No matches"}`,
-      kind: changed ? "changed" : "update",
+      title: "MTFs changed",
+      message,
+      kind: "changed",
     });
-    if (changed) {
-      showMtfDeviceNotification(matches || "No symbols are on MTF clouds now.", nextMtfs.length);
-    }
+    showMtfDeviceNotification(message, nextMtfs.length);
   }
 
   function addNotification({ title, message, kind = "update" }) {
@@ -138,7 +139,7 @@ export default function App() {
   }
 
   function showMtfDeviceNotification(body, badgeCount) {
-    if (!notificationState.appEnabled) return;
+    if (!notificationState.appEnabled || notificationState.permission !== "granted") return;
     showDeviceNotification({
       title: "MTFs changed",
       body,
@@ -207,8 +208,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    setAppBadgeCount(notificationState.appEnabled ? unreadNotificationCount : 0).catch(() => {});
-  }, [notificationState.appEnabled, unreadNotificationCount]);
+    const canBadge = notificationState.appEnabled && notificationState.permission === "granted";
+    setAppBadgeCount(canBadge ? unreadNotificationCount : 0).catch(() => {});
+  }, [notificationState.appEnabled, notificationState.permission, unreadNotificationCount]);
 
   useEffect(() => {
     strategyStateRef.current = strategyState;
