@@ -844,6 +844,13 @@ select {
   padding: 0;
 }
 
+.watchlist-refresh-all {
+  background: #12664f;
+  color: #ffffff;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
 .daily-list-editor {
   display: grid;
   gap: 10px;

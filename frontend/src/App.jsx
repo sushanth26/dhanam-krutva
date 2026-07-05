@@ -218,25 +218,42 @@ export default function App() {
     try {
       const activeTab = watchlistTabRef.current;
       const selectedWatchlist = watchlistsRef.current.find((item) => item.id === activeTab);
-      const selectedSymbols = selectedWatchlist?.symbols || [];
-      if (!selectedSymbols.length) {
-        setQuotesForTab(activeTab, []);
-        setUpdatedTextForTab(activeTab, "Add symbols to this list");
-        return;
-      }
-      const query = `?symbols=${encodeURIComponent(selectedSymbols.join(","))}`;
-      const payload = await getJson(`/api/webull/live-prices${query}`);
-      const nextQuotes = payload.quotes || [];
-      const updatedAt = new Date().toLocaleTimeString();
-      setQuotesForTab(activeTab, nextQuotes);
-      setUpdatedTextForTab(activeTab, `Updated ${updatedAt} from ${payload.source || "webull"}`);
-      notifyMtfUpdate(activeTab, filterQuotesByStrategy(nextQuotes.filter((quote) => quote.mtf_matches?.length), strategyStateRef.current));
+      await refreshWatchlistPrices(selectedWatchlist);
+    } catch (error) {
+      setLiveAlert(error.message);
+    }
+  }
 
-      if (payload.errors?.length) {
-        setLiveAlert(`Some data failed: ${payload.errors.map((item) => item.source).join(", ")}`);
+  async function refreshAllPrices() {
+    setLiveAlert("");
+    try {
+      const lists = watchlistsRef.current;
+      for (const watchlist of lists) {
+        await refreshWatchlistPrices(watchlist);
       }
     } catch (error) {
       setLiveAlert(error.message);
+    }
+  }
+
+  async function refreshWatchlistPrices(watchlist) {
+    if (!watchlist) return;
+    const selectedSymbols = watchlist.symbols || [];
+    if (!selectedSymbols.length) {
+      setQuotesForTab(watchlist.id, []);
+      setUpdatedTextForTab(watchlist.id, "Add symbols to this list");
+      return;
+    }
+    const query = `?symbols=${encodeURIComponent(selectedSymbols.join(","))}`;
+    const payload = await getJson(`/api/webull/live-prices${query}`);
+    const nextQuotes = payload.quotes || [];
+    const updatedAt = new Date().toLocaleTimeString();
+    setQuotesForTab(watchlist.id, nextQuotes);
+    setUpdatedTextForTab(watchlist.id, `Updated ${updatedAt} from ${payload.source || "webull"}`);
+    notifyMtfUpdate(watchlist.id, filterQuotesByStrategy(nextQuotes.filter((quote) => quote.mtf_matches?.length), strategyStateRef.current));
+
+    if (payload.errors?.length) {
+      setLiveAlert(`Some data failed: ${payload.errors.map((item) => item.source).join(", ")}`);
     }
   }
 
@@ -528,6 +545,7 @@ export default function App() {
               onAddSymbols={addSymbolsToActiveWatchlist}
               onAddTab={addWatchlist}
               onDeleteTab={deleteWatchlist}
+              onRefreshAll={refreshAllPrices}
               onRemoveSymbol={removeSymbolFromActiveWatchlist}
               onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
               onSwitchTab={switchWatchlistTab}
@@ -571,6 +589,7 @@ function WatchlistTabs({
   onAddSymbols,
   onAddTab,
   onDeleteTab,
+  onRefreshAll,
   onRemoveSymbol,
   onSwitchTab,
   onSymbolInput,
@@ -612,6 +631,13 @@ function WatchlistTabs({
           title="Add watchlist tab"
         >
           +
+        </button>
+        <button
+          type="button"
+          className="watchlist-refresh-all"
+          onClick={onRefreshAll}
+        >
+          Refresh All
         </button>
       </div>
       <div className="daily-list-editor">
