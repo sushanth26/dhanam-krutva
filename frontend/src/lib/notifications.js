@@ -30,7 +30,7 @@ export async function loadNotificationState() {
   };
 }
 
-export async function enableNotifications() {
+export async function enableNotifications(alertStrategies = {}) {
   const support = notificationSupport();
   if (!support.notifications || !support.serviceWorker) {
     throw new Error("This browser does not support app notifications.");
@@ -43,7 +43,7 @@ export async function enableNotifications() {
 
   const config = await getJson("/api/notifications/config");
   const registration = await registerNotificationWorker();
-  const subscription = support.push ? await ensureServerSubscription(registration, config) : null;
+  const subscription = support.push ? await ensureServerSubscription(registration, config, null, alertStrategies) : null;
 
   return {
     supported: true,
@@ -70,6 +70,30 @@ export async function showDeviceNotification(payload) {
   return true;
 }
 
+export async function setAppBadgeCount(count) {
+  const badgeCount = Number(count) || 0;
+  if (badgeCount > 0 && "setAppBadge" in navigator) {
+    await navigator.setAppBadge(badgeCount);
+    return true;
+  }
+  if (badgeCount <= 0 && "clearAppBadge" in navigator) {
+    await navigator.clearAppBadge();
+    return true;
+  }
+  return false;
+}
+
+export async function syncNotificationPreferences(alertStrategies = {}) {
+  const support = notificationSupport();
+  if (!support.notifications || !support.serviceWorker || !support.push || Notification.permission !== "granted") {
+    return false;
+  }
+  const config = await getJson("/api/notifications/config");
+  const registration = await registerNotificationWorker();
+  const subscription = await ensureServerSubscription(registration, config, null, alertStrategies);
+  return Boolean(subscription);
+}
+
 async function registerNotificationWorker() {
   const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, { scope: "/static/" });
   registration.update().catch(() => {});
@@ -84,7 +108,7 @@ async function syncExistingSubscription(registration, config, permission) {
   return ensureServerSubscription(registration, config, existing);
 }
 
-async function ensureServerSubscription(registration, config, currentSubscription = null) {
+async function ensureServerSubscription(registration, config, currentSubscription = null, alertStrategies = {}) {
   if (!config.web_push_configured || !config.vapid_public_key) return currentSubscription;
   if (currentSubscription && !subscriptionMatchesKey(currentSubscription, config.vapid_public_key)) {
     await currentSubscription.unsubscribe();
@@ -94,7 +118,10 @@ async function ensureServerSubscription(registration, config, currentSubscriptio
     userVisibleOnly: true,
     applicationServerKey: urlBase64ToUint8Array(config.vapid_public_key),
   });
-  await postJson("/api/notifications/subscribe", { subscription: subscription.toJSON() });
+  await postJson("/api/notifications/subscribe", {
+    subscription: subscription.toJSON(),
+    alert_strategies: alertStrategies,
+  });
   return subscription;
 }
 

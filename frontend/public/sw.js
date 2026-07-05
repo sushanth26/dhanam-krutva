@@ -13,12 +13,13 @@ self.addEventListener("push", (event) => {
       payload = { ...fallback, body: event.data.text() };
     }
   }
-  event.waitUntil(showNotification(payload));
+  event.waitUntil(Promise.all([setBadgeFromPayload(payload), showNotification(payload)]));
 });
 
 self.addEventListener("message", (event) => {
   if (event.data?.type !== "SHOW_NOTIFICATION") return;
-  event.waitUntil(showNotification(event.data.payload || {}));
+  const payload = event.data.payload || {};
+  event.waitUntil(Promise.all([setBadgeFromPayload(payload), showNotification(payload)]));
 });
 
 self.addEventListener("notificationclick", (event) => {
@@ -32,6 +33,22 @@ self.addEventListener("notificationclick", (event) => {
     }),
   );
 });
+
+function badgeCountFromPayload(payload) {
+  const count = payload.badgeCount ?? payload.badge_count ?? payload.matches?.length ?? 0;
+  return Number.isFinite(Number(count)) ? Number(count) : 0;
+}
+
+function setBadgeFromPayload(payload) {
+  const count = badgeCountFromPayload(payload);
+  if (count > 0 && "setAppBadge" in navigator) {
+    return navigator.setAppBadge(count);
+  }
+  if (count <= 0 && "clearAppBadge" in navigator) {
+    return navigator.clearAppBadge();
+  }
+  return Promise.resolve();
+}
 
 function showNotification(payload) {
   return self.registration.showNotification(payload.title || "MTFs changed", {

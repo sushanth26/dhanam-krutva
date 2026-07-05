@@ -422,6 +422,93 @@ h3 {
   padding: 18px;
 }
 
+.alert-strategies {
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.alert-strategies-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.alert-strategies-heading h3 {
+  font-size: 16px;
+}
+
+.strategy-list {
+  display: grid;
+  gap: 8px;
+}
+
+.strategy-toggle {
+  align-items: center;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 42px 1fr;
+  min-height: 58px;
+  padding: 9px 10px;
+}
+
+.strategy-toggle input {
+  appearance: none;
+  background: #d9e0dc;
+  border-radius: 999px;
+  height: 24px;
+  position: relative;
+  width: 42px;
+}
+
+.strategy-toggle input::after {
+  background: #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 1px 4px rgba(25, 33, 31, 0.24);
+  content: "";
+  height: 18px;
+  left: 3px;
+  position: absolute;
+  top: 3px;
+  transition: transform 0.16s ease;
+  width: 18px;
+}
+
+.strategy-toggle input:checked {
+  background: #126b4d;
+}
+
+.strategy-toggle input:checked::after {
+  transform: translateX(18px);
+}
+
+.strategy-toggle strong,
+.strategy-toggle small {
+  display: block;
+}
+
+.strategy-toggle strong {
+  font-size: 14px;
+}
+
+.strategy-toggle small {
+  color: #68766c;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.strategy-toggle.disabled {
+  background: #f7f8f6;
+  color: #68766c;
+}
+
 .panel,
 .sidebar,
 .content {
@@ -811,6 +898,12 @@ select {
   padding: 4px 8px;
 }
 
+.mtf-tag-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 .mtf-tag.hourly {
   --mtf-bg: #ffdfad;
   --mtf-border: #f09622;
@@ -827,6 +920,12 @@ select {
   --mtf-bg: #d5e8ff;
   --mtf-border: #4f95ee;
   --mtf-color: #123f7d;
+}
+
+.mtf-tag.touch {
+  --mtf-bg: #dff8f3;
+  --mtf-border: #25a184;
+  --mtf-color: #075747;
 }
 
 .wide {
@@ -1063,6 +1162,10 @@ h1 {
 
   .trend-price-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .strategy-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .section-heading {

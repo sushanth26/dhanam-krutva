@@ -73,7 +73,12 @@ function MtfRow({ quote }) {
   return (
     <BaseRow quote={quote}>
       <td className="mtf-tags">
-        {quote.mtf_matches.map((match) => <MtfTag key={match.label} label={match.label} />)}
+        {quote.mtf_matches.map((match) => (
+          <span key={match.label} className="mtf-tag-group">
+            <MtfTag label={match.label} />
+            {match.trend ? <CloudTag status={match.trend} /> : null}
+          </span>
+        ))}
       </td>
     </BaseRow>
   );
