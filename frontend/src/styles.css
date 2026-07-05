@@ -941,6 +941,62 @@ select {
   margin-bottom: 0;
 }
 
+.global-mtf-panel .global-mtf-table {
+  display: block;
+}
+
+.global-mtf-panel .global-mtf-table thead {
+  display: none;
+}
+
+.global-mtf-panel .global-mtf-table tbody {
+  display: grid;
+}
+
+.global-mtf-panel .global-mtf-table .stock-row {
+  align-items: center;
+  display: grid;
+  gap: 3px 10px;
+  grid-template-areas:
+    "symbol list price"
+    "symbol tags price"
+    "symbol time price";
+  grid-template-columns: 72px minmax(0, 1fr) 76px;
+  padding: 12px 0;
+}
+
+.global-mtf-panel .global-mtf-table td {
+  border-bottom: 0;
+  padding: 0;
+}
+
+.global-mtf-panel .global-mtf-table .stock-row + .stock-row {
+  border-top: 1px solid #dbe2d8;
+}
+
+.global-mtf-panel .global-mtf-table .stock-row > td:first-child {
+  grid-area: symbol;
+  width: auto;
+}
+
+.global-mtf-panel .global-mtf-table .watchlist-cell {
+  grid-area: list;
+}
+
+.global-mtf-panel .global-mtf-table .mtf-tags {
+  grid-area: tags;
+}
+
+.global-mtf-panel .global-mtf-table .trigger-time {
+  grid-area: time;
+}
+
+.global-mtf-panel .global-mtf-table .price-cell {
+  grid-area: price;
+  text-align: right;
+  width: auto;
+}
+
 .price-bucket {
   min-width: 0;
 }
@@ -1087,6 +1143,7 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
 }
 
 .mtf-tag {
@@ -1098,12 +1155,16 @@ select {
   font-size: 12px;
   font-weight: 900;
   padding: 4px 8px;
+  overflow-wrap: normal;
+  white-space: nowrap;
+  word-break: normal;
 }
 
 .mtf-tag-group {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
+  max-width: 100%;
 }
 
 .mtf-tag.hourly {

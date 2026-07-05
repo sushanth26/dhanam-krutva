@@ -9,7 +9,7 @@ export function MtfTable({ quotes, showWatchlist = false, title = "MTFs" }) {
         <span>{quotes.length}</span>
       </div>
       <div className="live-price-table-wrap">
-        <table className="live-price-table">
+        <table className={`live-price-table ${showWatchlist ? "global-mtf-table" : ""}`}>
           <thead>
             <tr>
               <th>Symbol</th>
