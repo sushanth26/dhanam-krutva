@@ -32,8 +32,9 @@ button:hover {
 
 .shell {
   margin: 0 auto;
-  max-width: 1280px;
+  max-width: none;
   padding: 18px 32px 32px;
+  width: 100%;
 }
 
 .app-header {
@@ -830,15 +831,17 @@ select {
   padding: 0;
 }
 
-.watchlist-new-tab {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.watchlist-new-tab button {
-  min-height: 42px;
-  padding: 0 12px;
+.watchlist-add-tab {
+  align-items: center;
+  background: #ffffff;
+  border: 1px dashed #9aa39e;
+  color: #184d36;
+  display: inline-flex;
+  font-size: 20px;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 38px;
+  padding: 0;
 }
 
 .daily-list-editor {

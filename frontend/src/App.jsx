@@ -3,12 +3,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
-import { getJson } from "./lib/api";
+import { getJson, postJson } from "./lib/api";
 import { filterQuotesByStrategy, loadStrategyState, saveStrategyState } from "./lib/alertStrategies";
 import { cloudStatus, describeMtfMatches, findAccountId, flattenAccounts, isMarketRefreshWindow, mtfSignature } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
 const MARKET_REFRESH_INTERVAL_MS = 15000;
+const WATCHLIST_SYNC_INTERVAL_MS = 30000;
 const MAX_NOTIFICATIONS = 20;
 const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
 const WATCHLISTS_KEY = "dhanam-watchlists";
@@ -26,10 +27,6 @@ function loadDailySymbols() {
   } catch {
     return [];
   }
-}
-
-function saveDailySymbols(symbols) {
-  window.localStorage.setItem(DAILY_SYMBOLS_KEY, JSON.stringify(symbols));
 }
 
 function loadWatchlists() {
@@ -103,6 +100,15 @@ function initialTabState(watchlists, value) {
   return watchlists.reduce((state, watchlist) => ({ ...state, [watchlist.id]: value }), {});
 }
 
+function shouldPromoteLocalWatchlists(serverWatchlists, localWatchlists) {
+  const serverOnlyDefaultOg = serverWatchlists.length === 1
+    && serverWatchlists[0]?.id === OG_WATCHLIST_ID
+    && serverWatchlists[0]?.symbols?.join(",") === OG_SYMBOLS.join(",");
+  const localHasCustomState = localWatchlists.length > 1
+    || localWatchlists[0]?.symbols?.join(",") !== OG_SYMBOLS.join(",");
+  return serverOnlyDefaultOg && localHasCustomState;
+}
+
 export default function App() {
   const [watchlists, setWatchlists] = useState(loadWatchlists);
   const [status, setStatus] = useState(null);
@@ -124,8 +130,8 @@ export default function App() {
   const [strategyState, setStrategyState] = useState(loadStrategyState);
   const [watchlistTab, setWatchlistTab] = useState(OG_WATCHLIST_ID);
   const [symbolInputs, setSymbolInputs] = useState({});
-  const [newTabName, setNewTabName] = useState("");
   const liveTimer = useRef(null);
+  const watchlistSyncTimer = useRef(null);
   const lastMtfSignature = useRef(initialTabState(loadWatchlists(), null));
   const strategyStateRef = useRef(strategyState);
   const watchlistTabRef = useRef(watchlistTab);
@@ -179,6 +185,26 @@ export default function App() {
       setSelectedAccountId((current) => current || findAccountId(nextAccounts));
     } catch (error) {
       setAlert(error.message);
+    }
+  }
+
+  async function refreshWatchlists() {
+    try {
+      const payload = await getJson("/api/webull/watchlists");
+      const serverWatchlists = normalizeWatchlists(payload.watchlists || []);
+      const localWatchlists = loadWatchlists();
+      if (shouldPromoteLocalWatchlists(serverWatchlists, localWatchlists)) {
+        const saved = await postJson("/api/webull/watchlists", { watchlists: localWatchlists });
+        const next = normalizeWatchlists(saved.watchlists || localWatchlists);
+        saveWatchlists(next);
+        applyWatchlists(next);
+        return;
+      }
+      const next = serverWatchlists;
+      saveWatchlists(next);
+      applyWatchlists(next);
+    } catch (error) {
+      setLiveAlert(error.message);
     }
   }
 
@@ -294,9 +320,8 @@ export default function App() {
     lastMtfSignature.current = { ...lastMtfSignature.current, [watchlistTab]: null };
   }
 
-  function addWatchlist(event) {
-    event.preventDefault();
-    const name = newTabName.trim();
+  function addWatchlist() {
+    const name = window.prompt("Name this tab")?.trim();
     if (!name) return;
     const usedIds = new Set(watchlistsRef.current.map((item) => item.id));
     const id = uniqueId(slugify(name), usedIds);
@@ -305,7 +330,6 @@ export default function App() {
     setQuotesByTab((current) => ({ ...current, [id]: [] }));
     setUpdatedTextByTab((current) => ({ ...current, [id]: "Add symbols to this list" }));
     lastMtfSignature.current = { ...lastMtfSignature.current, [id]: null };
-    setNewTabName("");
     setWatchlistTab(id);
   }
 
@@ -345,11 +369,40 @@ export default function App() {
   }
 
   function updateWatchlists(updater) {
-    setWatchlists((current) => {
-      const next = normalizeWatchlists(updater(current));
-      saveWatchlists(next);
-      return next;
+    const next = normalizeWatchlists(updater(watchlistsRef.current));
+    saveWatchlists(next);
+    applyWatchlists(next);
+    postJson("/api/webull/watchlists", { watchlists: next })
+      .then((payload) => {
+        const saved = normalizeWatchlists(payload.watchlists || next);
+        saveWatchlists(saved);
+        applyWatchlists(saved);
+      })
+      .catch((error) => setLiveAlert(error.message));
+  }
+
+  function applyWatchlists(next) {
+    setWatchlists(next);
+    watchlistsRef.current = next;
+    setQuotesByTab((current) => {
+      const allowedIds = new Set(next.map((item) => item.id));
+      const updated = {};
+      for (const watchlist of next) {
+        updated[watchlist.id] = current[watchlist.id] || [];
+      }
+      for (const id of Object.keys(current)) {
+        if (allowedIds.has(id)) updated[id] = current[id];
+      }
+      return updated;
     });
+    setUpdatedTextByTab((current) => {
+      const updated = {};
+      for (const watchlist of next) {
+        updated[watchlist.id] = current[watchlist.id] || "Webull polling stopped";
+      }
+      return updated;
+    });
+    setWatchlistTab((current) => next.some((item) => item.id === current) ? current : OG_WATCHLIST_ID);
   }
 
   function showMtfDeviceNotification(body, badgeCount) {
@@ -411,6 +464,8 @@ export default function App() {
 
   useEffect(() => {
     refreshShell();
+    refreshWatchlists();
+    watchlistSyncTimer.current = setInterval(() => refreshWatchlists(), WATCHLIST_SYNC_INTERVAL_MS);
     loadNotificationState()
       .then(setNotificationState)
       .catch(() => {
@@ -418,6 +473,7 @@ export default function App() {
       });
     return () => {
       if (liveTimer.current) clearInterval(liveTimer.current);
+      if (watchlistSyncTimer.current) clearInterval(watchlistSyncTimer.current);
     };
   }, []);
 
@@ -469,11 +525,9 @@ export default function App() {
           <section className="live-prices-panel">
             <WatchlistTabs
               activeTab={watchlistTab}
-              newTabName={newTabName}
               onAddSymbols={addSymbolsToActiveWatchlist}
               onAddTab={addWatchlist}
               onDeleteTab={deleteWatchlist}
-              onNewTabName={setNewTabName}
               onRemoveSymbol={removeSymbolFromActiveWatchlist}
               onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
               onSwitchTab={switchWatchlistTab}
@@ -514,11 +568,9 @@ export default function App() {
 
 function WatchlistTabs({
   activeTab,
-  newTabName,
   onAddSymbols,
   onAddTab,
   onDeleteTab,
-  onNewTabName,
   onRemoveSymbol,
   onSwitchTab,
   onSymbolInput,
@@ -552,16 +604,16 @@ function WatchlistTabs({
             ) : null}
           </span>
         ))}
+        <button
+          type="button"
+          className="watchlist-add-tab"
+          onClick={onAddTab}
+          aria-label="Add watchlist tab"
+          title="Add watchlist tab"
+        >
+          +
+        </button>
       </div>
-      <form className="watchlist-new-tab" onSubmit={onAddTab}>
-        <input
-          aria-label="New watchlist tab name"
-          placeholder="New tab name"
-          value={newTabName}
-          onChange={(event) => onNewTabName(event.target.value)}
-        />
-        <button type="submit">New Tab</button>
-      </form>
       <div className="daily-list-editor">
         <form onSubmit={onAddSymbols}>
           <input

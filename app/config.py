@@ -32,6 +32,7 @@ class Settings:
     vapid_private_key: str | None
     vapid_subject: str
     push_subscription_file: Path
+    watchlist_file: Path
     mtf_push_poll_seconds: int
     mtf_push_timezone: str
 
@@ -71,6 +72,7 @@ def get_settings() -> Settings:
         vapid_private_key=os.getenv("VAPID_PRIVATE_KEY", "").strip() or None,
         vapid_subject=os.getenv("VAPID_SUBJECT", "mailto:sushanth@example.com").strip() or "mailto:sushanth@example.com",
         push_subscription_file=Path(os.getenv("PUSH_SUBSCRIPTION_FILE", "").strip() or default_push_subscription_file()),
+        watchlist_file=Path(os.getenv("WATCHLIST_FILE", "").strip() or default_watchlist_file()),
         mtf_push_poll_seconds=max(30, int(os.getenv("MTF_PUSH_POLL_SECONDS", "60") or "60")),
         mtf_push_timezone=os.getenv("MTF_PUSH_TIMEZONE", "America/Chicago").strip() or "America/Chicago",
     )
@@ -86,3 +88,9 @@ def default_push_subscription_file() -> str:
     if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
         return "/data/push-subscriptions.json"
     return ".web-push-subscriptions.json"
+
+
+def default_watchlist_file() -> str:
+    if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
+        return "/data/watchlists.json"
+    return ".watchlists.json"

@@ -39,6 +39,8 @@ def wait_for_server(process: subprocess.Popen):
 
 
 def test_uvicorn_serves_react_shell_and_protected_api():
+    watchlist_file = ROOT / ".test-watchlists-smoke.json"
+    watchlist_file.unlink(missing_ok=True)
     env = {
         **os.environ,
         "APP_USERNAME": "tester",
@@ -47,6 +49,7 @@ def test_uvicorn_serves_react_shell_and_protected_api():
         "WEBULL_APP_SECRET": "",
         "WEBULL_ACCESS_TOKEN": "",
         "WEBULL_TOKEN_DIR": "",
+        "WATCHLIST_FILE": str(watchlist_file),
         "PORT": str(PORT),
     }
     process = subprocess.Popen(
@@ -103,7 +106,14 @@ def test_uvicorn_serves_react_shell_and_protected_api():
             assert response.status == 200
             assert payload["web_push_configured"] is False
             assert payload["vapid_public_key"] is None
+
+        with request("/api/webull/watchlists", auth_header()) as response:
+            payload = json.loads(response.read())
+            assert response.status == 200
+            assert payload["watchlists"][0]["id"] == "og"
+            assert payload["watchlists"][0]["locked"] is True
     finally:
+        watchlist_file.unlink(missing_ok=True)
         process.terminate()
         try:
             process.wait(timeout=5)
