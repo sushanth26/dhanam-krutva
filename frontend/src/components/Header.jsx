@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { findAccountId } from "../lib/market";
 
@@ -16,6 +16,8 @@ export function Header({
   notifications,
   onMarkNotificationsRead,
 }) {
+  const accountAnchorRef = useRef(null);
+  const notificationAnchorRef = useRef(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const notificationLabel = notificationButtonLabel(notificationState);
@@ -24,6 +26,33 @@ export function Header({
   const pushEnabled = notificationState.permission === "granted";
   const selectedAccount = accounts.find((account) => findAccountId(account) === selectedAccountId);
   const selectedAccountLabel = findAccountId(selectedAccount) || `${accounts.length} accounts`;
+
+  useEffect(() => {
+    function closeOverlaysOnOutsidePointer(event) {
+      const target = event.target;
+      if (accountAnchorRef.current && !accountAnchorRef.current.contains(target)) {
+        setAccountMenuOpen(false);
+      }
+      if (notificationAnchorRef.current && !notificationAnchorRef.current.contains(target)) {
+        setNotificationsOpen(false);
+      }
+    }
+
+    function closeOverlaysOnEscape(event) {
+      if (event.key === "Escape") {
+        setAccountMenuOpen(false);
+        setNotificationsOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", closeOverlaysOnOutsidePointer);
+    document.addEventListener("keydown", closeOverlaysOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOverlaysOnOutsidePointer);
+      document.removeEventListener("keydown", closeOverlaysOnEscape);
+    };
+  }, []);
+
   return (
     <header className="app-header">
       <section className="topbar">
@@ -52,11 +81,14 @@ export function Header({
           >
             <span aria-hidden="true">■</span>
           </button>
-          <div className="account-menu-anchor">
+          <div className="account-menu-anchor" ref={accountAnchorRef}>
             <button
               type="button"
               className="account-menu-button secondary-button"
-              onClick={() => setAccountMenuOpen((open) => !open)}
+              onClick={() => {
+                setAccountMenuOpen((open) => !open);
+                setNotificationsOpen(false);
+              }}
               aria-label="Open account menu"
               title="Accounts"
             >
@@ -77,11 +109,14 @@ export function Header({
               />
             ) : null}
           </div>
-          <div className="notification-anchor">
+          <div className="notification-anchor" ref={notificationAnchorRef}>
             <button
               type="button"
               className="icon-button notification-button"
-              onClick={() => setNotificationsOpen((open) => !open)}
+              onClick={() => {
+                setNotificationsOpen((open) => !open);
+                setAccountMenuOpen(false);
+              }}
               aria-label="Open notifications"
               title="Notifications"
             >
