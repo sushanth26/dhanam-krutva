@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from app.market_data import LIVE_WATCHLIST, aggregate_by_minutes, ema_cloud_bounce_matches, ema_values, mtf_matches, parse_symbols
+from app.market_data import LIVE_WATCHLIST, aggregate_by_minutes, ema_cloud_bounce_matches, ema_values, mtf_matches, mtf_signal_matches, parse_symbols
 
 
 def candle(index: int, close: float) -> dict:
@@ -58,6 +58,32 @@ def test_mtf_matches_detects_price_inside_cloud_ranges():
     )
 
     assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 50/55"]
+
+
+def test_mtf_signal_matches_skips_chop_trend():
+    matches = mtf_signal_matches(
+        105,
+        "Chop",
+        [{"low": 99, "close": 113}],
+        {"5": 101, "12": 102, "34": 100, "50": 110},
+        {"34": 100, "50": 110},
+        {"20": 80, "21": 90, "50": 104, "55": 106},
+    )
+
+    assert matches == []
+
+
+def test_mtf_signal_matches_keeps_bullish_or_bearish_trend():
+    matches = mtf_signal_matches(
+        105,
+        "Bullish",
+        [{"low": 99, "close": 113}],
+        {"5": 116, "12": 114, "34": 100, "50": 110},
+        {"34": 100, "50": 110},
+        {"20": 80, "21": 90, "50": 104, "55": 106},
+    )
+
+    assert [match["label"] for match in matches][:2] == ["Hourly 34/50", "Daily 50/55"]
 
 
 def test_ema_cloud_bounce_matches_alerts_when_10m_candle_closes_back_above_clouds():

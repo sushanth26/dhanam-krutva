@@ -87,6 +87,7 @@ def build_live_prices(webull: WebullService, symbols: str) -> dict[str, Any]:
         ema_1h = ema_values(h1_candles, [20, 21, 34, 50, 55])
         ema_daily = ema_values(daily_candles, [20, 21, 50, 55])
         ten_minute_ema = ema_values(ten_minute_candles, [5, 12, 34, 50])
+        ten_minute_trend = cloud_status(ten_minute_ema, ["5", "12"], ["34", "50"])
         quotes.append(
             {
                 "symbol": symbol,
@@ -97,10 +98,7 @@ def build_live_prices(webull: WebullService, symbols: str) -> dict[str, Any]:
                 "ema_10m": ten_minute_ema,
                 "ema_1h": ema_1h,
                 "ema_daily": ema_daily,
-                "mtf_matches": [
-                    *mtf_matches(price, ema_1h, ema_daily),
-                    *ema_cloud_bounce_matches(ten_minute_candles, ten_minute_ema, ema_1h, ema_daily),
-                ],
+                "mtf_matches": mtf_signal_matches(price, ten_minute_trend, ten_minute_candles, ten_minute_ema, ema_1h, ema_daily),
             }
         )
 
@@ -202,6 +200,22 @@ def mtf_matches(price: float | None, ema_1h: dict[str, float | None], ema_daily:
         if low <= price <= high:
             matches.append({"label": label, "low": round(low, 4), "high": round(high, 4)})
     return matches
+
+
+def mtf_signal_matches(
+    price: float | None,
+    ten_minute_trend: str,
+    ten_minute_candles: list[dict[str, Any]],
+    ema_10m: dict[str, float | None],
+    ema_1h: dict[str, float | None],
+    ema_daily: dict[str, float | None],
+) -> list[dict[str, Any]]:
+    if ten_minute_trend == "Chop":
+        return []
+    return [
+        *mtf_matches(price, ema_1h, ema_daily),
+        *ema_cloud_bounce_matches(ten_minute_candles, ema_10m, ema_1h, ema_daily),
+    ]
 
 
 def ema_cloud_bounce_matches(
