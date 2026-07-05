@@ -926,6 +926,7 @@ select {
   box-shadow: 0 8px 28px rgba(25, 33, 31, 0.06);
   margin-top: 16px;
   min-width: 0;
+  order: -1;
   padding: 18px;
 }
 
@@ -1457,6 +1458,7 @@ h1 {
   }
 
   .global-mtf-panel {
+    order: 0;
     position: sticky;
     top: 72px;
   }
