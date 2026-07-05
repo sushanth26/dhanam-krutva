@@ -160,6 +160,7 @@ export function Header({
               <NotificationDrawer
                 notificationLabel={notificationLabel}
                 notifications={notifications}
+                canEnableNotifications={notificationState.permission !== "denied"}
                 onDisableNotifications={onDisableNotifications}
                 onEnableNotifications={onEnableNotifications}
                 onMarkNotificationsRead={onMarkNotificationsRead}
@@ -232,6 +233,7 @@ function MetaLine({ badge, badgeKind = "test", label, value }) {
 }
 
 function NotificationDrawer({
+  canEnableNotifications,
   notificationLabel,
   notifications,
   onDisableNotifications,
@@ -248,7 +250,11 @@ function NotificationDrawer({
       <div className="push-row">
         <span aria-hidden="true">🔔</span>
         <p>Push notifications <strong>{pushEnabled ? "ON" : "OFF"}</strong> for this device.</p>
-        <button type="button" onClick={pushEnabled ? onDisableNotifications : onEnableNotifications}>
+        <button
+          type="button"
+          onClick={pushEnabled ? onDisableNotifications : onEnableNotifications}
+          disabled={!pushEnabled && !canEnableNotifications}
+        >
           {pushEnabled ? "Turn off" : notificationLabel}
         </button>
       </div>
@@ -285,9 +291,10 @@ function relativeTime(value) {
 
 function notificationButtonLabel(state) {
   if (!state?.supported) return "No Notifications";
+  if (state.permission === "denied") return "Blocked in browser";
+  if (state.permission === "default") return "Allow notifications";
   if (state.appEnabled === false) return "Turn on";
   if (state.permission === "granted" && state.webPushConfigured && state.subscribed) return "Push Enabled";
   if (state.permission === "granted") return "Notify Enabled";
-  if (state.permission === "denied") return "Notifications Blocked";
   return "Enable Notifications";
 }

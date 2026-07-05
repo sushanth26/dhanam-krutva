@@ -4,7 +4,7 @@ const SERVICE_WORKER_URL = "/static/sw.js";
 const NOTIFICATIONS_ENABLED_KEY = "dhanam-web-notifications-enabled";
 
 export function webNotificationsEnabled() {
-  return window.localStorage.getItem(NOTIFICATIONS_ENABLED_KEY) !== "false";
+  return window.localStorage.getItem(NOTIFICATIONS_ENABLED_KEY) === "true";
 }
 
 function setWebNotificationsEnabled(enabled) {
@@ -28,6 +28,9 @@ export async function loadNotificationState() {
   const appEnabled = webNotificationsEnabled();
   const config = await getJson("/api/notifications/config");
   const registration = await registerNotificationWorker();
+  if (!appEnabled && support.push) {
+    await removeExistingSubscription(registration);
+  }
   const subscription = appEnabled && support.push
     ? await syncExistingSubscription(registration, config, Notification.permission)
     : null;
@@ -49,6 +52,7 @@ export async function enableNotifications(alertStrategies = {}) {
 
   const permission = await Notification.requestPermission();
   if (permission !== "granted") {
+    setWebNotificationsEnabled(false);
     return { supported: true, permission, webPushConfigured: false, subscribed: false, appEnabled: false };
   }
 
@@ -81,11 +85,7 @@ export async function disableNotifications() {
 
   const registration = await registerNotificationWorker();
   if (support.push) {
-    const subscription = await registration.pushManager.getSubscription();
-    if (subscription) {
-      await postJson("/api/notifications/unsubscribe", { endpoint: subscription.endpoint });
-      await subscription.unsubscribe();
-    }
+    await removeExistingSubscription(registration);
   }
   await setAppBadgeCount(0);
   return {
@@ -150,6 +150,14 @@ async function syncExistingSubscription(registration, config, permission) {
     return existing;
   }
   return ensureServerSubscription(registration, config, existing);
+}
+
+async function removeExistingSubscription(registration) {
+  const subscription = await registration.pushManager.getSubscription();
+  if (!subscription) return false;
+  await postJson("/api/notifications/unsubscribe", { endpoint: subscription.endpoint });
+  await subscription.unsubscribe();
+  return true;
 }
 
 async function ensureServerSubscription(registration, config, currentSubscription = null, alertStrategies = {}) {
