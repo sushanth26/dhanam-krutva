@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { AlertStrategies } from "./components/AlertStrategies";
 import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
@@ -218,6 +217,8 @@ export default function App() {
         onEnableNotifications={enableAppNotifications}
         notifications={notifications}
         onMarkNotificationsRead={markNotificationsRead}
+        strategyState={strategyState}
+        onToggleStrategy={toggleStrategy}
       />
       <main className="shell">
         {alert ? <div className="alert app-alert">{alert}</div> : null}
@@ -235,7 +236,6 @@ export default function App() {
 
           {liveAlert ? <div className="alert">{liveAlert}</div> : null}
 
-          <AlertStrategies strategyState={strategyState} onToggleStrategy={toggleStrategy} />
           <MtfTable quotes={mtfs} />
           <div className="trend-price-grid">
             <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" />

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { AlertStrategies } from "./AlertStrategies";
 import { findAccountId } from "../lib/market";
 
 export function Header({
@@ -15,11 +16,15 @@ export function Header({
   onEnableNotifications,
   notifications,
   onMarkNotificationsRead,
+  strategyState,
+  onToggleStrategy,
 }) {
   const accountAnchorRef = useRef(null);
   const notificationAnchorRef = useRef(null);
+  const strategiesAnchorRef = useRef(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [strategiesOpen, setStrategiesOpen] = useState(false);
   const notificationLabel = notificationButtonLabel(notificationState);
   const environmentText = status ? `${status.environment.toUpperCase()} / ${status.region.toUpperCase()}` : "-";
   const unreadCount = notifications.filter((item) => !item.read).length;
@@ -36,12 +41,16 @@ export function Header({
       if (notificationAnchorRef.current && !notificationAnchorRef.current.contains(target)) {
         setNotificationsOpen(false);
       }
+      if (strategiesAnchorRef.current && !strategiesAnchorRef.current.contains(target)) {
+        setStrategiesOpen(false);
+      }
     }
 
     function closeOverlaysOnEscape(event) {
       if (event.key === "Escape") {
         setAccountMenuOpen(false);
         setNotificationsOpen(false);
+        setStrategiesOpen(false);
       }
     }
 
@@ -81,6 +90,27 @@ export function Header({
           >
             <span aria-hidden="true">■</span>
           </button>
+          <div className="strategy-menu-anchor" ref={strategiesAnchorRef}>
+            <button
+              type="button"
+              className="account-menu-button secondary-button"
+              onClick={() => {
+                setStrategiesOpen((open) => !open);
+                setAccountMenuOpen(false);
+                setNotificationsOpen(false);
+              }}
+              aria-label="Open strategy menu"
+              title="Strategies"
+            >
+              <span>Strategies</span>
+              <b>{Object.values(strategyState || {}).filter((enabled) => enabled !== false).length}</b>
+            </button>
+            {strategiesOpen ? (
+              <div className="strategy-menu">
+                <AlertStrategies strategyState={strategyState} onToggleStrategy={onToggleStrategy} />
+              </div>
+            ) : null}
+          </div>
           <div className="account-menu-anchor" ref={accountAnchorRef}>
             <button
               type="button"
@@ -88,6 +118,7 @@ export function Header({
               onClick={() => {
                 setAccountMenuOpen((open) => !open);
                 setNotificationsOpen(false);
+                setStrategiesOpen(false);
               }}
               aria-label="Open account menu"
               title="Accounts"
@@ -116,6 +147,7 @@ export function Header({
               onClick={() => {
                 setNotificationsOpen((open) => !open);
                 setAccountMenuOpen(false);
+                setStrategiesOpen(false);
               }}
               aria-label="Open notifications"
               title="Notifications"
