@@ -20,10 +20,10 @@ export const ALERT_STRATEGIES = [
     match: (match) => String(match?.label || "").includes("Daily 50/55"),
   },
   {
-    id: "ten-minute-touch",
-    name: "10m EMA reclaim",
-    description: "10m candle touches or goes below an EMA, then closes above it.",
-    match: (match) => match?.type === "10m_touch" || String(match?.label || "").includes("10m touch"),
+    id: "ten-minute-bounce",
+    name: "10m cloud bounce",
+    description: "10m candle touches or goes below a full EMA cloud, then closes above it.",
+    match: (match) => match?.type === "10m_cloud_bounce" || String(match?.label || "").includes("10m bounce"),
   },
 ];
 
@@ -35,6 +35,11 @@ export function loadStrategyState() {
   const defaults = defaultStrategyState();
   try {
     const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "{}");
+    if (saved["ten-minute-bounce"] === undefined && saved["ten-minute-touch"] !== undefined) {
+      saved["ten-minute-bounce"] = saved["ten-minute-touch"];
+      delete saved["ten-minute-touch"];
+      saveStrategyState({ ...defaults, ...saved });
+    }
     return { ...defaults, ...saved };
   } catch {
     return defaults;

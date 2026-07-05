@@ -16,7 +16,7 @@ DEFAULT_ALERT_STRATEGIES = {
     "hourly-cloud": True,
     "daily-fast-cloud": True,
     "daily-slow-cloud": True,
-    "ten-minute-touch": True,
+    "ten-minute-bounce": True,
 }
 
 
@@ -177,8 +177,8 @@ def mtf_signature(quotes: list[dict[str, Any]]) -> str:
 
 
 def strategy_id_for_label(label: str) -> str:
-    if label.startswith("10m touch"):
-        return "ten-minute-touch"
+    if label.startswith("10m bounce"):
+        return "ten-minute-bounce"
     if "Hourly 34/50" in label:
         return "hourly-cloud"
     if "Daily 20/21" in label:
@@ -191,6 +191,8 @@ def strategy_id_for_label(label: str) -> str:
 def normalize_strategy_state(strategy_state: dict[str, Any] | None) -> dict[str, bool]:
     normalized = DEFAULT_ALERT_STRATEGIES.copy()
     if isinstance(strategy_state, dict):
+        if "ten-minute-bounce" not in strategy_state and "ten-minute-touch" in strategy_state:
+            normalized["ten-minute-bounce"] = bool(strategy_state["ten-minute-touch"])
         for key in normalized:
             if key in strategy_state:
                 normalized[key] = bool(strategy_state[key])

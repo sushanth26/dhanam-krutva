@@ -41,19 +41,29 @@ def test_filter_payload_by_strategies_removes_disabled_alerts():
         "title": "MTFs changed",
         "body": "old body",
         "matches": [
-            {"symbol": "BE", "labels": ["Hourly 34/50", "10m touch Hourly 50"]},
+            {"symbol": "BE", "labels": ["Hourly 34/50", "10m bounce Hourly 34/50"]},
             {"symbol": "LLY", "labels": ["Daily 50/55"]},
         ],
     }
 
     filtered = filter_payload_by_strategies(
         payload,
-        {"hourly-cloud": False, "daily-slow-cloud": True, "ten-minute-touch": True},
+        {"hourly-cloud": False, "daily-slow-cloud": True, "ten-minute-bounce": True},
     )
 
-    assert filtered["body"] == "BE 10m touch Hourly 50 | LLY Daily 50/55"
+    assert filtered["body"] == "BE 10m bounce Hourly 34/50 | LLY Daily 50/55"
     assert filtered["badgeCount"] == 2
-    assert filtered["matches"][0]["labels"] == ["10m touch Hourly 50"]
+    assert filtered["matches"][0]["labels"] == ["10m bounce Hourly 34/50"]
+
+
+def test_filter_payload_by_strategies_migrates_old_10m_touch_setting():
+    payload = {
+        "matches": [
+            {"symbol": "BE", "labels": ["10m bounce 34/50"]},
+        ],
+    }
+
+    assert filter_payload_by_strategies(payload, {"ten-minute-touch": False}) is None
 
 
 def test_filter_payload_by_strategies_skips_push_when_all_alerts_disabled():

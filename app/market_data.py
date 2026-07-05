@@ -91,7 +91,7 @@ def build_live_prices(webull: WebullService, symbols: str) -> dict[str, Any]:
                 "ema_daily": ema_daily,
                 "mtf_matches": [
                     *mtf_matches(price, ema_1h, ema_daily),
-                    *ema_touch_matches(ten_minute_candles, ten_minute_ema, ema_1h, ema_daily),
+                    *ema_cloud_bounce_matches(ten_minute_candles, ten_minute_ema, ema_1h, ema_daily),
                 ],
             }
         )
@@ -196,7 +196,7 @@ def mtf_matches(price: float | None, ema_1h: dict[str, float | None], ema_daily:
     return matches
 
 
-def ema_touch_matches(
+def ema_cloud_bounce_matches(
     ten_minute_candles: list[dict[str, Any]],
     ema_10m: dict[str, float | None],
     ema_1h: dict[str, float | None],
@@ -212,28 +212,27 @@ def ema_touch_matches(
         return []
 
     checks = [
-        ("10m touch 34", ema_10m.get("34"), "10m"),
-        ("10m touch 50", ema_10m.get("50"), "10m"),
-        ("10m touch Hourly 34", ema_1h.get("34"), "hourly"),
-        ("10m touch Hourly 50", ema_1h.get("50"), "hourly"),
-        ("10m touch Daily 20", ema_daily.get("20"), "daily"),
-        ("10m touch Daily 21", ema_daily.get("21"), "daily"),
-        ("10m touch Daily 50", ema_daily.get("50"), "daily"),
-        ("10m touch Daily 55", ema_daily.get("55"), "daily"),
+        ("10m bounce 34/50", ema_10m.get("34"), ema_10m.get("50"), "10m"),
+        ("10m bounce Hourly 34/50", ema_1h.get("34"), ema_1h.get("50"), "hourly"),
+        ("10m bounce Daily 20/21", ema_daily.get("20"), ema_daily.get("21"), "daily"),
+        ("10m bounce Daily 50/55", ema_daily.get("50"), ema_daily.get("55"), "daily"),
     ]
     matches = []
-    for label, value, timeframe in checks:
-        if value is None:
+    for label, first, second, timeframe in checks:
+        if first is None or second is None:
             continue
-        if low <= value and close > value:
+        cloud_low = min(first, second)
+        cloud_high = max(first, second)
+        if low <= cloud_high and close > cloud_high:
             matches.append(
                 {
                     "label": label,
                     "timeframe": timeframe,
-                    "ema": round(value, 4),
+                    "cloud_low": round(cloud_low, 4),
+                    "cloud_high": round(cloud_high, 4),
                     "candle_low": round(low, 4),
                     "candle_close": round(close, 4),
-                    "type": "10m_touch",
+                    "type": "10m_cloud_bounce",
                 }
             )
     return matches
