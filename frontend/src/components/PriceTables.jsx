@@ -112,5 +112,7 @@ function mtfTriggerTime(matches) {
   if (!match) return "-";
   const parsed = new Date(match.candle_time);
   if (Number.isNaN(parsed.getTime())) return String(match.candle_time);
-  return parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const date = parsed.toLocaleDateString([], { month: "short", day: "numeric" });
+  const time = parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return `${date} ${time}`;
 }

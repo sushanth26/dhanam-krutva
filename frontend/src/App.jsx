@@ -41,8 +41,11 @@ export default function App() {
   const [status, setStatus] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [selectedAccountId, setSelectedAccountId] = useState(null);
-  const [quotes, setQuotes] = useState([]);
-  const [updatedText, setUpdatedText] = useState("Webull polling stopped");
+  const [quotesByTab, setQuotesByTab] = useState({ og: [], daily: [] });
+  const [updatedTextByTab, setUpdatedTextByTab] = useState({
+    og: "Webull polling stopped",
+    daily: "Daily list selected",
+  });
   const [alert, setAlert] = useState("");
   const [liveAlert, setLiveAlert] = useState("");
   const [liveRefreshActive, setLiveRefreshActive] = useState(false);
@@ -59,10 +62,12 @@ export default function App() {
   const [dailySymbols, setDailySymbols] = useState(loadDailySymbols);
   const [dailySymbolInput, setDailySymbolInput] = useState("");
   const liveTimer = useRef(null);
-  const lastMtfSignature = useRef(null);
+  const lastMtfSignature = useRef({ og: null, daily: null });
   const strategyStateRef = useRef(strategyState);
   const watchlistTabRef = useRef(watchlistTab);
   const dailySymbolsRef = useRef(dailySymbols);
+  const quotes = quotesByTab[watchlistTab] || [];
+  const updatedText = updatedTextByTab[watchlistTab] || "";
 
   const trendBuckets = useMemo(() => {
     return quotes.reduce(
@@ -105,26 +110,27 @@ export default function App() {
 
   async function loadLivePrices({ manual = false } = {}) {
     if (!manual && !isMarketRefreshWindow()) {
-      setUpdatedText("Auto-refresh paused until premarket open");
+      setUpdatedTextForTab(watchlistTabRef.current, "Auto-refresh paused until premarket open");
       return;
     }
 
     setLiveAlert("");
     try {
-      const dailyMode = watchlistTabRef.current === "daily";
+      const activeTab = watchlistTabRef.current;
+      const dailyMode = activeTab === "daily";
       const selectedSymbols = dailyMode ? dailySymbolsRef.current : [];
       if (dailyMode && !selectedSymbols.length) {
-        setQuotes([]);
-        setUpdatedText("Add symbols to the Daily list");
+        setQuotesForTab(activeTab, []);
+        setUpdatedTextForTab(activeTab, "Add symbols to the Daily list");
         return;
       }
       const query = dailyMode ? `?symbols=${encodeURIComponent(selectedSymbols.join(","))}` : "";
       const payload = await getJson(`/api/webull/live-prices${query}`);
       const nextQuotes = payload.quotes || [];
       const updatedAt = new Date().toLocaleTimeString();
-      setQuotes(nextQuotes);
-      setUpdatedText(`Updated ${updatedAt} from ${payload.source || "webull"}`);
-      notifyMtfUpdate(filterQuotesByStrategy(nextQuotes.filter((quote) => quote.mtf_matches?.length), strategyStateRef.current));
+      setQuotesForTab(activeTab, nextQuotes);
+      setUpdatedTextForTab(activeTab, `Updated ${updatedAt} from ${payload.source || "webull"}`);
+      notifyMtfUpdate(activeTab, filterQuotesByStrategy(nextQuotes.filter((quote) => quote.mtf_matches?.length), strategyStateRef.current));
 
       if (payload.errors?.length) {
         setLiveAlert(`Some data failed: ${payload.errors.map((item) => item.source).join(", ")}`);
@@ -134,10 +140,19 @@ export default function App() {
     }
   }
 
-  function notifyMtfUpdate(nextMtfs) {
+  function setQuotesForTab(tab, nextQuotes) {
+    setQuotesByTab((current) => ({ ...current, [tab]: nextQuotes }));
+  }
+
+  function setUpdatedTextForTab(tab, text) {
+    setUpdatedTextByTab((current) => ({ ...current, [tab]: text }));
+  }
+
+  function notifyMtfUpdate(tab, nextMtfs) {
     const signature = mtfSignature(nextMtfs);
-    const changed = lastMtfSignature.current !== null && signature !== lastMtfSignature.current;
-    lastMtfSignature.current = signature;
+    const previousSignature = lastMtfSignature.current[tab];
+    const changed = previousSignature !== null && signature !== previousSignature;
+    lastMtfSignature.current = { ...lastMtfSignature.current, [tab]: signature };
     if (!changed) return;
 
     const matches = describeMtfMatches(nextMtfs);
@@ -174,7 +189,7 @@ export default function App() {
       saveStrategyState(next);
       return next;
     });
-    lastMtfSignature.current = null;
+    lastMtfSignature.current = { og: null, daily: null };
   }
 
   function addDailySymbols(event) {
@@ -187,7 +202,7 @@ export default function App() {
       return next;
     });
     setDailySymbolInput("");
-    lastMtfSignature.current = null;
+    lastMtfSignature.current = { ...lastMtfSignature.current, daily: null };
   }
 
   function removeDailySymbol(symbol) {
@@ -196,14 +211,19 @@ export default function App() {
       saveDailySymbols(next);
       return next;
     });
-    lastMtfSignature.current = null;
+    setQuotesByTab((current) => ({
+      ...current,
+      daily: current.daily.filter((quote) => quote.symbol !== symbol),
+    }));
+    lastMtfSignature.current = { ...lastMtfSignature.current, daily: null };
   }
 
   function switchWatchlistTab(tab) {
     setWatchlistTab(tab);
-    setQuotes([]);
-    lastMtfSignature.current = null;
-    setUpdatedText(tab === "daily" ? "Daily list selected" : "OG list selected");
+    setUpdatedTextByTab((current) => ({
+      ...current,
+      [tab]: current[tab] || (tab === "daily" ? "Daily list selected" : "OG list selected"),
+    }));
   }
 
   function showMtfDeviceNotification(body, badgeCount) {
@@ -260,7 +280,7 @@ export default function App() {
     if (liveTimer.current) clearInterval(liveTimer.current);
     liveTimer.current = null;
     setLiveRefreshActive(false);
-    setUpdatedText("Webull polling stopped");
+    setUpdatedTextForTab(watchlistTabRef.current, "Webull polling stopped");
   }
 
   useEffect(() => {
