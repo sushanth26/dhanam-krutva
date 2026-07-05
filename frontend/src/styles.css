@@ -477,8 +477,11 @@ h3 {
 .strategy-toggle input {
   appearance: none;
   background: #d9e0dc;
+  border: 0;
   border-radius: 999px;
+  flex: none;
   height: 24px;
+  min-height: 24px;
   position: relative;
   width: 42px;
 }
@@ -715,6 +718,19 @@ select {
   min-height: 42px;
   padding: 0 12px;
   width: 100%;
+}
+
+.strategy-toggle input[type="checkbox"] {
+  background: #d9e0dc;
+  border: 0;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  width: 42px;
+}
+
+.strategy-toggle input[type="checkbox"]:checked {
+  background: #126b4d;
 }
 
 .tradingview-results {
