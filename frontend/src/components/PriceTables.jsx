@@ -1,11 +1,11 @@
 import { CloudTag, MtfTag } from "./Tags";
 import { cloudStatus, formatPrice, groupBySector, sectorSlug } from "../lib/market";
 
-export function MtfTable({ quotes }) {
+export function MtfTable({ quotes, showWatchlist = false, title = "MTFs" }) {
   return (
     <section className="price-bucket mtf-bucket">
       <div className="bucket-heading">
-        <h3>MTFs</h3>
+        <h3>{title}</h3>
         <span>{quotes.length}</span>
       </div>
       <div className="live-price-table-wrap">
@@ -13,14 +13,17 @@ export function MtfTable({ quotes }) {
           <thead>
             <tr>
               <th>Symbol</th>
+              {showWatchlist ? <th>List</th> : null}
               <th>On EMA</th>
               <th>Time</th>
               <th className="price-col">Last</th>
             </tr>
           </thead>
           <tbody>
-            {quotes.length ? quotes.map((quote) => <MtfRow key={quote.symbol} quote={quote} />) : (
-              <tr><td colSpan="4">No stocks are on hourly or daily EMA clouds right now.</td></tr>
+            {quotes.length ? quotes.map((quote) => (
+              <MtfRow key={`${quote.watchlist_id || "tab"}-${quote.symbol}`} quote={quote} showWatchlist={showWatchlist} />
+            )) : (
+              <tr><td colSpan={showWatchlist ? "5" : "4"}>No stocks are on hourly or daily EMA clouds right now.</td></tr>
             )}
           </tbody>
         </table>
@@ -70,10 +73,11 @@ function SectorRows({ sector, quotes }) {
   );
 }
 
-function MtfRow({ quote }) {
+function MtfRow({ quote, showWatchlist }) {
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
   return (
     <BaseRow quote={quote}>
+      {showWatchlist ? <td className="watchlist-cell">{quote.watchlist_name || "-"}</td> : null}
       <td className="mtf-tags">
         {quote.mtf_matches.map((match) => (
           <span key={match.label} className="mtf-tag-group">

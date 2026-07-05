@@ -146,9 +146,18 @@ export default function App() {
       { bullish: [], bearish: [], chop: [] },
     );
   }, [quotes]);
-  const mtfs = useMemo(() => {
-    return filterQuotesByStrategy(quotes.filter((quote) => quote.mtf_matches?.length), strategyState);
-  }, [quotes, strategyState]);
+  const allMtfs = useMemo(() => {
+    const matches = watchlists.flatMap((watchlist) => (
+      (quotesByTab[watchlist.id] || [])
+        .filter((quote) => quote.mtf_matches?.length)
+        .map((quote) => ({
+          ...quote,
+          watchlist_id: watchlist.id,
+          watchlist_name: watchlist.name,
+        }))
+    ));
+    return filterQuotesByStrategy(matches, strategyState);
+  }, [quotesByTab, strategyState, watchlists]);
   const unreadNotificationCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
 
   async function refreshShell() {
@@ -483,13 +492,19 @@ export default function App() {
 
           {liveAlert ? <div className="alert">{liveAlert}</div> : null}
 
-          <MtfTable quotes={mtfs} />
-          <div className="trend-price-grid">
-            <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" />
-            <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" />
-            <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" />
+          <div className="homepage-market-grid">
+            <div className="active-watchlist-tables">
+              <div className="trend-price-grid">
+                <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" />
+                <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" />
+                <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" />
+              </div>
+              <p className="muted">{updatedText}</p>
+            </div>
+            <aside className="global-mtf-panel" aria-label="MTFs from all tabs">
+              <MtfTable quotes={allMtfs} title="MTFs" showWatchlist />
+            </aside>
           </div>
-          <p className="muted">{updatedText}</p>
         </section>
         <HiddenLegacyPanels />
       </main>

@@ -903,6 +903,23 @@ select {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.homepage-market-grid {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 1fr;
+}
+
+.active-watchlist-tables {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.global-mtf-panel {
+  min-width: 0;
+}
+
 .price-bucket {
   min-width: 0;
 }
@@ -994,6 +1011,12 @@ select {
 
 .stock-row {
   position: relative;
+}
+
+.watchlist-cell {
+  color: #4d5a55;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .trigger-time {
@@ -1413,4 +1436,15 @@ h1 {
     width: 72px;
   }
 
+}
+
+@media (min-width: 1120px) {
+  .homepage-market-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
+  }
+
+  .global-mtf-panel {
+    position: sticky;
+    top: 72px;
+  }
 }
