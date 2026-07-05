@@ -14,6 +14,7 @@ export function Header({
   onSelectAccount,
   notificationState,
   onEnableNotifications,
+  onDisableNotifications,
   notifications,
   onMarkNotificationsRead,
   strategyState,
@@ -28,7 +29,7 @@ export function Header({
   const notificationLabel = notificationButtonLabel(notificationState);
   const environmentText = status ? `${status.environment.toUpperCase()} / ${status.region.toUpperCase()}` : "-";
   const unreadCount = notifications.filter((item) => !item.read).length;
-  const pushEnabled = notificationState.permission === "granted";
+  const pushEnabled = notificationState.permission === "granted" && notificationState.appEnabled !== false;
   const selectedAccount = accounts.find((account) => findAccountId(account) === selectedAccountId);
   const selectedAccountLabel = findAccountId(selectedAccount) || `${accounts.length} accounts`;
 
@@ -159,6 +160,7 @@ export function Header({
               <NotificationDrawer
                 notificationLabel={notificationLabel}
                 notifications={notifications}
+                onDisableNotifications={onDisableNotifications}
                 onEnableNotifications={onEnableNotifications}
                 onMarkNotificationsRead={onMarkNotificationsRead}
                 pushEnabled={pushEnabled}
@@ -232,6 +234,7 @@ function MetaLine({ badge, badgeKind = "test", label, value }) {
 function NotificationDrawer({
   notificationLabel,
   notifications,
+  onDisableNotifications,
   onEnableNotifications,
   onMarkNotificationsRead,
   pushEnabled,
@@ -245,8 +248,8 @@ function NotificationDrawer({
       <div className="push-row">
         <span aria-hidden="true">🔔</span>
         <p>Push notifications <strong>{pushEnabled ? "ON" : "OFF"}</strong> for this device.</p>
-        <button type="button" onClick={onEnableNotifications} disabled={pushEnabled}>
-          {pushEnabled ? "On" : notificationLabel}
+        <button type="button" onClick={pushEnabled ? onDisableNotifications : onEnableNotifications}>
+          {pushEnabled ? "Turn off" : notificationLabel}
         </button>
       </div>
       <div className="notification-list">
@@ -282,6 +285,7 @@ function relativeTime(value) {
 
 function notificationButtonLabel(state) {
   if (!state?.supported) return "No Notifications";
+  if (state.appEnabled === false) return "Turn on";
   if (state.permission === "granted" && state.webPushConfigured && state.subscribed) return "Push Enabled";
   if (state.permission === "granted") return "Notify Enabled";
   if (state.permission === "denied") return "Notifications Blocked";
