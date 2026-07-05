@@ -151,9 +151,11 @@ export default function App() {
   function notifyMtfUpdate(tab, nextMtfs) {
     const signature = mtfSignature(nextMtfs);
     const previousSignature = lastMtfSignature.current[tab];
+    const hasMatches = nextMtfs.length > 0;
+    const firstMatchLoad = previousSignature === null && hasMatches;
     const changed = previousSignature !== null && signature !== previousSignature;
     lastMtfSignature.current = { ...lastMtfSignature.current, [tab]: signature };
-    if (!changed) return;
+    if (!firstMatchLoad && !changed) return;
 
     const matches = describeMtfMatches(nextMtfs);
     const message = matches || "No symbols are on MTF clouds now.";
