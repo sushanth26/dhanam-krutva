@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { AlertStrategies } from "./components/AlertStrategies";
 import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
 import { getJson } from "./lib/api";
 import { filterQuotesByStrategy, loadStrategyState, saveStrategyState } from "./lib/alertStrategies";
 import { cloudStatus, describeMtfMatches, findAccountId, flattenAccounts, isMarketRefreshWindow, mtfSignature } from "./lib/market";
-import { enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
+import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
 const MARKET_REFRESH_INTERVAL_MS = 15000;
 const MAX_NOTIFICATIONS = 20;
@@ -26,6 +25,7 @@ export default function App() {
     permission: "default",
     webPushConfigured: false,
     subscribed: false,
+    appEnabled: true,
   });
   const [notifications, setNotifications] = useState([]);
   const [strategyState, setStrategyState] = useState(loadStrategyState);
@@ -138,6 +138,7 @@ export default function App() {
   }
 
   function showMtfDeviceNotification(body, badgeCount) {
+    if (!notificationState.appEnabled) return;
     showDeviceNotification({
       title: "MTFs changed",
       body,
@@ -160,6 +161,20 @@ export default function App() {
           kind: "system",
         });
       }
+    } catch (error) {
+      setLiveAlert(error.message);
+    }
+  }
+
+  async function disableAppNotifications() {
+    try {
+      const nextState = await disableNotifications();
+      setNotificationState((current) => ({ ...current, ...nextState }));
+      addNotification({
+        title: "Web notifications off",
+        message: "This device will not receive app notifications until you turn them back on.",
+        kind: "system",
+      });
     } catch (error) {
       setLiveAlert(error.message);
     }
@@ -192,16 +207,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    setAppBadgeCount(unreadNotificationCount).catch(() => {});
-  }, [unreadNotificationCount]);
+    setAppBadgeCount(notificationState.appEnabled ? unreadNotificationCount : 0).catch(() => {});
+  }, [notificationState.appEnabled, unreadNotificationCount]);
 
   useEffect(() => {
     strategyStateRef.current = strategyState;
   }, [strategyState]);
 
   useEffect(() => {
+    if (!notificationState.appEnabled) return;
     syncNotificationPreferences(strategyState).catch(() => {});
-  }, [strategyState]);
+  }, [notificationState.appEnabled, strategyState]);
 
   return (
     <>
@@ -216,8 +232,11 @@ export default function App() {
         onSelectAccount={setSelectedAccountId}
         notificationState={notificationState}
         onEnableNotifications={enableAppNotifications}
+        onDisableNotifications={disableAppNotifications}
         notifications={notifications}
         onMarkNotificationsRead={markNotificationsRead}
+        strategyState={strategyState}
+        onToggleStrategy={toggleStrategy}
       />
       <main className="shell">
         {alert ? <div className="alert app-alert">{alert}</div> : null}
@@ -235,7 +254,6 @@ export default function App() {
 
           {liveAlert ? <div className="alert">{liveAlert}</div> : null}
 
-          <AlertStrategies strategyState={strategyState} onToggleStrategy={toggleStrategy} />
           <MtfTable quotes={mtfs} />
           <div className="trend-price-grid">
             <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" />

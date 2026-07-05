@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { AlertStrategies } from "./AlertStrategies";
 import { findAccountId } from "../lib/market";
 
 export function Header({
@@ -13,17 +14,22 @@ export function Header({
   onSelectAccount,
   notificationState,
   onEnableNotifications,
+  onDisableNotifications,
   notifications,
   onMarkNotificationsRead,
+  strategyState,
+  onToggleStrategy,
 }) {
   const accountAnchorRef = useRef(null);
   const notificationAnchorRef = useRef(null);
+  const strategiesAnchorRef = useRef(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [strategiesOpen, setStrategiesOpen] = useState(false);
   const notificationLabel = notificationButtonLabel(notificationState);
   const environmentText = status ? `${status.environment.toUpperCase()} / ${status.region.toUpperCase()}` : "-";
   const unreadCount = notifications.filter((item) => !item.read).length;
-  const pushEnabled = notificationState.permission === "granted";
+  const pushEnabled = notificationState.permission === "granted" && notificationState.appEnabled !== false;
   const selectedAccount = accounts.find((account) => findAccountId(account) === selectedAccountId);
   const selectedAccountLabel = findAccountId(selectedAccount) || `${accounts.length} accounts`;
 
@@ -36,12 +42,16 @@ export function Header({
       if (notificationAnchorRef.current && !notificationAnchorRef.current.contains(target)) {
         setNotificationsOpen(false);
       }
+      if (strategiesAnchorRef.current && !strategiesAnchorRef.current.contains(target)) {
+        setStrategiesOpen(false);
+      }
     }
 
     function closeOverlaysOnEscape(event) {
       if (event.key === "Escape") {
         setAccountMenuOpen(false);
         setNotificationsOpen(false);
+        setStrategiesOpen(false);
       }
     }
 
@@ -81,6 +91,27 @@ export function Header({
           >
             <span aria-hidden="true">■</span>
           </button>
+          <div className="strategy-menu-anchor" ref={strategiesAnchorRef}>
+            <button
+              type="button"
+              className="account-menu-button secondary-button"
+              onClick={() => {
+                setStrategiesOpen((open) => !open);
+                setAccountMenuOpen(false);
+                setNotificationsOpen(false);
+              }}
+              aria-label="Open strategy menu"
+              title="Strategies"
+            >
+              <span>Strategies</span>
+              <b>{Object.values(strategyState || {}).filter((enabled) => enabled !== false).length}</b>
+            </button>
+            {strategiesOpen ? (
+              <div className="strategy-menu">
+                <AlertStrategies strategyState={strategyState} onToggleStrategy={onToggleStrategy} />
+              </div>
+            ) : null}
+          </div>
           <div className="account-menu-anchor" ref={accountAnchorRef}>
             <button
               type="button"
@@ -88,6 +119,7 @@ export function Header({
               onClick={() => {
                 setAccountMenuOpen((open) => !open);
                 setNotificationsOpen(false);
+                setStrategiesOpen(false);
               }}
               aria-label="Open account menu"
               title="Accounts"
@@ -116,6 +148,7 @@ export function Header({
               onClick={() => {
                 setNotificationsOpen((open) => !open);
                 setAccountMenuOpen(false);
+                setStrategiesOpen(false);
               }}
               aria-label="Open notifications"
               title="Notifications"
@@ -127,6 +160,8 @@ export function Header({
               <NotificationDrawer
                 notificationLabel={notificationLabel}
                 notifications={notifications}
+                canEnableNotifications={notificationState.permission !== "denied"}
+                onDisableNotifications={onDisableNotifications}
                 onEnableNotifications={onEnableNotifications}
                 onMarkNotificationsRead={onMarkNotificationsRead}
                 pushEnabled={pushEnabled}
@@ -198,8 +233,10 @@ function MetaLine({ badge, badgeKind = "test", label, value }) {
 }
 
 function NotificationDrawer({
+  canEnableNotifications,
   notificationLabel,
   notifications,
+  onDisableNotifications,
   onEnableNotifications,
   onMarkNotificationsRead,
   pushEnabled,
@@ -213,8 +250,12 @@ function NotificationDrawer({
       <div className="push-row">
         <span aria-hidden="true">🔔</span>
         <p>Push notifications <strong>{pushEnabled ? "ON" : "OFF"}</strong> for this device.</p>
-        <button type="button" onClick={onEnableNotifications} disabled={pushEnabled}>
-          {pushEnabled ? "On" : notificationLabel}
+        <button
+          type="button"
+          onClick={pushEnabled ? onDisableNotifications : onEnableNotifications}
+          disabled={!pushEnabled && !canEnableNotifications}
+        >
+          {pushEnabled ? "Turn off" : notificationLabel}
         </button>
       </div>
       <div className="notification-list">
@@ -250,8 +291,10 @@ function relativeTime(value) {
 
 function notificationButtonLabel(state) {
   if (!state?.supported) return "No Notifications";
+  if (state.permission === "denied") return "Blocked in browser";
+  if (state.permission === "default") return "Allow notifications";
+  if (state.appEnabled === false) return "Turn on";
   if (state.permission === "granted" && state.webPushConfigured && state.subscribed) return "Push Enabled";
   if (state.permission === "granted") return "Notify Enabled";
-  if (state.permission === "denied") return "Notifications Blocked";
   return "Enable Notifications";
 }

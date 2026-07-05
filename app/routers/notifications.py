@@ -15,6 +15,10 @@ class PushSubscriptionPayload(BaseModel):
     alert_strategies: dict[str, Any] | None = None
 
 
+class PushUnsubscribePayload(BaseModel):
+    endpoint: str
+
+
 @router.get("/config")
 def notification_config():
     settings = get_settings()
@@ -38,6 +42,13 @@ def subscribe(payload: PushSubscriptionPayload):
         "alert_strategies": payload.alert_strategies or {},
     }
     total = PushSubscriptionStore(settings.push_subscription_file).upsert(subscription)
+    return {"ok": True, "subscriptions": total}
+
+
+@router.post("/unsubscribe")
+def unsubscribe(payload: PushUnsubscribePayload):
+    settings = get_settings()
+    total = PushSubscriptionStore(settings.push_subscription_file).remove(payload.endpoint)
     return {"ok": True, "subscriptions": total}
 
 

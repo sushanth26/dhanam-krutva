@@ -1,6 +1,15 @@
 import { getJson, postJson } from "./api";
 
 const SERVICE_WORKER_URL = "/static/sw.js";
+const NOTIFICATIONS_ENABLED_KEY = "dhanam-web-notifications-enabled";
+
+export function webNotificationsEnabled() {
+  return window.localStorage.getItem(NOTIFICATIONS_ENABLED_KEY) === "true";
+}
+
+function setWebNotificationsEnabled(enabled) {
+  window.localStorage.setItem(NOTIFICATIONS_ENABLED_KEY, enabled ? "true" : "false");
+}
 
 export function notificationSupport() {
   return {
@@ -13,17 +22,22 @@ export function notificationSupport() {
 export async function loadNotificationState() {
   const support = notificationSupport();
   if (!support.notifications || !support.serviceWorker) {
-    return { supported: false, permission: "unsupported", webPushConfigured: false, subscribed: false };
+    return { supported: false, permission: "unsupported", webPushConfigured: false, subscribed: false, appEnabled: false };
   }
 
+  const appEnabled = webNotificationsEnabled();
   const config = await getJson("/api/notifications/config");
   const registration = await registerNotificationWorker();
-  const subscription = support.push
+  if (!appEnabled && support.push) {
+    await removeExistingSubscription(registration);
+  }
+  const subscription = appEnabled && support.push
     ? await syncExistingSubscription(registration, config, Notification.permission)
     : null;
   return {
     supported: true,
     permission: Notification.permission,
+    appEnabled,
     webPushConfigured: Boolean(config.web_push_configured && config.vapid_public_key),
     vapidPublicKey: config.vapid_public_key,
     subscribed: Boolean(subscription),
@@ -38,9 +52,11 @@ export async function enableNotifications(alertStrategies = {}) {
 
   const permission = await Notification.requestPermission();
   if (permission !== "granted") {
-    return { supported: true, permission, webPushConfigured: false, subscribed: false };
+    setWebNotificationsEnabled(false);
+    return { supported: true, permission, webPushConfigured: false, subscribed: false, appEnabled: false };
   }
 
+  setWebNotificationsEnabled(true);
   const config = await getJson("/api/notifications/config");
   const registration = await registerNotificationWorker();
   const subscription = support.push ? await ensureServerSubscription(registration, config, null, alertStrategies) : null;
@@ -48,13 +64,41 @@ export async function enableNotifications(alertStrategies = {}) {
   return {
     supported: true,
     permission,
+    appEnabled: true,
     webPushConfigured: Boolean(config.web_push_configured && config.vapid_public_key),
     subscribed: Boolean(subscription),
   };
 }
 
+export async function disableNotifications() {
+  setWebNotificationsEnabled(false);
+  const support = notificationSupport();
+  if (!support.serviceWorker) {
+    return {
+      supported: support.notifications,
+      permission: support.notifications ? Notification.permission : "unsupported",
+      webPushConfigured: false,
+      subscribed: false,
+      appEnabled: false,
+    };
+  }
+
+  const registration = await registerNotificationWorker();
+  if (support.push) {
+    await removeExistingSubscription(registration);
+  }
+  await setAppBadgeCount(0);
+  return {
+    supported: support.notifications,
+    permission: support.notifications ? Notification.permission : "unsupported",
+    webPushConfigured: false,
+    subscribed: false,
+    appEnabled: false,
+  };
+}
+
 export async function showDeviceNotification(payload) {
-  if (!("Notification" in window) || Notification.permission !== "granted") return false;
+  if (!webNotificationsEnabled() || !("Notification" in window) || Notification.permission !== "granted") return false;
   const registration = await registerNotificationWorker();
   if (registration.active) {
     registration.active.postMessage({ type: "SHOW_NOTIFICATION", payload });
@@ -85,7 +129,7 @@ export async function setAppBadgeCount(count) {
 
 export async function syncNotificationPreferences(alertStrategies = {}) {
   const support = notificationSupport();
-  if (!support.notifications || !support.serviceWorker || !support.push || Notification.permission !== "granted") {
+  if (!webNotificationsEnabled() || !support.notifications || !support.serviceWorker || !support.push || Notification.permission !== "granted") {
     return false;
   }
   const config = await getJson("/api/notifications/config");
@@ -106,6 +150,14 @@ async function syncExistingSubscription(registration, config, permission) {
     return existing;
   }
   return ensureServerSubscription(registration, config, existing);
+}
+
+async function removeExistingSubscription(registration) {
+  const subscription = await registration.pushManager.getSubscription();
+  if (!subscription) return false;
+  await postJson("/api/notifications/unsubscribe", { endpoint: subscription.endpoint });
+  await subscription.unsubscribe();
+  return true;
 }
 
 async function ensureServerSubscription(registration, config, currentSubscription = null, alertStrategies = {}) {
