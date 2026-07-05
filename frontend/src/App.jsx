@@ -465,34 +465,34 @@ export default function App() {
       <main className="shell">
         {alert ? <div className="alert app-alert">{alert}</div> : null}
 
-        <section className="live-prices-panel">
-          <WatchlistTabs
-            activeTab={watchlistTab}
-            newTabName={newTabName}
-            onAddSymbols={addSymbolsToActiveWatchlist}
-            onAddTab={addWatchlist}
-            onDeleteTab={deleteWatchlist}
-            onNewTabName={setNewTabName}
-            onRemoveSymbol={removeSymbolFromActiveWatchlist}
-            onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
-            onSwitchTab={switchWatchlistTab}
-            selectedWatchlist={activeWatchlist}
-            symbolInput={symbolInputs[watchlistTab] || ""}
-            watchlists={watchlists}
-          />
-          <div className="section-heading">
-            <div>
-              <h2>{activeWatchlist?.name || "Watchlist"}</h2>
-              <p className="muted">Live Webull prices with clock-aligned EMA levels.</p>
+        <div className="homepage-market-grid">
+          <section className="live-prices-panel">
+            <WatchlistTabs
+              activeTab={watchlistTab}
+              newTabName={newTabName}
+              onAddSymbols={addSymbolsToActiveWatchlist}
+              onAddTab={addWatchlist}
+              onDeleteTab={deleteWatchlist}
+              onNewTabName={setNewTabName}
+              onRemoveSymbol={removeSymbolFromActiveWatchlist}
+              onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
+              onSwitchTab={switchWatchlistTab}
+              selectedWatchlist={activeWatchlist}
+              symbolInput={symbolInputs[watchlistTab] || ""}
+              watchlists={watchlists}
+            />
+            <div className="section-heading">
+              <div>
+                <h2>{activeWatchlist?.name || "Watchlist"}</h2>
+                <p className="muted">Live Webull prices with clock-aligned EMA levels.</p>
+              </div>
+              <div className="live-price-actions">
+                <button type="button" onClick={() => loadLivePrices({ manual: true })}>Refresh Prices</button>
+              </div>
             </div>
-            <div className="live-price-actions">
-              <button type="button" onClick={() => loadLivePrices({ manual: true })}>Refresh Prices</button>
-            </div>
-          </div>
 
-          {liveAlert ? <div className="alert">{liveAlert}</div> : null}
+            {liveAlert ? <div className="alert">{liveAlert}</div> : null}
 
-          <div className="homepage-market-grid">
             <div className="active-watchlist-tables">
               <div className="trend-price-grid">
                 <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" />
@@ -501,11 +501,11 @@ export default function App() {
               </div>
               <p className="muted">{updatedText}</p>
             </div>
-            <aside className="global-mtf-panel" aria-label="MTFs from all tabs">
-              <MtfTable quotes={allMtfs} title="MTFs" showWatchlist />
-            </aside>
-          </div>
-        </section>
+          </section>
+          <aside className="global-mtf-panel" aria-label="MTFs from all tabs">
+            <MtfTable quotes={allMtfs} title="MTFs" showWatchlist />
+          </aside>
+        </div>
         <HiddenLegacyPanels />
       </main>
     </>

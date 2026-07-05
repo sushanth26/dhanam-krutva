@@ -917,7 +917,17 @@ select {
 }
 
 .global-mtf-panel {
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(25, 33, 31, 0.06);
+  margin-top: 16px;
   min-width: 0;
+  padding: 18px;
+}
+
+.global-mtf-panel .mtf-bucket {
+  margin-bottom: 0;
 }
 
 .price-bucket {
