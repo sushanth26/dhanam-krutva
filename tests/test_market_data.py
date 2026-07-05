@@ -1,6 +1,16 @@
 from datetime import datetime, timedelta
 
-from app.market_data import LIVE_WATCHLIST, aggregate_by_minutes, ema_cloud_bounce_matches, ema_values, mtf_matches, mtf_signal_matches, parse_symbols
+from app.market_data import (
+    LIVE_WATCHLIST,
+    aggregate_by_minutes,
+    batch_history_bars_chunked,
+    ema_cloud_bounce_matches,
+    ema_values,
+    mtf_matches,
+    mtf_signal_matches,
+    parse_symbols,
+    symbol_chunks,
+)
 
 
 def candle(index: int, close: float) -> dict:
@@ -24,6 +34,43 @@ def test_live_watchlist_includes_new_og_symbols_under_webull_limit():
     for symbol in ["APLD", "CIFR", "CRWV", "HUT", "IREN", "NBIS", "WULF"]:
         assert symbol in LIVE_WATCHLIST
     assert len(LIVE_WATCHLIST) <= 25
+
+
+def test_symbol_chunks_splits_bar_requests_at_webull_limit():
+    symbols = [f"S{index}" for index in range(24)]
+
+    chunks = symbol_chunks(symbols, 20)
+
+    assert [len(chunk) for chunk in chunks] == [20, 4]
+    assert chunks[0][0] == "S0"
+    assert chunks[1][-1] == "S23"
+
+
+def test_batch_history_bars_chunked_merges_results():
+    class FakeWebull:
+        def __init__(self):
+            self.calls = []
+
+        def batch_history_bars(self, symbols, category, timespan, count, real_time_required=True, trading_sessions=None):
+            self.calls.append(list(symbols))
+            return {
+                "ok": True,
+                "data": {
+                    "result": [
+                        {"symbol": symbol, "result": [{"close": index}]}
+                        for index, symbol in enumerate(symbols)
+                    ]
+                },
+            }
+
+    webull = FakeWebull()
+    symbols = [f"S{index}" for index in range(24)]
+
+    response = batch_history_bars_chunked(webull, symbols, "US_STOCK", "M5", count="1200")
+
+    assert [len(call) for call in webull.calls] == [20, 4]
+    assert response["ok"] is True
+    assert [item["symbol"] for item in response["data"]["result"]] == symbols
 
 
 def test_aggregate_by_minutes_rolls_5m_bars_into_10m_buckets():

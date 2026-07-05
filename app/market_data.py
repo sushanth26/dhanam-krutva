@@ -15,6 +15,7 @@ LIVE_WATCHLIST = [
     "APLD", "CIFR", "CRWV", "HUT", "IREN", "NBIS", "WULF",
 ]
 INTRADAY_EMA_SESSIONS = ["PRE", "RTH", "ATH"]
+WEBULL_BATCH_BAR_LIMIT = 20
 
 SYMBOL_SECTORS = {
     "BE": "Clean Energy",
@@ -47,14 +48,16 @@ SYMBOL_SECTORS = {
 def build_live_prices(webull: WebullService, symbols: str) -> dict[str, Any]:
     selected_symbols = parse_symbols(symbols)
     snapshot_response = webull.market_snapshot(selected_symbols, Category.US_STOCK.name)
-    m5_response = webull.batch_history_bars(
+    m5_response = batch_history_bars_chunked(
+        webull,
         selected_symbols,
         Category.US_STOCK.name,
         Timespan.M5.name,
         count="1200",
         trading_sessions=INTRADAY_EMA_SESSIONS,
     )
-    h1_response = webull.batch_history_bars(
+    h1_response = batch_history_bars_chunked(
+        webull,
         selected_symbols,
         Category.US_STOCK.name,
         Timespan.M60.name,
@@ -62,7 +65,8 @@ def build_live_prices(webull: WebullService, symbols: str) -> dict[str, Any]:
         real_time_required=None,
         trading_sessions=INTRADAY_EMA_SESSIONS,
     )
-    daily_response = webull.batch_history_bars(
+    daily_response = batch_history_bars_chunked(
+        webull,
         selected_symbols,
         Category.US_STOCK.name,
         Timespan.D.name,
@@ -129,6 +133,42 @@ def parse_symbols(symbols: str) -> list[str]:
     if len(selected_symbols) > 25:
         raise HTTPException(status_code=400, detail="Use 25 symbols or fewer.")
     return selected_symbols
+
+
+def batch_history_bars_chunked(
+    webull: WebullService,
+    symbols: list[str],
+    category: str,
+    timespan: str,
+    count: str,
+    real_time_required: bool | None = True,
+    trading_sessions: list[str] | str | None = None,
+) -> dict[str, Any]:
+    responses = [
+        webull.batch_history_bars(
+            chunk,
+            category,
+            timespan,
+            count=count,
+            real_time_required=real_time_required,
+            trading_sessions=trading_sessions,
+        )
+        for chunk in symbol_chunks(symbols, WEBULL_BATCH_BAR_LIMIT)
+    ]
+    merged_results = []
+    for response in responses:
+        data = response.get("data")
+        if isinstance(data, dict) and isinstance(data.get("result"), list):
+            merged_results.extend(data["result"])
+    return {
+        "ok": all(response.get("ok") for response in responses),
+        "data": {"result": merged_results},
+        "chunks": responses,
+    }
+
+
+def symbol_chunks(symbols: list[str], size: int) -> list[list[str]]:
+    return [symbols[index:index + size] for index in range(0, len(symbols), size)]
 
 
 def batch_bar_map(data: Any) -> dict[str, list[Any]]:
