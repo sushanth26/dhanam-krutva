@@ -212,13 +212,14 @@ def ema_cloud_bounce_matches(
         return []
 
     checks = [
-        ("10m bounce 34/50", ema_10m.get("34"), ema_10m.get("50"), "10m"),
+        ("10m bounce 34/50", ema_10m.get("34"), ema_10m.get("50"), "10m", cloud_status(ema_10m, ["5", "12"], ["34", "50"])),
         ("10m bounce Hourly 34/50", ema_1h.get("34"), ema_1h.get("50"), "hourly"),
         ("10m bounce Daily 20/21", ema_daily.get("20"), ema_daily.get("21"), "daily"),
         ("10m bounce Daily 50/55", ema_daily.get("50"), ema_daily.get("55"), "daily"),
     ]
     matches = []
-    for label, first, second, timeframe in checks:
+    for check in checks:
+        label, first, second, timeframe, *trend = check
         if first is None or second is None:
             continue
         cloud_low = min(first, second)
@@ -233,9 +234,29 @@ def ema_cloud_bounce_matches(
                     "candle_low": round(low, 4),
                     "candle_close": round(close, 4),
                     "type": "10m_cloud_bounce",
+                    **({"trend": trend[0]} if trend and trend[0] != "-" else {}),
                 }
             )
     return matches
+
+
+def cloud_status(ema_set: dict[str, float | None], fast_keys: list[str], slow_keys: list[str]) -> str:
+    values = [ema_set.get(key) for key in [*fast_keys, *slow_keys]]
+    if any(value is None for value in values):
+        return "-"
+
+    fast_values = [ema_set[key] for key in fast_keys]
+    slow_values = [ema_set[key] for key in slow_keys]
+    fast_bottom = min(fast_values)
+    fast_top = max(fast_values)
+    slow_bottom = min(slow_values)
+    slow_top = max(slow_values)
+
+    if fast_bottom > slow_top:
+        return "Bullish"
+    if fast_top < slow_bottom:
+        return "Bearish"
+    return "Chop"
 
 
 def latest_complete_candle(candles: list[dict[str, Any]]) -> dict[str, Any] | None:

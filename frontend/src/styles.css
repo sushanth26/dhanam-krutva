@@ -898,6 +898,12 @@ select {
   padding: 4px 8px;
 }
 
+.mtf-tag-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 .mtf-tag.hourly {
   --mtf-bg: #ffdfad;
   --mtf-border: #f09622;

@@ -74,6 +74,7 @@ def test_ema_cloud_bounce_matches_alerts_when_10m_candle_closes_back_above_cloud
         "10m bounce Daily 50/55",
     ]
     assert all(match["type"] == "10m_cloud_bounce" for match in matches)
+    assert matches[0]["trend"] == "Chop"
 
 
 def test_ema_cloud_bounce_matches_ignores_5_and_12_cloud():
@@ -85,6 +86,30 @@ def test_ema_cloud_bounce_matches_ignores_5_and_12_cloud():
     )
 
     assert matches == []
+
+
+def test_ema_cloud_bounce_marks_10m_34_50_bullish_trend():
+    matches = ema_cloud_bounce_matches(
+        [{"low": 99, "close": 113}],
+        {"5": 116, "12": 114, "34": 100, "50": 110},
+        {"34": 120, "50": 121},
+        {"20": 122, "21": 123, "50": 124, "55": 125},
+    )
+
+    assert matches[0]["label"] == "10m bounce 34/50"
+    assert matches[0]["trend"] == "Bullish"
+
+
+def test_ema_cloud_bounce_marks_10m_34_50_bearish_trend():
+    matches = ema_cloud_bounce_matches(
+        [{"low": 99, "close": 113}],
+        {"5": 90, "12": 95, "34": 100, "50": 110},
+        {"34": 120, "50": 121},
+        {"20": 122, "21": 123, "50": 124, "55": 125},
+    )
+
+    assert matches[0]["label"] == "10m bounce 34/50"
+    assert matches[0]["trend"] == "Bearish"
 
 
 def test_ema_cloud_bounce_matches_uses_latest_complete_10m_candle():
