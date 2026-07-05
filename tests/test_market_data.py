@@ -1,6 +1,16 @@
 from datetime import datetime, timedelta
 
-from app.market_data import aggregate_by_minutes, ema_cloud_bounce_matches, ema_values, mtf_matches, parse_symbols
+from app.market_data import (
+    LIVE_WATCHLIST,
+    aggregate_by_minutes,
+    batch_history_bars_chunked,
+    ema_cloud_bounce_matches,
+    ema_values,
+    mtf_matches,
+    mtf_signal_matches,
+    parse_symbols,
+    symbol_chunks,
+)
 
 
 def candle(index: int, close: float) -> dict:
@@ -18,6 +28,49 @@ def candle(index: int, close: float) -> dict:
 
 def test_parse_symbols_normalizes_and_filters_empty_entries():
     assert parse_symbols(" be, AAOI ,,lly ") == ["BE", "AAOI", "LLY"]
+
+
+def test_live_watchlist_includes_new_og_symbols_under_webull_limit():
+    for symbol in ["APLD", "CIFR", "CRWV", "HUT", "IREN", "NBIS", "WULF"]:
+        assert symbol in LIVE_WATCHLIST
+    assert len(LIVE_WATCHLIST) <= 25
+
+
+def test_symbol_chunks_splits_bar_requests_at_webull_limit():
+    symbols = [f"S{index}" for index in range(24)]
+
+    chunks = symbol_chunks(symbols, 20)
+
+    assert [len(chunk) for chunk in chunks] == [20, 4]
+    assert chunks[0][0] == "S0"
+    assert chunks[1][-1] == "S23"
+
+
+def test_batch_history_bars_chunked_merges_results():
+    class FakeWebull:
+        def __init__(self):
+            self.calls = []
+
+        def batch_history_bars(self, symbols, category, timespan, count, real_time_required=True, trading_sessions=None):
+            self.calls.append(list(symbols))
+            return {
+                "ok": True,
+                "data": {
+                    "result": [
+                        {"symbol": symbol, "result": [{"close": index}]}
+                        for index, symbol in enumerate(symbols)
+                    ]
+                },
+            }
+
+    webull = FakeWebull()
+    symbols = [f"S{index}" for index in range(24)]
+
+    response = batch_history_bars_chunked(webull, symbols, "US_STOCK", "M5", count="1200")
+
+    assert [len(call) for call in webull.calls] == [20, 4]
+    assert response["ok"] is True
+    assert [item["symbol"] for item in response["data"]["result"]] == symbols
 
 
 def test_aggregate_by_minutes_rolls_5m_bars_into_10m_buckets():
@@ -54,6 +107,34 @@ def test_mtf_matches_detects_price_inside_cloud_ranges():
     assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 50/55"]
 
 
+def test_mtf_signal_matches_skips_chop_trend():
+    matches = mtf_signal_matches(
+        105,
+        "Chop",
+        [{"low": 99, "close": 113}],
+        {"5": 101, "12": 102, "34": 100, "50": 110},
+        {"34": 100, "50": 110},
+        {"20": 80, "21": 90, "50": 104, "55": 106},
+    )
+
+    assert matches == []
+
+
+def test_mtf_signal_matches_keeps_bullish_or_bearish_trend():
+    matches = mtf_signal_matches(
+        105,
+        "Bullish",
+        [{"low": 99, "close": 113, "time": "2026-07-02T09:40:00"}],
+        {"5": 116, "12": 114, "34": 100, "50": 110},
+        {"34": 100, "50": 110},
+        {"20": 80, "21": 90, "50": 104, "55": 106},
+    )
+
+    assert [match["label"] for match in matches][:2] == ["Hourly 34/50", "Daily 50/55"]
+    assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
+    assert matches[1]["candle_time"] == "2026-07-02T09:40:00"
+
+
 def test_ema_cloud_bounce_matches_alerts_when_10m_candle_closes_back_above_clouds():
     candles = [
         {"low": 93, "close": 97},
@@ -75,6 +156,7 @@ def test_ema_cloud_bounce_matches_alerts_when_10m_candle_closes_back_above_cloud
     ]
     assert all(match["type"] == "10m_cloud_bounce" for match in matches)
     assert matches[0]["trend"] == "Chop"
+    assert matches[0]["candle_time"] is None
 
 
 def test_ema_cloud_bounce_matches_ignores_5_and_12_cloud():
@@ -115,8 +197,8 @@ def test_ema_cloud_bounce_marks_10m_34_50_bearish_trend():
 def test_ema_cloud_bounce_matches_uses_latest_complete_10m_candle():
     matches = ema_cloud_bounce_matches(
         [
-            {"low": 99, "close": 113, "source_count": 2},
-            {"low": 89, "close": 93, "source_count": 1},
+            {"low": 99, "close": 113, "source_count": 2, "time": "2026-07-02T09:40:00"},
+            {"low": 89, "close": 93, "source_count": 1, "time": "2026-07-02T09:50:00"},
         ],
         {"34": 100, "50": 110},
         {"34": 120, "50": 121},
@@ -124,6 +206,7 @@ def test_ema_cloud_bounce_matches_uses_latest_complete_10m_candle():
     )
 
     assert [match["label"] for match in matches] == ["10m bounce 34/50"]
+    assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
 
 
 def test_ema_cloud_bounce_requires_close_above_entire_cloud():
