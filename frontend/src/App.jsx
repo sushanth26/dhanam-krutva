@@ -10,6 +10,32 @@ import { disableNotifications, enableNotifications, loadNotificationState, setAp
 
 const MARKET_REFRESH_INTERVAL_MS = 15000;
 const MAX_NOTIFICATIONS = 20;
+const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
+
+function loadDailySymbols() {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(DAILY_SYMBOLS_KEY) || "[]");
+    return Array.isArray(value) ? normalizeSymbols(value) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveDailySymbols(symbols) {
+  window.localStorage.setItem(DAILY_SYMBOLS_KEY, JSON.stringify(symbols));
+}
+
+function normalizeSymbols(value) {
+  const seen = new Set();
+  return value
+    .flatMap((item) => String(item || "").split(/[,\s]+/))
+    .map((symbol) => symbol.trim().toUpperCase())
+    .filter((symbol) => {
+      if (!symbol || seen.has(symbol)) return false;
+      seen.add(symbol);
+      return true;
+    });
+}
 
 export default function App() {
   const [status, setStatus] = useState(null);
@@ -29,9 +55,14 @@ export default function App() {
   });
   const [notifications, setNotifications] = useState([]);
   const [strategyState, setStrategyState] = useState(loadStrategyState);
+  const [watchlistTab, setWatchlistTab] = useState("og");
+  const [dailySymbols, setDailySymbols] = useState(loadDailySymbols);
+  const [dailySymbolInput, setDailySymbolInput] = useState("");
   const liveTimer = useRef(null);
   const lastMtfSignature = useRef(null);
   const strategyStateRef = useRef(strategyState);
+  const watchlistTabRef = useRef(watchlistTab);
+  const dailySymbolsRef = useRef(dailySymbols);
 
   const trendBuckets = useMemo(() => {
     return quotes.reduce(
@@ -80,7 +111,15 @@ export default function App() {
 
     setLiveAlert("");
     try {
-      const payload = await getJson("/api/webull/live-prices");
+      const dailyMode = watchlistTabRef.current === "daily";
+      const selectedSymbols = dailyMode ? dailySymbolsRef.current : [];
+      if (dailyMode && !selectedSymbols.length) {
+        setQuotes([]);
+        setUpdatedText("Add symbols to the Daily list");
+        return;
+      }
+      const query = dailyMode ? `?symbols=${encodeURIComponent(selectedSymbols.join(","))}` : "";
+      const payload = await getJson(`/api/webull/live-prices${query}`);
       const nextQuotes = payload.quotes || [];
       const updatedAt = new Date().toLocaleTimeString();
       setQuotes(nextQuotes);
@@ -136,6 +175,35 @@ export default function App() {
       return next;
     });
     lastMtfSignature.current = null;
+  }
+
+  function addDailySymbols(event) {
+    event.preventDefault();
+    const incoming = normalizeSymbols([dailySymbolInput]);
+    if (!incoming.length) return;
+    setDailySymbols((current) => {
+      const next = normalizeSymbols([...current, ...incoming]).slice(0, 25);
+      saveDailySymbols(next);
+      return next;
+    });
+    setDailySymbolInput("");
+    lastMtfSignature.current = null;
+  }
+
+  function removeDailySymbol(symbol) {
+    setDailySymbols((current) => {
+      const next = current.filter((item) => item !== symbol);
+      saveDailySymbols(next);
+      return next;
+    });
+    lastMtfSignature.current = null;
+  }
+
+  function switchWatchlistTab(tab) {
+    setWatchlistTab(tab);
+    setQuotes([]);
+    lastMtfSignature.current = null;
+    setUpdatedText(tab === "daily" ? "Daily list selected" : "OG list selected");
   }
 
   function showMtfDeviceNotification(body, badgeCount) {
@@ -217,6 +285,14 @@ export default function App() {
   }, [strategyState]);
 
   useEffect(() => {
+    watchlistTabRef.current = watchlistTab;
+  }, [watchlistTab]);
+
+  useEffect(() => {
+    dailySymbolsRef.current = dailySymbols;
+  }, [dailySymbols]);
+
+  useEffect(() => {
     if (!notificationState.appEnabled) return;
     syncNotificationPreferences(strategyState).catch(() => {});
   }, [notificationState.appEnabled, strategyState]);
@@ -244,9 +320,18 @@ export default function App() {
         {alert ? <div className="alert app-alert">{alert}</div> : null}
 
         <section className="live-prices-panel">
+          <WatchlistTabs
+            activeTab={watchlistTab}
+            dailySymbolInput={dailySymbolInput}
+            dailySymbols={dailySymbols}
+            onAddDailySymbols={addDailySymbols}
+            onDailySymbolInput={setDailySymbolInput}
+            onRemoveDailySymbol={removeDailySymbol}
+            onSwitchTab={switchWatchlistTab}
+          />
           <div className="section-heading">
             <div>
-              <h2>Webull Live Prices</h2>
+              <h2>{watchlistTab === "daily" ? "Daily List" : "OG List"}</h2>
               <p className="muted">Live Webull prices with clock-aligned EMA levels.</p>
             </div>
             <div className="live-price-actions">
@@ -267,5 +352,62 @@ export default function App() {
         <HiddenLegacyPanels />
       </main>
     </>
+  );
+}
+
+function WatchlistTabs({
+  activeTab,
+  dailySymbolInput,
+  dailySymbols,
+  onAddDailySymbols,
+  onDailySymbolInput,
+  onRemoveDailySymbol,
+  onSwitchTab,
+}) {
+  return (
+    <section className="watchlist-panel" aria-label="Watchlists">
+      <div className="watchlist-tabs" role="tablist" aria-label="Watchlist tabs">
+        <button
+          type="button"
+          className={activeTab === "og" ? "active" : ""}
+          onClick={() => onSwitchTab("og")}
+          role="tab"
+          aria-selected={activeTab === "og"}
+        >
+          OG list
+        </button>
+        <button
+          type="button"
+          className={activeTab === "daily" ? "active" : ""}
+          onClick={() => onSwitchTab("daily")}
+          role="tab"
+          aria-selected={activeTab === "daily"}
+        >
+          Daily list
+          <span>{dailySymbols.length}</span>
+        </button>
+      </div>
+      {activeTab === "daily" ? (
+        <div className="daily-list-editor">
+          <form onSubmit={onAddDailySymbols}>
+            <input
+              aria-label="Add daily symbols"
+              placeholder="Add ticker"
+              value={dailySymbolInput}
+              onChange={(event) => onDailySymbolInput(event.target.value)}
+            />
+            <button type="submit">Add</button>
+          </form>
+          <div className="daily-symbols" aria-label="Daily symbols">
+            {dailySymbols.length ? dailySymbols.map((symbol) => (
+              <span key={symbol}>
+                {symbol}
+                <button type="button" onClick={() => onRemoveDailySymbol(symbol)} aria-label={`Remove ${symbol}`}>x</button>
+              </span>
+            )) : <em>Add tickers for today.</em>}
+          </div>
+        </div>
+      ) : null}
+    </section>
   );
 }

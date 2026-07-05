@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from app.market_data import aggregate_by_minutes, ema_cloud_bounce_matches, ema_values, mtf_matches, parse_symbols
+from app.market_data import LIVE_WATCHLIST, aggregate_by_minutes, ema_cloud_bounce_matches, ema_values, mtf_matches, parse_symbols
 
 
 def candle(index: int, close: float) -> dict:
@@ -18,6 +18,12 @@ def candle(index: int, close: float) -> dict:
 
 def test_parse_symbols_normalizes_and_filters_empty_entries():
     assert parse_symbols(" be, AAOI ,,lly ") == ["BE", "AAOI", "LLY"]
+
+
+def test_live_watchlist_includes_new_og_symbols_under_webull_limit():
+    for symbol in ["APLD", "CIFR", "CRWV", "HUT", "IREN", "NBIS", "WULF"]:
+        assert symbol in LIVE_WATCHLIST
+    assert len(LIVE_WATCHLIST) <= 25
 
 
 def test_aggregate_by_minutes_rolls_5m_bars_into_10m_buckets():

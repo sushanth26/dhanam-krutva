@@ -765,6 +765,108 @@ select {
   justify-content: flex-end;
 }
 
+.watchlist-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.watchlist-tabs {
+  background: #eef2f5;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 4px;
+}
+
+.watchlist-tabs button {
+  align-items: center;
+  background: transparent;
+  color: #4d5a55;
+  display: inline-flex;
+  gap: 6px;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 10px;
+}
+
+.watchlist-tabs button.active {
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(25, 33, 31, 0.12);
+  color: #184d36;
+}
+
+.watchlist-tabs span {
+  align-items: center;
+  background: #dff4e9;
+  border-radius: 999px;
+  color: #0d513f;
+  display: inline-flex;
+  font-size: 11px;
+  height: 20px;
+  justify-content: center;
+  min-width: 20px;
+  padding: 0 6px;
+}
+
+.daily-list-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.daily-list-editor form {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.daily-list-editor form button {
+  min-height: 42px;
+  padding: 0 14px;
+}
+
+.daily-symbols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.daily-symbols span {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 999px;
+  color: #19211f;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 900;
+  gap: 6px;
+  padding: 5px 6px 5px 10px;
+}
+
+.daily-symbols button {
+  align-items: center;
+  background: #eef2f5;
+  border-radius: 999px;
+  color: #4d5a55;
+  display: inline-flex;
+  font-size: 12px;
+  height: 22px;
+  justify-content: center;
+  min-height: 22px;
+  min-width: 22px;
+  padding: 0;
+}
+
+.daily-symbols em {
+  color: #68766c;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 800;
+}
+
 .trend-price-grid {
   display: grid;
   gap: 16px;
@@ -834,7 +936,10 @@ select {
 }
 
 .sector-clean-energy td { background: #e2f3e8; }
+.sector-cloud-ai td { background: #e9f0ff; }
 .sector-components td { background: #edf0f7; }
+.sector-crypto-mining td { background: #edf8f4; }
+.sector-data-centers td { background: #f4f0ff; }
 .sector-hardware td { background: #e8edf0; }
 .sector-healthcare td { background: #f1e9f7; }
 .sector-memory td { background: #edf5ff; }

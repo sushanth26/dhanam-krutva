@@ -12,6 +12,7 @@ from app.webull_service import WebullService
 LIVE_WATCHLIST = [
     "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
     "ASTS", "AMD", "ARM", "AVGO", "DELL", "INTC", "APP", "LLY",
+    "APLD", "CIFR", "CRWV", "HUT", "IREN", "NBIS", "WULF",
 ]
 INTRADAY_EMA_SESSIONS = ["PRE", "RTH", "ATH"]
 
@@ -33,6 +34,13 @@ SYMBOL_SECTORS = {
     "INTC": "Semiconductors",
     "APP": "Software",
     "LLY": "Healthcare",
+    "APLD": "Data Centers",
+    "CIFR": "Crypto Mining",
+    "CRWV": "Cloud AI",
+    "HUT": "Crypto Mining",
+    "IREN": "Data Centers",
+    "NBIS": "Cloud AI",
+    "WULF": "Crypto Mining",
 }
 
 
