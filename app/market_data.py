@@ -252,10 +252,22 @@ def mtf_signal_matches(
 ) -> list[dict[str, Any]]:
     if ten_minute_trend == "Chop":
         return []
-    return [
+    matches = [
         *mtf_matches(price, ema_1h, ema_daily),
         *ema_cloud_bounce_matches(ten_minute_candles, ema_10m, ema_1h, ema_daily),
     ]
+    candle_time = latest_complete_candle_time(ten_minute_candles)
+    if candle_time is not None:
+        for match in matches:
+            match.setdefault("candle_time", candle_time)
+    return matches
+
+
+def latest_complete_candle_time(candles: list[dict[str, Any]]) -> Any:
+    candle = latest_complete_candle(candles)
+    if not candle:
+        return None
+    return candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
 
 
 def ema_cloud_bounce_matches(
@@ -272,7 +284,7 @@ def ema_cloud_bounce_matches(
     low = candle.get("low")
     if close is None or low is None:
         return []
-    candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
+    candle_time = latest_complete_candle_time(ten_minute_candles)
 
     checks = [
         ("10m bounce 34/50", ema_10m.get("34"), ema_10m.get("50"), "10m", cloud_status(ema_10m, ["5", "12"], ["34", "50"])),
