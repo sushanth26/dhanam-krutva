@@ -48,7 +48,7 @@ def test_filter_payload_by_strategies_removes_disabled_alerts():
 
     filtered = filter_payload_by_strategies(
         payload,
-        {"hourly-cloud": False, "daily-slow-cloud": True, "ten-minute-bounce": True},
+        {"hourly-cloud": False, "daily-slow-cloud": True, "ten-minute-bounce-hourly": True},
     )
 
     assert filtered["body"] == "BE 10m bounce Hourly 34/50 | LLY Daily 50/55"
@@ -64,6 +64,56 @@ def test_filter_payload_by_strategies_migrates_old_10m_touch_setting():
     }
 
     assert filter_payload_by_strategies(payload, {"ten-minute-touch": False}) is None
+
+
+def test_filter_payload_by_strategies_can_disable_10m_hourly_bounces_only():
+    payload = {
+        "matches": [
+            {
+                "symbol": "BE",
+                "labels": [
+                    "10m bounce 34/50",
+                    "10m bounce Hourly 34/50",
+                    "10m bounce Daily 20/21",
+                    "10m bounce Daily 50/55",
+                ],
+            },
+        ],
+    }
+
+    filtered = filter_payload_by_strategies(payload, {"ten-minute-bounce-hourly": False})
+
+    assert filtered["matches"][0]["labels"] == [
+        "10m bounce 34/50",
+        "10m bounce Daily 20/21",
+        "10m bounce Daily 50/55",
+    ]
+
+
+def test_filter_payload_by_strategies_can_disable_daily_bounces_only():
+    payload = {
+        "matches": [
+            {
+                "symbol": "BE",
+                "labels": [
+                    "10m bounce 34/50",
+                    "10m bounce Hourly 34/50",
+                    "10m bounce Daily 20/21",
+                    "10m bounce Daily 50/55",
+                ],
+            },
+        ],
+    }
+
+    filtered = filter_payload_by_strategies(
+        payload,
+        {"ten-minute-bounce-daily-fast": False, "ten-minute-bounce-daily-slow": False},
+    )
+
+    assert filtered["matches"][0]["labels"] == [
+        "10m bounce 34/50",
+        "10m bounce Hourly 34/50",
+    ]
 
 
 def test_filter_payload_by_strategies_skips_push_when_all_alerts_disabled():

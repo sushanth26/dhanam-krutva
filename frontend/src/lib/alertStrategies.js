@@ -5,25 +5,43 @@ export const ALERT_STRATEGIES = [
     id: "hourly-cloud",
     name: "Hourly 34/50",
     description: "Price is inside the hourly 34/50 EMA cloud.",
-    match: (match) => String(match?.label || "").includes("Hourly 34/50"),
+    match: (match) => String(match?.label || "") === "Hourly 34/50",
   },
   {
     id: "daily-fast-cloud",
     name: "Daily 20/21",
     description: "Price is inside the daily 20/21 EMA cloud.",
-    match: (match) => String(match?.label || "").includes("Daily 20/21"),
+    match: (match) => String(match?.label || "") === "Daily 20/21",
   },
   {
     id: "daily-slow-cloud",
     name: "Daily 50/55",
     description: "Price is inside the daily 50/55 EMA cloud.",
-    match: (match) => String(match?.label || "").includes("Daily 50/55"),
+    match: (match) => String(match?.label || "") === "Daily 50/55",
   },
   {
-    id: "ten-minute-bounce",
-    name: "10m cloud bounce",
-    description: "10m candle touches or goes below a full EMA cloud, then closes above it.",
-    match: (match) => match?.type === "10m_cloud_bounce" || String(match?.label || "").includes("10m bounce"),
+    id: "ten-minute-bounce-10m",
+    name: "10m bounce 34/50",
+    description: "10m candle bounces through the 10m 34/50 EMA cloud and closes above it.",
+    match: (match) => String(match?.label || "") === "10m bounce 34/50",
+  },
+  {
+    id: "ten-minute-bounce-hourly",
+    name: "10m bounce 1hr 34/50",
+    description: "10m candle bounces through the hourly 34/50 EMA cloud and closes above it.",
+    match: (match) => String(match?.label || "") === "10m bounce Hourly 34/50",
+  },
+  {
+    id: "ten-minute-bounce-daily-fast",
+    name: "10m bounce Daily 20/21",
+    description: "10m candle bounces through the daily 20/21 EMA cloud and closes above it.",
+    match: (match) => String(match?.label || "") === "10m bounce Daily 20/21",
+  },
+  {
+    id: "ten-minute-bounce-daily-slow",
+    name: "10m bounce Daily 50/55",
+    description: "10m candle bounces through the daily 50/55 EMA cloud and closes above it.",
+    match: (match) => String(match?.label || "") === "10m bounce Daily 50/55",
   },
 ];
 
@@ -35,8 +53,17 @@ export function loadStrategyState() {
   const defaults = defaultStrategyState();
   try {
     const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "{}");
-    if (saved["ten-minute-bounce"] === undefined && saved["ten-minute-touch"] !== undefined) {
-      saved["ten-minute-bounce"] = saved["ten-minute-touch"];
+    const legacyBounce = saved["ten-minute-bounce"] ?? saved["ten-minute-touch"];
+    if (legacyBounce !== undefined) {
+      for (const key of [
+        "ten-minute-bounce-10m",
+        "ten-minute-bounce-hourly",
+        "ten-minute-bounce-daily-fast",
+        "ten-minute-bounce-daily-slow",
+      ]) {
+        if (saved[key] === undefined) saved[key] = legacyBounce;
+      }
+      delete saved["ten-minute-bounce"];
       delete saved["ten-minute-touch"];
       saveStrategyState({ ...defaults, ...saved });
     }

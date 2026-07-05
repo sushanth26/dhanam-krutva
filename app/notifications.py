@@ -16,7 +16,10 @@ DEFAULT_ALERT_STRATEGIES = {
     "hourly-cloud": True,
     "daily-fast-cloud": True,
     "daily-slow-cloud": True,
-    "ten-minute-bounce": True,
+    "ten-minute-bounce-10m": True,
+    "ten-minute-bounce-hourly": True,
+    "ten-minute-bounce-daily-fast": True,
+    "ten-minute-bounce-daily-slow": True,
 }
 
 
@@ -177,13 +180,19 @@ def mtf_signature(quotes: list[dict[str, Any]]) -> str:
 
 
 def strategy_id_for_label(label: str) -> str:
-    if label.startswith("10m bounce"):
-        return "ten-minute-bounce"
-    if "Hourly 34/50" in label:
+    if label == "10m bounce 34/50":
+        return "ten-minute-bounce-10m"
+    if label == "10m bounce Hourly 34/50":
+        return "ten-minute-bounce-hourly"
+    if label == "10m bounce Daily 20/21":
+        return "ten-minute-bounce-daily-fast"
+    if label == "10m bounce Daily 50/55":
+        return "ten-minute-bounce-daily-slow"
+    if label == "Hourly 34/50":
         return "hourly-cloud"
-    if "Daily 20/21" in label:
+    if label == "Daily 20/21":
         return "daily-fast-cloud"
-    if "Daily 50/55" in label:
+    if label == "Daily 50/55":
         return "daily-slow-cloud"
     return "unknown"
 
@@ -191,8 +200,16 @@ def strategy_id_for_label(label: str) -> str:
 def normalize_strategy_state(strategy_state: dict[str, Any] | None) -> dict[str, bool]:
     normalized = DEFAULT_ALERT_STRATEGIES.copy()
     if isinstance(strategy_state, dict):
-        if "ten-minute-bounce" not in strategy_state and "ten-minute-touch" in strategy_state:
-            normalized["ten-minute-bounce"] = bool(strategy_state["ten-minute-touch"])
+        legacy_bounce = strategy_state.get("ten-minute-bounce", strategy_state.get("ten-minute-touch"))
+        if legacy_bounce is not None:
+            for key in (
+                "ten-minute-bounce-10m",
+                "ten-minute-bounce-hourly",
+                "ten-minute-bounce-daily-fast",
+                "ten-minute-bounce-daily-slow",
+            ):
+                if key not in strategy_state:
+                    normalized[key] = bool(legacy_bounce)
         for key in normalized:
             if key in strategy_state:
                 normalized[key] = bool(strategy_state[key])
