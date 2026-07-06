@@ -883,46 +883,6 @@ select {
   padding: 0 14px;
 }
 
-.daily-symbols {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.daily-symbols span {
-  align-items: center;
-  background: #ffffff;
-  border: 1px solid #dbe2d8;
-  border-radius: 999px;
-  color: #19211f;
-  display: inline-flex;
-  font-size: 13px;
-  font-weight: 900;
-  gap: 6px;
-  padding: 5px 6px 5px 10px;
-}
-
-.daily-symbols button {
-  align-items: center;
-  background: #eef2f5;
-  border-radius: 999px;
-  color: #4d5a55;
-  display: inline-flex;
-  font-size: 12px;
-  height: 22px;
-  justify-content: center;
-  min-height: 22px;
-  min-width: 22px;
-  padding: 0;
-}
-
-.daily-symbols em {
-  color: #68766c;
-  font-size: 13px;
-  font-style: normal;
-  font-weight: 800;
-}
-
 .trend-price-grid {
   display: grid;
   gap: 16px;
@@ -974,10 +934,10 @@ select {
   display: grid;
   gap: 3px 10px;
   grid-template-areas:
-    "symbol list price"
-    "symbol tags price"
-    "symbol time price";
-  grid-template-columns: 72px minmax(0, 1fr) 76px;
+    "symbol list"
+    "symbol tags"
+    "symbol time";
+  grid-template-columns: 72px minmax(0, 1fr);
   padding: 12px 0;
 }
 
@@ -1005,12 +965,6 @@ select {
 
 .global-mtf-panel .global-mtf-table .trigger-time {
   grid-area: time;
-}
-
-.global-mtf-panel .global-mtf-table .price-cell {
-  grid-area: price;
-  text-align: right;
-  width: auto;
 }
 
 .price-bucket {
@@ -1061,6 +1015,10 @@ select {
   text-transform: uppercase;
 }
 
+.live-price-table .action-col {
+  width: 34px;
+}
+
 .live-price-table td {
   font-size: 14px;
   font-weight: 700;
@@ -1104,6 +1062,30 @@ select {
 
 .stock-row {
   position: relative;
+}
+
+.row-action-cell {
+  text-align: right;
+  width: 34px;
+}
+
+.row-delete-button {
+  align-items: center;
+  background: #eef2f5;
+  border-radius: 999px;
+  color: #4d5a55;
+  display: inline-flex;
+  font-size: 12px;
+  height: 26px;
+  justify-content: center;
+  min-height: 26px;
+  min-width: 26px;
+  padding: 0;
+}
+
+.row-delete-button:hover {
+  background: #ffe1e1;
+  color: #8a2424;
 }
 
 .watchlist-cell {

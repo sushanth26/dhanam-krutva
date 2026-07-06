@@ -324,17 +324,17 @@ export default function App() {
     lastMtfSignature.current = { ...lastMtfSignature.current, [watchlistTab]: null };
   }
 
-  function removeSymbolFromActiveWatchlist(symbol) {
+  function removeSymbolFromWatchlist(symbol, tab = watchlistTab) {
     updateWatchlists((current) => current.map((watchlist) => (
-      watchlist.id === watchlistTab
+      watchlist.id === tab
         ? { ...watchlist, symbols: watchlist.symbols.filter((item) => item !== symbol) }
         : watchlist
     )));
     setQuotesByTab((current) => ({
       ...current,
-      [watchlistTab]: (current[watchlistTab] || []).filter((quote) => quote.symbol !== symbol),
+      [tab]: (current[tab] || []).filter((quote) => quote.symbol !== symbol),
     }));
-    lastMtfSignature.current = { ...lastMtfSignature.current, [watchlistTab]: null };
+    lastMtfSignature.current = { ...lastMtfSignature.current, [tab]: null };
   }
 
   function addWatchlist() {
@@ -546,7 +546,6 @@ export default function App() {
               onAddTab={addWatchlist}
               onDeleteTab={deleteWatchlist}
               onRefreshAll={refreshAllPrices}
-              onRemoveSymbol={removeSymbolFromActiveWatchlist}
               onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
               onSwitchTab={switchWatchlistTab}
               selectedWatchlist={activeWatchlist}
@@ -567,15 +566,19 @@ export default function App() {
 
             <div className="active-watchlist-tables">
               <div className="trend-price-grid">
-                <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" />
-                <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" />
-                <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" />
+                <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
+                <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
+                <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
               </div>
               <p className="muted">{updatedText}</p>
             </div>
           </section>
           <aside className="global-mtf-panel" aria-label="MTFs from all tabs">
-            <MtfTable quotes={allMtfs} title="MTFs" showWatchlist />
+            <MtfTable
+              quotes={allMtfs}
+              title="MTFs"
+              showWatchlist
+            />
           </aside>
         </div>
         <HiddenLegacyPanels />
@@ -590,7 +593,6 @@ function WatchlistTabs({
   onAddTab,
   onDeleteTab,
   onRefreshAll,
-  onRemoveSymbol,
   onSwitchTab,
   onSymbolInput,
   selectedWatchlist,
@@ -650,14 +652,6 @@ function WatchlistTabs({
           />
           <button type="submit">Add</button>
         </form>
-        <div className="daily-symbols" aria-label={`${selectedWatchlist?.name || "Watchlist"} symbols`}>
-          {selectedWatchlist?.symbols?.length ? selectedWatchlist.symbols.map((symbol) => (
-            <span key={symbol}>
-              {symbol}
-              <button type="button" onClick={() => onRemoveSymbol(symbol)} aria-label={`Remove ${symbol}`}>x</button>
-            </span>
-          )) : <em>Add tickers to this list.</em>}
-        </div>
       </div>
     </section>
   );
