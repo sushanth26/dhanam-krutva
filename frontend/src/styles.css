@@ -923,6 +923,79 @@ select {
   padding: 0 14px;
 }
 
+.risk-settings-panel {
+  align-items: end;
+  background: #f8faf7;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 10px;
+}
+
+.risk-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.risk-field > span {
+  color: #68766c;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.risk-field label {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 6px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  min-height: 38px;
+  overflow: hidden;
+}
+
+.risk-field label b {
+  color: #68766c;
+  font-size: 13px;
+  padding-left: 10px;
+}
+
+.risk-field input,
+.risk-field select,
+.auto-risk-note strong {
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 6px;
+  color: #19211f;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  min-height: 38px;
+  min-width: 0;
+  padding: 0 9px;
+  width: 100%;
+}
+
+.risk-field label input {
+  border: 0;
+  border-radius: 0;
+  padding-left: 5px;
+}
+
+.auto-risk-note strong {
+  align-items: center;
+  display: inline-flex;
+}
+
+.risk-apply-button {
+  min-height: 38px;
+  padding: 0 12px;
+}
+
 .trend-price-grid {
   display: grid;
   gap: 16px;
@@ -1282,6 +1355,7 @@ select {
   color: #68766c;
   font-size: 11px;
   font-weight: 900;
+  text-transform: capitalize;
 }
 
 .mtf-tag.hourly {
@@ -1522,6 +1596,10 @@ h1 {
   flex: 1 1 130px;
 }
 
+  .risk-settings-panel {
+    grid-template-columns: 1fr;
+  }
+
 .live-price-table-wrap {
   overflow-x: hidden;
 }
@@ -1611,6 +1689,10 @@ h1 {
 
   .live-price-actions button {
     flex: 0 0 auto;
+  }
+
+  .risk-settings-panel {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .top-actions {

@@ -13,6 +13,7 @@ const WATCHLIST_SYNC_INTERVAL_MS = 2 * 60 * 1000;
 const MAX_NOTIFICATIONS = 20;
 const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
 const WATCHLISTS_KEY = "dhanam-watchlists";
+const RISK_SETTINGS_KEY = "dhanam-risk-settings";
 const OG_WATCHLIST_ID = "og";
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
@@ -175,6 +176,34 @@ function quotesWithMatchStatus(quotes, status) {
     .filter((quote) => quote.mtf_matches.length);
 }
 
+function loadRiskSettings() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(RISK_SETTINGS_KEY) || "{}");
+    return normalizeRiskSettings(saved);
+  } catch {
+    return normalizeRiskSettings({});
+  }
+}
+
+function normalizeRiskSettings(settings) {
+  const riskAmount = Number(settings?.riskAmount);
+  const fixedStopBuffer = Number(settings?.fixedStopBuffer);
+  const stopMode = settings?.stopMode === "auto" ? "auto" : "fixed";
+  return {
+    riskAmount: Number.isFinite(riskAmount) ? clamp(riskAmount, 1, 10000) : 100,
+    stopMode,
+    fixedStopBuffer: Number.isFinite(fixedStopBuffer) ? clamp(fixedStopBuffer, 0.05, 25) : 1,
+  };
+}
+
+function saveRiskSettings(settings) {
+  window.localStorage.setItem(RISK_SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
 export default function App() {
   const [watchlists, setWatchlists] = useState(loadWatchlists);
   const [status, setStatus] = useState(null);
@@ -193,6 +222,7 @@ export default function App() {
   });
   const [notifications, setNotifications] = useState([]);
   const [strategyState, setStrategyState] = useState(loadStrategyState);
+  const [riskSettings, setRiskSettings] = useState(loadRiskSettings);
   const [watchlistTab, setWatchlistTab] = useState(OG_WATCHLIST_ID);
   const [symbolInputs, setSymbolInputs] = useState({});
   const [newMtfRows, setNewMtfRows] = useState({});
@@ -210,6 +240,7 @@ export default function App() {
   const lastMtfRows = useRef(initialTabState(loadWatchlists(), {}));
   const lastFocusRefreshAt = useRef(0);
   const strategyStateRef = useRef(strategyState);
+  const riskSettingsRef = useRef(riskSettings);
   const watchlistTabRef = useRef(watchlistTab);
   const watchlistsRef = useRef(watchlists);
   const activeWatchlist = watchlists.find((item) => item.id === watchlistTab) || watchlists[0];
@@ -338,8 +369,14 @@ export default function App() {
       setUpdatedTextForTab(watchlist.id, "Add symbols to this list");
       return;
     }
-    const query = `?symbols=${encodeURIComponent(selectedSymbols.join(","))}`;
-    const payload = await getJson(`/api/webull/live-prices${query}`);
+    const settings = riskSettingsRef.current;
+    const query = new URLSearchParams({
+      symbols: selectedSymbols.join(","),
+      risk_amount: String(settings.riskAmount),
+      stop_mode: settings.stopMode,
+      fixed_stop_buffer: String(settings.fixedStopBuffer),
+    });
+    const payload = await getJson(`/api/webull/live-prices?${query.toString()}`);
     const nextQuotes = payload.quotes || [];
     const updatedAt = new Date().toLocaleTimeString();
     setQuotesForTab(watchlist.id, nextQuotes);
@@ -465,6 +502,14 @@ export default function App() {
       saveStrategyState(next);
       return next;
     });
+    lastMtfSignature.current = initialTabState(watchlistsRef.current, null);
+  }
+
+  function updateRiskSettings(nextSettings) {
+    const normalized = normalizeRiskSettings(nextSettings);
+    setRiskSettings(normalized);
+    riskSettingsRef.current = normalized;
+    saveRiskSettings(normalized);
     lastMtfSignature.current = initialTabState(watchlistsRef.current, null);
   }
 
@@ -735,6 +780,10 @@ export default function App() {
   }, [strategyState]);
 
   useEffect(() => {
+    riskSettingsRef.current = riskSettings;
+  }, [riskSettings]);
+
+  useEffect(() => {
     watchlistTabRef.current = watchlistTab;
   }, [watchlistTab]);
 
@@ -791,6 +840,12 @@ export default function App() {
               symbolInput={symbolInputs[watchlistTab] || ""}
               watchlists={watchlists}
             />
+            <RiskSettingsPanel
+              disabled={loading.prices}
+              onApply={refreshAllPrices}
+              riskSettings={riskSettings}
+              onChange={updateRiskSettings}
+            />
             <div className="section-heading">
               <div>
                 <h2>{activeWatchlist?.name || "Watchlist"}</h2>
@@ -836,6 +891,68 @@ export default function App() {
         <HiddenLegacyPanels />
       </main>
     </>
+  );
+}
+
+function RiskSettingsPanel({ disabled, riskSettings, onApply, onChange }) {
+  function update(key, value) {
+    onChange({ ...riskSettings, [key]: value });
+  }
+
+  return (
+    <section className="risk-settings-panel" aria-label="A++ risk settings">
+      <div className="risk-field">
+        <span>Max risk</span>
+        <label>
+          <b>$</b>
+          <input
+            type="number"
+            min="1"
+            max="10000"
+            step="1"
+            value={riskSettings.riskAmount}
+            disabled={disabled}
+            onChange={(event) => update("riskAmount", event.target.value)}
+          />
+        </label>
+      </div>
+      <div className="risk-field">
+        <span>SL mode</span>
+        <select
+          value={riskSettings.stopMode}
+          disabled={disabled}
+          onChange={(event) => update("stopMode", event.target.value)}
+        >
+          <option value="auto">Auto range</option>
+          <option value="fixed">Fixed $</option>
+        </select>
+      </div>
+      {riskSettings.stopMode === "fixed" ? (
+        <div className="risk-field">
+          <span>Cloud buffer</span>
+          <label>
+            <b>$</b>
+            <input
+              type="number"
+              min="0.05"
+              max="25"
+              step="0.05"
+              value={riskSettings.fixedStopBuffer}
+              disabled={disabled}
+              onChange={(event) => update("fixedStopBuffer", event.target.value)}
+            />
+          </label>
+        </div>
+      ) : (
+        <div className="risk-field auto-risk-note">
+          <span>Range</span>
+          <strong>Last 3D</strong>
+        </div>
+      )}
+      <button type="button" className="risk-apply-button" disabled={disabled} onClick={onApply}>
+        Apply
+      </button>
+    </section>
   );
 }
 

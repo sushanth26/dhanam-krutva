@@ -18,6 +18,8 @@ INTRADAY_EMA_SESSIONS = ["PRE", "RTH", "ATH"]
 WEBULL_BATCH_BAR_LIMIT = 20
 A_PLUS_PLUS_MAX_RISK = 100
 A_PLUS_PLUS_STOP_BUFFER = 1
+A_PLUS_PLUS_STOP_MODE_FIXED = "fixed"
+A_PLUS_PLUS_STOP_MODE_AUTO = "auto"
 
 SYMBOL_SECTORS = {
     "BE": "Clean Energy",
@@ -47,7 +49,13 @@ SYMBOL_SECTORS = {
 }
 
 
-def build_live_prices(webull: WebullService, symbols: str) -> dict[str, Any]:
+def build_live_prices(
+    webull: WebullService,
+    symbols: str,
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
+    stop_mode: str = A_PLUS_PLUS_STOP_MODE_FIXED,
+    fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
+) -> dict[str, Any]:
     selected_symbols = parse_symbols(symbols)
     snapshot_response = webull.market_snapshot(selected_symbols, Category.US_STOCK.name)
     m5_response = batch_history_bars_chunked(
@@ -105,7 +113,18 @@ def build_live_prices(webull: WebullService, symbols: str) -> dict[str, Any]:
                 "ema_10m": ten_minute_ema,
                 "ema_1h": ema_1h,
                 "ema_daily": ema_daily,
-                "mtf_matches": mtf_signal_matches(candle_price, ten_minute_trend, ten_minute_candles, ten_minute_ema, ema_1h, ema_daily),
+                "mtf_matches": mtf_signal_matches(
+                    candle_price,
+                    ten_minute_trend,
+                    ten_minute_candles,
+                    ten_minute_ema,
+                    ema_1h,
+                    ema_daily,
+                    daily_candles=daily_candles,
+                    risk_amount=risk_amount,
+                    stop_mode=stop_mode,
+                    fixed_stop_buffer=fixed_stop_buffer,
+                ),
             }
         )
 
@@ -276,6 +295,10 @@ def mtf_signal_matches(
     ema_10m: dict[str, float | None],
     ema_1h: dict[str, float | None],
     ema_daily: dict[str, float | None],
+    daily_candles: list[dict[str, Any]] | None = None,
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
+    stop_mode: str = A_PLUS_PLUS_STOP_MODE_FIXED,
+    fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
 ) -> list[dict[str, Any]]:
     if ten_minute_trend == "Chop":
         return []
@@ -299,7 +322,16 @@ def mtf_signal_matches(
             current_low=candle_low,
             candle_complete=status == "confirmed",
         ),
-        *ema_cloud_bounce_matches(ten_minute_candles, ema_10m, ema_1h, ema_daily),
+        *ema_cloud_bounce_matches(
+            ten_minute_candles,
+            ema_10m,
+            ema_1h,
+            ema_daily,
+            daily_candles=daily_candles,
+            risk_amount=risk_amount,
+            stop_mode=stop_mode,
+            fixed_stop_buffer=fixed_stop_buffer,
+        ),
     ]
     visible_matches = []
     for match in matches:
@@ -349,6 +381,10 @@ def ema_cloud_bounce_matches(
     ema_10m: dict[str, float | None],
     ema_1h: dict[str, float | None],
     ema_daily: dict[str, float | None],
+    daily_candles: list[dict[str, Any]] | None = None,
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
+    stop_mode: str = A_PLUS_PLUS_STOP_MODE_FIXED,
+    fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
 ) -> list[dict[str, Any]]:
     candle = latest_ten_minute_candle(ten_minute_candles)
     if not candle:
@@ -385,6 +421,10 @@ def ema_cloud_bounce_matches(
                 cloud_low=cloud_low,
                 cloud_high=cloud_high,
                 trend=trend_value,
+                daily_candles=daily_candles,
+                risk_amount=risk_amount,
+                stop_mode=stop_mode,
+                fixed_stop_buffer=fixed_stop_buffer,
             )
             matches.append(
                 {
@@ -426,11 +466,17 @@ def a_plus_plus_risk_plan(
     cloud_low: float,
     cloud_high: float,
     trend: str,
+    daily_candles: list[dict[str, Any]] | None = None,
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
+    stop_mode: str = A_PLUS_PLUS_STOP_MODE_FIXED,
+    fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
 ) -> dict[str, Any] | None:
+    volatility = daily_volatility(daily_candles or [], entry)
+    stop_buffer = stop_buffer_for_mode(stop_mode, fixed_stop_buffer, volatility)
     if trend == "Bullish":
-        stop = cloud_low - A_PLUS_PLUS_STOP_BUFFER
+        stop = cloud_low - stop_buffer
     elif trend == "Bearish":
-        stop = cloud_high + A_PLUS_PLUS_STOP_BUFFER
+        stop = cloud_high + stop_buffer
     else:
         return None
 
@@ -438,14 +484,52 @@ def a_plus_plus_risk_plan(
     if risk_per_share <= 0:
         return None
 
-    shares = int(A_PLUS_PLUS_MAX_RISK // risk_per_share)
+    max_risk = max(1, float(risk_amount or A_PLUS_PLUS_MAX_RISK))
+    shares = int(max_risk // risk_per_share)
 
     return {
         "entry": round(entry, 4),
         "stop": round(stop, 4),
+        "stop_buffer": round(stop_buffer, 4),
+        "stop_mode": stop_mode if stop_mode == A_PLUS_PLUS_STOP_MODE_AUTO else A_PLUS_PLUS_STOP_MODE_FIXED,
         "risk_per_share": round(risk_per_share, 4),
-        "max_risk": A_PLUS_PLUS_MAX_RISK,
+        "max_risk": round(max_risk, 2),
         "shares": shares,
+        "volatility": volatility,
+    }
+
+
+def stop_buffer_for_mode(stop_mode: str, fixed_stop_buffer: float, volatility: dict[str, Any]) -> float:
+    if stop_mode == A_PLUS_PLUS_STOP_MODE_AUTO:
+        average_range = volatility.get("average_range")
+        if average_range is not None:
+            return round(min(5, max(0.25, float(average_range) * 0.12)), 4)
+    return round(max(0.05, float(fixed_stop_buffer or A_PLUS_PLUS_STOP_BUFFER)), 4)
+
+
+def daily_volatility(candles: list[dict[str, Any]], price: float | None) -> dict[str, Any]:
+    sample = candles[-3:]
+    ranges = [
+        abs(candle["high"] - candle["low"])
+        for candle in sample
+        if candle.get("high") is not None and candle.get("low") is not None
+    ]
+    if not ranges or not price:
+        return {"grade": "unknown", "average_range": None, "average_range_pct": None, "sample_size": len(ranges)}
+
+    average_range = sum(ranges) / len(ranges)
+    average_range_pct = average_range / price * 100
+    if average_range_pct >= 7:
+        grade = "fast"
+    elif average_range_pct >= 3.5:
+        grade = "normal"
+    else:
+        grade = "slow"
+    return {
+        "grade": grade,
+        "average_range": round(average_range, 4),
+        "average_range_pct": round(average_range_pct, 2),
+        "sample_size": len(ranges),
     }
 
 

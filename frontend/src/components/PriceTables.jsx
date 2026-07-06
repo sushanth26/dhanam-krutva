@@ -127,6 +127,9 @@ function RiskPlan({ plan }) {
       Qty <b>{plan.shares}</b>
       <span>SL {formatPrice(plan.stop)}</span>
       <small>Risk {formatPrice(plan.risk_per_share)}/sh</small>
+      {plan.volatility?.grade ? (
+        <small>{volatilityLabel(plan.volatility)}</small>
+      ) : null}
     </span>
   );
 }
@@ -220,4 +223,10 @@ function mtfTriggerTime(matches) {
 
 function aPlusPlusRiskPlan(matches) {
   return (matches || []).find((match) => match.label === "10m bounce 34/50" && match.risk_plan)?.risk_plan || null;
+}
+
+function volatilityLabel(volatility) {
+  const grade = String(volatility.grade || "unknown");
+  const range = volatility.average_range == null ? "" : ` ${formatPrice(volatility.average_range)} avg`;
+  return `${grade}${range}`;
 }
