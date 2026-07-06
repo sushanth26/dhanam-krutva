@@ -974,10 +974,11 @@ select {
   display: grid;
   gap: 3px 10px;
   grid-template-areas:
-    "symbol list buy"
-    "symbol tags buy"
-    "symbol time buy";
-  grid-template-columns: 72px minmax(0, 1fr) 58px;
+    "symbol list"
+    "symbol tags"
+    "symbol time"
+    "symbol buy";
+  grid-template-columns: 72px minmax(0, 1fr);
   padding: 12px 0;
 }
 
@@ -1017,7 +1018,8 @@ select {
 
 .global-mtf-panel .global-mtf-table .buy-action-cell {
   grid-area: buy;
-  justify-self: end;
+  justify-self: start;
+  width: auto;
 }
 
 .price-bucket {
@@ -1244,6 +1246,42 @@ select {
   flex-wrap: nowrap;
   gap: 4px;
   max-width: 100%;
+}
+
+.mtf-tag-group,
+.mtf-tag,
+.cloud-tag {
+  flex: 0 0 auto;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+
+.risk-plan {
+  align-items: center;
+  background: #f8faf7;
+  border: 1px solid #dbe2d8;
+  border-radius: 999px;
+  color: #22302c;
+  display: inline-flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 5px;
+  line-height: 1.15;
+  max-width: 100%;
+  padding: 5px 8px;
+}
+
+.risk-plan b {
+  color: #12664f;
+}
+
+.risk-plan span,
+.risk-plan small {
+  color: #68766c;
+  font-size: 11px;
+  font-weight: 900;
 }
 
 .mtf-tag.hourly {
@@ -1513,11 +1551,28 @@ h1 {
   align-items: center;
 }
 
+.global-mtf-panel {
+  padding: 14px;
+}
+
+.global-mtf-panel .global-mtf-table .stock-row {
+  gap: 6px 8px;
+  grid-template-columns: 70px minmax(0, 1fr);
+}
+
+.global-mtf-panel .global-mtf-table .buy-action-cell {
+  margin-top: 2px;
+}
+
 .mtf-tag,
 .cloud-tag {
   font-size: 11px;
   min-height: 28px;
   padding: 5px 8px;
+}
+
+.buy-one {
+  min-width: 64px;
 }
 
 @media (min-width: 760px) {
@@ -1625,6 +1680,24 @@ h1 {
   .live-price-table th:first-child,
   .live-price-table td:first-child {
     width: 72px;
+  }
+
+  .global-mtf-panel {
+    padding: 18px;
+  }
+
+  .global-mtf-panel .global-mtf-table .stock-row {
+    gap: 3px 10px;
+    grid-template-areas:
+      "symbol list buy"
+      "symbol tags buy"
+      "symbol time buy";
+    grid-template-columns: 72px minmax(0, 1fr) 64px;
+  }
+
+  .global-mtf-panel .global-mtf-table .buy-action-cell {
+    justify-self: end;
+    margin-top: 0;
   }
 
 }

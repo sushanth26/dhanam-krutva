@@ -345,3 +345,29 @@ def test_ema_cloud_bounce_alerts_10m_touch_without_waiting_for_close_above():
 
     assert [match["label"] for match in matches] == ["10m bounce 34/50"]
     assert matches[0]["trend"] == "Bullish"
+    assert matches[0]["risk_plan"] == {
+        "entry": 105,
+        "stop": 99,
+        "risk_per_share": 6,
+        "max_risk": 100,
+        "shares": 16,
+    }
+
+
+def test_ema_cloud_bounce_sizes_a_plus_plus_bearish_stop_above_cloud():
+    matches = ema_cloud_bounce_matches(
+        [{"low": 99, "high": 106, "close": 104}],
+        {"5": 90, "12": 95, "34": 100, "50": 110},
+        {"34": 111, "50": 112},
+        {"20": 113, "21": 114, "50": 115, "55": 116},
+    )
+
+    assert [match["label"] for match in matches] == ["10m bounce 34/50"]
+    assert matches[0]["trend"] == "Bearish"
+    assert matches[0]["risk_plan"] == {
+        "entry": 104,
+        "stop": 111,
+        "risk_per_share": 7,
+        "max_risk": 100,
+        "shares": 14,
+    }

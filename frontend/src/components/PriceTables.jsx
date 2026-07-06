@@ -81,6 +81,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
 
 function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }) {
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
+  const riskPlan = aPlusPlusRiskPlan(quote.mtf_matches);
   const dismissNew = quote.is_new ? () => onDismissNew?.(quote) : undefined;
   const waiting = quote.mtf_matches?.some((match) => match.status === "waiting");
   return (
@@ -113,9 +114,20 @@ function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }
             {match.trend ? <CloudTag status={match.trend} /> : null}
           </span>
         ))}
+        {riskPlan ? <RiskPlan plan={riskPlan} /> : null}
       </td>
       <td className="trigger-time">{triggerTime}</td>
     </BaseRow>
+  );
+}
+
+function RiskPlan({ plan }) {
+  return (
+    <span className="risk-plan">
+      Qty <b>{plan.shares}</b>
+      <span>SL {formatPrice(plan.stop)}</span>
+      <small>Risk {formatPrice(plan.risk_per_share)}/sh</small>
+    </span>
   );
 }
 
@@ -204,4 +216,8 @@ function mtfTriggerTime(matches) {
   const date = parsed.toLocaleDateString([], { month: "short", day: "numeric" });
   const time = parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return `${date} ${time}`;
+}
+
+function aPlusPlusRiskPlan(matches) {
+  return (matches || []).find((match) => match.label === "10m bounce 34/50" && match.risk_plan)?.risk_plan || null;
 }

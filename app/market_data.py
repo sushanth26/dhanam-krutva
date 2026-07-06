@@ -16,6 +16,8 @@ LIVE_WATCHLIST = [
 ]
 INTRADAY_EMA_SESSIONS = ["PRE", "RTH", "ATH"]
 WEBULL_BATCH_BAR_LIMIT = 20
+A_PLUS_PLUS_MAX_RISK = 100
+A_PLUS_PLUS_STOP_BUFFER = 1
 
 SYMBOL_SECTORS = {
     "BE": "Clean Energy",
@@ -378,6 +380,12 @@ def ema_cloud_bounce_matches(
         if timeframe == "10m":
             if trend_value not in {"Bullish", "Bearish"} or not touched_cloud:
                 continue
+            risk_plan = a_plus_plus_risk_plan(
+                entry=close,
+                cloud_low=cloud_low,
+                cloud_high=cloud_high,
+                trend=trend_value,
+            )
             matches.append(
                 {
                     "label": label,
@@ -390,6 +398,7 @@ def ema_cloud_bounce_matches(
                     "candle_time": candle_time,
                     "type": "10m_cloud_bounce",
                     "trend": trend_value,
+                    **({"risk_plan": risk_plan} if risk_plan else {}),
                 }
             )
             continue
@@ -410,6 +419,34 @@ def ema_cloud_bounce_matches(
                 }
             )
     return matches
+
+
+def a_plus_plus_risk_plan(
+    entry: float,
+    cloud_low: float,
+    cloud_high: float,
+    trend: str,
+) -> dict[str, Any] | None:
+    if trend == "Bullish":
+        stop = cloud_low - A_PLUS_PLUS_STOP_BUFFER
+    elif trend == "Bearish":
+        stop = cloud_high + A_PLUS_PLUS_STOP_BUFFER
+    else:
+        return None
+
+    risk_per_share = abs(entry - stop)
+    if risk_per_share <= 0:
+        return None
+
+    shares = int(A_PLUS_PLUS_MAX_RISK // risk_per_share)
+
+    return {
+        "entry": round(entry, 4),
+        "stop": round(stop, 4),
+        "risk_per_share": round(risk_per_share, 4),
+        "max_risk": A_PLUS_PLUS_MAX_RISK,
+        "shares": shares,
+    }
 
 
 def cloud_status(ema_set: dict[str, float | None], fast_keys: list[str], slow_keys: list[str]) -> str:
