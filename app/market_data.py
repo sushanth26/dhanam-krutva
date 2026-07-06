@@ -92,6 +92,7 @@ def build_live_prices(webull: WebullService, symbols: str) -> dict[str, Any]:
         ema_daily = ema_values(daily_candles, [20, 21, 50, 55])
         ten_minute_ema = ema_values(ten_minute_candles, [5, 12, 34, 50])
         ten_minute_trend = cloud_status(ten_minute_ema, ["5", "12"], ["34", "50"])
+        candle_price = latest_ten_minute_price(ten_minute_candles, price)
         quotes.append(
             {
                 "symbol": symbol,
@@ -102,7 +103,7 @@ def build_live_prices(webull: WebullService, symbols: str) -> dict[str, Any]:
                 "ema_10m": ten_minute_ema,
                 "ema_1h": ema_1h,
                 "ema_daily": ema_daily,
-                "mtf_matches": mtf_signal_matches(price, ten_minute_trend, ten_minute_candles, ten_minute_ema, ema_1h, ema_daily),
+                "mtf_matches": mtf_signal_matches(candle_price, ten_minute_trend, ten_minute_candles, ten_minute_ema, ema_1h, ema_daily),
             }
         )
 
@@ -252,22 +253,32 @@ def mtf_signal_matches(
 ) -> list[dict[str, Any]]:
     if ten_minute_trend == "Chop":
         return []
+    candle = latest_ten_minute_candle(ten_minute_candles)
+    if not candle:
+        return []
+    status = "confirmed" if is_complete_ten_minute_candle(candle) else "waiting"
+    candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
     matches = [
         *mtf_matches(price, ema_1h, ema_daily),
         *ema_cloud_bounce_matches(ten_minute_candles, ema_10m, ema_1h, ema_daily),
     ]
-    candle_time = latest_complete_candle_time(ten_minute_candles)
-    if candle_time is not None:
-        for match in matches:
+    for match in matches:
+        match["status"] = status
+        if candle_time is not None:
             match.setdefault("candle_time", candle_time)
     return matches
 
 
 def latest_complete_candle_time(candles: list[dict[str, Any]]) -> Any:
-    candle = latest_complete_candle(candles)
+    candle = latest_confirmed_ten_minute_candle(candles)
     if not candle:
         return None
     return candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
+
+
+def latest_ten_minute_price(candles: list[dict[str, Any]], fallback: float | None = None) -> float | None:
+    candle = latest_ten_minute_candle(candles)
+    return candle.get("close") if candle and candle.get("close") is not None else fallback
 
 
 def ema_cloud_bounce_matches(
@@ -276,7 +287,7 @@ def ema_cloud_bounce_matches(
     ema_1h: dict[str, float | None],
     ema_daily: dict[str, float | None],
 ) -> list[dict[str, Any]]:
-    candle = latest_complete_candle(ten_minute_candles)
+    candle = latest_ten_minute_candle(ten_minute_candles)
     if not candle:
         return []
 
@@ -336,11 +347,23 @@ def cloud_status(ema_set: dict[str, float | None], fast_keys: list[str], slow_ke
 
 
 def latest_complete_candle(candles: list[dict[str, Any]]) -> dict[str, Any] | None:
+    return latest_confirmed_ten_minute_candle(candles)
+
+
+def latest_ten_minute_candle(candles: list[dict[str, Any]]) -> dict[str, Any] | None:
+    return candles[-1] if candles else None
+
+
+def latest_confirmed_ten_minute_candle(candles: list[dict[str, Any]]) -> dict[str, Any] | None:
     for candle in reversed(candles):
-        source_count = candle.get("source_count")
-        if source_count is None or source_count >= 2:
+        if is_complete_ten_minute_candle(candle):
             return candle
     return None
+
+
+def is_complete_ten_minute_candle(candle: dict[str, Any]) -> bool:
+    source_count = candle.get("source_count")
+    return source_count is None or source_count >= 2
 
 
 def aggregate_by_minutes(candles: list[dict[str, Any]], minutes: int) -> list[dict[str, Any]]:

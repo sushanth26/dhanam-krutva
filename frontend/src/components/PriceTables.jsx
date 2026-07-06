@@ -93,6 +93,7 @@ function MtfRow({ quote, showWatchlist, onDismissNew }) {
         {quote.mtf_matches.map((match) => (
           <span key={match.label} className="mtf-tag-group">
             <MtfTag label={match.label} />
+            {match.status === "waiting" ? <CloudTag status="Waiting" /> : null}
             {match.trend ? <CloudTag status={match.trend} /> : null}
           </span>
         ))}

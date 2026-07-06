@@ -1,5 +1,6 @@
 from app.notifications import (
     PushSubscriptionStore,
+    confirmed_mtf_quotes,
     describe_mtf_matches,
     filter_payload_by_strategies,
     mtf_notification_payload,
@@ -34,6 +35,25 @@ def test_mtf_notification_payload_lists_symbols_and_clouds():
     assert payload["matches"][1]["labels"] == ["Daily 20/21", "Daily 50/55"]
     assert describe_mtf_matches(quotes) in payload["body"]
     assert mtf_signature(list(reversed(quotes))) == mtf_signature(quotes)
+
+
+def test_confirmed_mtf_quotes_removes_waiting_matches():
+    quotes = [
+        {
+            "symbol": "BE",
+            "mtf_matches": [
+                {"label": "Hourly 34/50", "status": "waiting"},
+                {"label": "Daily 50/55", "status": "confirmed"},
+            ],
+        },
+        {"symbol": "LLY", "mtf_matches": [{"label": "Daily 20/21", "status": "waiting"}]},
+    ]
+
+    confirmed = confirmed_mtf_quotes(quotes)
+
+    assert len(confirmed) == 1
+    assert confirmed[0]["symbol"] == "BE"
+    assert confirmed[0]["mtf_matches"] == [{"label": "Daily 50/55", "status": "confirmed"}]
 
 
 def test_filter_payload_by_strategies_removes_disabled_alerts():
