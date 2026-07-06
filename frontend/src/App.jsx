@@ -140,6 +140,12 @@ export default function App() {
   const [watchlistTab, setWatchlistTab] = useState(OG_WATCHLIST_ID);
   const [symbolInputs, setSymbolInputs] = useState({});
   const [newMtfRows, setNewMtfRows] = useState({});
+  const [loading, setLoading] = useState({
+    shell: false,
+    watchlists: false,
+    prices: false,
+    notifications: false,
+  });
   const liveTimer = useRef(null);
   const watchlistSyncTimer = useRef(null);
   const lastMtfSignature = useRef(initialTabState(loadWatchlists(), null));
@@ -151,6 +157,7 @@ export default function App() {
   const activeWatchlist = watchlists.find((item) => item.id === watchlistTab) || watchlists[0];
   const quotes = quotesByTab[watchlistTab] || [];
   const updatedText = updatedTextByTab[watchlistTab] || "";
+  const pageLoading = loading.shell || loading.watchlists || loading.prices || loading.notifications;
 
   const trendBuckets = useMemo(() => {
     return quotes.reduce(
@@ -180,6 +187,7 @@ export default function App() {
   const unreadNotificationCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
 
   async function refreshShell() {
+    setLoadingKey("shell", true);
     try {
       const nextStatus = await getJson("/api/status");
       setStatus(nextStatus);
@@ -198,10 +206,13 @@ export default function App() {
       setSelectedAccountId((current) => current || findAccountId(nextAccounts));
     } catch (error) {
       setAlert(error.message);
+    } finally {
+      setLoadingKey("shell", false);
     }
   }
 
   async function refreshWatchlists() {
+    setLoadingKey("watchlists", true);
     try {
       const payload = await getJson("/api/webull/watchlists");
       const serverWatchlists = normalizeWatchlists(payload.watchlists || []);
@@ -220,6 +231,8 @@ export default function App() {
     } catch (error) {
       setLiveAlert(error.message);
       return null;
+    } finally {
+      setLoadingKey("watchlists", false);
     }
   }
 
@@ -230,17 +243,21 @@ export default function App() {
     }
 
     setLiveAlert("");
+    setLoadingKey("prices", true);
     try {
       const activeTab = watchlistTabRef.current;
       const selectedWatchlist = watchlistsRef.current.find((item) => item.id === activeTab);
       await refreshWatchlistPrices(selectedWatchlist);
     } catch (error) {
       setLiveAlert(error.message);
+    } finally {
+      setLoadingKey("prices", false);
     }
   }
 
   async function refreshAllPrices() {
     setLiveAlert("");
+    setLoadingKey("prices", true);
     try {
       const lists = watchlistsRef.current;
       for (const watchlist of lists) {
@@ -248,6 +265,8 @@ export default function App() {
       }
     } catch (error) {
       setLiveAlert(error.message);
+    } finally {
+      setLoadingKey("prices", false);
     }
   }
 
@@ -328,6 +347,10 @@ export default function App() {
 
   function markNotificationsRead() {
     setNotifications((current) => current.map((item) => ({ ...item, read: true })));
+  }
+
+  function setLoadingKey(key, value) {
+    setLoading((current) => ({ ...current, [key]: value }));
   }
 
   function dismissNewMtfRow(tab, symbol) {
@@ -437,13 +460,15 @@ export default function App() {
     const next = normalizeWatchlists(updater(watchlistsRef.current));
     saveWatchlists(next);
     applyWatchlists(next);
+    setLoadingKey("watchlists", true);
     postJson("/api/webull/watchlists", { watchlists: next })
       .then((payload) => {
         const saved = normalizeWatchlists(payload.watchlists || next);
         saveWatchlists(saved);
         applyWatchlists(saved);
       })
-      .catch((error) => setLiveAlert(error.message));
+      .catch((error) => setLiveAlert(error.message))
+      .finally(() => setLoadingKey("watchlists", false));
   }
 
   function applyWatchlists(next) {
@@ -487,6 +512,7 @@ export default function App() {
   }
 
   async function enableAppNotifications() {
+    setLoadingKey("notifications", true);
     try {
       const nextState = await enableNotifications(strategyState);
       setNotificationState(nextState);
@@ -501,10 +527,13 @@ export default function App() {
       }
     } catch (error) {
       setLiveAlert(error.message);
+    } finally {
+      setLoadingKey("notifications", false);
     }
   }
 
   async function disableAppNotifications() {
+    setLoadingKey("notifications", true);
     try {
       const nextState = await disableNotifications();
       setNotificationState((current) => ({ ...current, ...nextState }));
@@ -515,6 +544,8 @@ export default function App() {
       });
     } catch (error) {
       setLiveAlert(error.message);
+    } finally {
+      setLoadingKey("notifications", false);
     }
   }
 
@@ -604,6 +635,8 @@ export default function App() {
         accounts={accounts}
         selectedAccountId={selectedAccountId}
         liveRefreshActive={liveRefreshActive}
+        loading={loading}
+        pageLoading={pageLoading}
         onRefresh={refreshShell}
         onStart={startLiveRefresh}
         onStop={stopLiveRefresh}
@@ -616,7 +649,9 @@ export default function App() {
         strategyState={strategyState}
         onToggleStrategy={toggleStrategy}
       />
+      {pageLoading ? <div className="loading-blocker" aria-hidden="true"></div> : null}
       <main className="shell">
+        {pageLoading ? <div className="top-loading-bar" aria-label="Loading"></div> : null}
         {alert ? <div className="alert app-alert">{alert}</div> : null}
 
         <div className="homepage-market-grid">
@@ -627,6 +662,7 @@ export default function App() {
               onAddTab={addWatchlist}
               onDeleteTab={deleteWatchlist}
               onRefreshAll={refreshAllPrices}
+              loading={loading.watchlists || loading.prices}
               onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
               onSwitchTab={switchWatchlistTab}
               selectedWatchlist={activeWatchlist}
@@ -639,7 +675,9 @@ export default function App() {
                 <p className="muted">Live Webull prices with clock-aligned EMA levels.</p>
               </div>
               <div className="live-price-actions">
-                <button type="button" onClick={() => loadLivePrices({ manual: true })}>Refresh Prices</button>
+                <button type="button" onClick={() => loadLivePrices({ manual: true })} disabled={loading.prices}>
+                  {loading.prices ? <LoadingLabel label="Refreshing" /> : "Refresh Prices"}
+                </button>
               </div>
             </div>
 
@@ -647,9 +685,9 @@ export default function App() {
 
             <div className="active-watchlist-tables">
               <div className="trend-price-grid">
-                <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
-                <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
-                <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
+                <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" loading={loading.prices} onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
+                <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" loading={loading.prices} onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
+                <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" loading={loading.prices} onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
               </div>
               <p className="muted">{updatedText}</p>
             </div>
@@ -659,6 +697,7 @@ export default function App() {
               quotes={allMtfs}
               title="MTFs"
               showWatchlist
+              loading={loading.prices || loading.watchlists}
               onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
             />
           </aside>
@@ -675,6 +714,7 @@ function WatchlistTabs({
   onAddTab,
   onDeleteTab,
   onRefreshAll,
+  loading,
   onSwitchTab,
   onSymbolInput,
   selectedWatchlist,
@@ -720,8 +760,9 @@ function WatchlistTabs({
           type="button"
           className="watchlist-refresh-all"
           onClick={onRefreshAll}
+          disabled={loading}
         >
-          Refresh All
+          {loading ? <LoadingLabel label="Loading" /> : "Refresh All"}
         </button>
       </div>
       <div className="daily-list-editor">
@@ -732,9 +773,18 @@ function WatchlistTabs({
             value={symbolInput}
             onChange={(event) => onSymbolInput(event.target.value)}
           />
-          <button type="submit">Add</button>
+          <button type="submit" disabled={loading}>{loading ? <LoadingLabel label="Saving" /> : "Add"}</button>
         </form>
       </div>
     </section>
+  );
+}
+
+function LoadingLabel({ label }) {
+  return (
+    <span className="loading-label">
+      <span className="loading-spinner" aria-hidden="true"></span>
+      {label}
+    </span>
   );
 }

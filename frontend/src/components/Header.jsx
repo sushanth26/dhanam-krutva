@@ -8,6 +8,8 @@ export function Header({
   accounts,
   selectedAccountId,
   liveRefreshActive,
+  loading,
+  pageLoading,
   onRefresh,
   onStart,
   onStop,
@@ -75,7 +77,7 @@ export function Header({
             type="button"
             className="icon-button"
             onClick={onStart}
-            disabled={liveRefreshActive}
+            disabled={liveRefreshActive || pageLoading}
             aria-label={liveRefreshActive ? "Webull running" : "Start Webull"}
             title={liveRefreshActive ? "Webull running" : "Start Webull"}
           >
@@ -85,7 +87,7 @@ export function Header({
             type="button"
             className="icon-button secondary-button"
             onClick={onStop}
-            disabled={!liveRefreshActive}
+            disabled={!liveRefreshActive || pageLoading}
             aria-label="Stop Webull"
             title="Stop Webull"
           >
@@ -95,6 +97,7 @@ export function Header({
             <button
               type="button"
               className="account-menu-button secondary-button"
+              disabled={pageLoading}
               onClick={() => {
                 setStrategiesOpen((open) => !open);
                 setAccountMenuOpen(false);
@@ -116,6 +119,7 @@ export function Header({
             <button
               type="button"
               className="account-menu-button secondary-button"
+              disabled={pageLoading}
               onClick={() => {
                 setAccountMenuOpen((open) => !open);
                 setNotificationsOpen(false);
@@ -145,6 +149,7 @@ export function Header({
             <button
               type="button"
               className="icon-button notification-button"
+              disabled={pageLoading}
               onClick={() => {
                 setNotificationsOpen((open) => !open);
                 setAccountMenuOpen(false);
@@ -168,8 +173,8 @@ export function Header({
               />
             ) : null}
           </div>
-          <button type="button" className="icon-button" onClick={onRefresh} aria-label="Refresh" title="Refresh">
-            <span aria-hidden="true">↻</span>
+          <button type="button" className="icon-button" onClick={onRefresh} disabled={pageLoading} aria-label="Refresh" title="Refresh">
+            <span aria-hidden="true">{loading?.shell ? "…" : "↻"}</span>
           </button>
         </div>
       </section>
