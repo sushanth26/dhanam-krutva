@@ -1105,11 +1105,13 @@ select {
   border-radius: 999px;
   box-shadow: 0 0 0 0 rgba(255, 174, 0, 0.45);
   color: #3f2b00;
+  cursor: pointer;
   flex: 0 0 auto;
   font-size: 10px;
   font-weight: 900;
   min-height: 22px;
   padding: 3px 7px;
+  touch-action: manipulation;
 }
 
 @keyframes new-alert-pulse {
