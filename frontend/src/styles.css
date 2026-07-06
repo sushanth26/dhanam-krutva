@@ -1096,30 +1096,6 @@ select {
   text-align: center;
 }
 
-.live-price-table .sector-row td {
-  color: #4d5a55;
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0;
-  padding: 8px 10px;
-  text-transform: uppercase;
-}
-
-.sector-clean-energy td { background: #e2f3e8; }
-.sector-cloud-ai td { background: #e9f0ff; }
-.sector-components td { background: #edf0f7; }
-.sector-crypto-mining td { background: #edf8f4; }
-.sector-data-centers td { background: #f4f0ff; }
-.sector-hardware td { background: #e8edf0; }
-.sector-healthcare td { background: #f1e9f7; }
-.sector-memory td { background: #edf5ff; }
-.sector-optical-networking td { background: #e7f5f6; }
-.sector-semiconductors td { background: #fff1db; }
-.sector-software td { background: #eaf2ff; }
-.sector-space td { background: #f4edff; }
-.sector-storage td { background: #f1f0e7; }
-.sector-other td { background: #eef2f5; }
-
 .live-price-table tr.trend-bullish td {
   background: #edf8f1;
 }

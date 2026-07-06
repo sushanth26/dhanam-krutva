@@ -1,5 +1,5 @@
 import { CloudTag, MtfTag } from "./Tags";
-import { cloudStatus, formatPrice, groupBySector, sectorSlug } from "../lib/market";
+import { cloudStatus, formatPrice } from "../lib/market";
 
 export function MtfTable({ quotes, showWatchlist = false, title = "MTFs", loading = false, onDismissNew }) {
   return (
@@ -39,7 +39,6 @@ export function MtfTable({ quotes, showWatchlist = false, title = "MTFs", loadin
 }
 
 export function PriceBucket({ title, quotes, kind, loading = false, onRemoveSymbol }) {
-  const grouped = groupBySector(quotes);
   return (
     <section className="price-bucket">
       <div className="bucket-heading">
@@ -59,8 +58,8 @@ export function PriceBucket({ title, quotes, kind, loading = false, onRemoveSymb
           <tbody>
             {loading ? (
               <LoadingRow colSpan={onRemoveSymbol ? "4" : "3"} label={`Loading ${title}`} />
-            ) : quotes.length ? Object.entries(grouped).map(([sector, sectorQuotes]) => (
-              <SectorRows key={sector} sector={sector} quotes={sectorQuotes} onRemoveSymbol={onRemoveSymbol} />
+            ) : quotes.length ? quotes.map((quote) => (
+              <PriceRow key={quote.symbol} quote={quote} onRemoveSymbol={onRemoveSymbol} />
             )) : (
               <tr><td colSpan={onRemoveSymbol ? "4" : "3"}>No {kind} stocks right now.</td></tr>
             )}
@@ -81,17 +80,6 @@ function LoadingRow({ colSpan, label }) {
         </span>
       </td>
     </tr>
-  );
-}
-
-function SectorRows({ sector, quotes, onRemoveSymbol }) {
-  return (
-    <>
-      <tr className={`sector-row sector-${sectorSlug(sector)}`}>
-        <td colSpan={onRemoveSymbol ? "4" : "3"}>{sector}</td>
-      </tr>
-      {quotes.map((quote) => <PriceRow key={quote.symbol} quote={quote} onRemoveSymbol={onRemoveSymbol} />)}
-    </>
   );
 }
 

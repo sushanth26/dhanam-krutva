@@ -83,19 +83,6 @@ export function mtfSignature(quotes) {
     .join(",");
 }
 
-export function groupBySector(quotes) {
-  return quotes.reduce((groups, quote) => {
-    const sector = quote.sector || "Other";
-    groups[sector] = groups[sector] || [];
-    groups[sector].push(quote);
-    return groups;
-  }, {});
-}
-
-export function sectorSlug(sector) {
-  return String(sector || "Other").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-
 export function isMarketRefreshWindow(date = new Date()) {
   const day = date.getDay();
   if (day === 0 || day === 6) return false;
