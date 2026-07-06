@@ -80,12 +80,13 @@ function SectorRows({ sector, quotes, onRemoveSymbol }) {
 
 function MtfRow({ quote, showWatchlist, onDismissNew }) {
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
+  const dismissNew = quote.is_new ? () => onDismissNew?.(quote) : undefined;
   return (
-    <BaseRow quote={quote} showPrice={false}>
+    <BaseRow quote={quote} showPrice={false} onClick={dismissNew}>
       {showWatchlist ? (
         <td className="watchlist-cell">
           {quote.watchlist_name || "-"}
-          {quote.is_new ? <NewTag onDismiss={() => onDismissNew?.(quote)} symbol={quote.symbol} /> : null}
+          {quote.is_new ? <NewTag onDismiss={dismissNew} symbol={quote.symbol} /> : null}
         </td>
       ) : null}
       <td className="mtf-tags">
@@ -102,8 +103,20 @@ function MtfRow({ quote, showWatchlist, onDismissNew }) {
 }
 
 function NewTag({ onDismiss, symbol }) {
+  function dismiss(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    onDismiss?.();
+  }
+
   return (
-    <button type="button" className="new-mtf-tag" onClick={onDismiss} aria-label={`Clear new alert for ${symbol}`}>
+    <button
+      type="button"
+      className="new-mtf-tag"
+      onClick={dismiss}
+      onPointerDown={dismiss}
+      aria-label={`Clear new alert for ${symbol}`}
+    >
       NEW
     </button>
   );
@@ -118,10 +131,10 @@ function PriceRow({ quote, onRemoveSymbol }) {
   );
 }
 
-function BaseRow({ quote, children, trend = "", action = null, showPrice = true }) {
+function BaseRow({ quote, children, trend = "", action = null, showPrice = true, onClick }) {
   const rowClass = trend ? `trend-${String(trend).toLowerCase()}` : "";
   return (
-    <tr className={`stock-row ${rowClass}`}>
+    <tr className={`stock-row ${rowClass}`} onClick={onClick}>
       <td><strong>{quote.symbol}</strong></td>
       {children}
       {showPrice ? <td className="price-cell">{formatPrice(quote.price)}</td> : null}
