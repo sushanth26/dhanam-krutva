@@ -58,6 +58,15 @@ export function mtfTagClass(label) {
   return "default";
 }
 
+export function confirmedMtfQuotes(quotes) {
+  return quotes
+    .map((quote) => ({
+      ...quote,
+      mtf_matches: (quote.mtf_matches || []).filter((match) => (match.status || "confirmed") === "confirmed"),
+    }))
+    .filter((quote) => quote.mtf_matches.length);
+}
+
 export function describeMtfMatches(quotes) {
   return quotes
     .map((quote) => {
