@@ -97,24 +97,32 @@ def test_ema_values_returns_latest_values_by_period():
     assert values["20"] is None
 
 
-def test_mtf_matches_waits_when_price_is_inside_cloud_ranges():
+def test_mtf_matches_waits_when_active_candle_tests_cloud_ranges():
     matches = mtf_matches(
         105,
         "Bullish",
         {"34": 100, "50": 110},
-        {"20": 80, "21": 90, "50": 104, "55": 106},
+        {"20": 100, "21": 103, "50": 104, "55": 106},
+        previous_price=95,
+        current_low=99,
+        current_high=106,
+        candle_complete=False,
     )
 
     assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 20/21", "Daily 50/55"]
-    assert [match["status"] for match in matches] == ["waiting", "confirmed", "waiting"]
+    assert [match["status"] for match in matches] == ["waiting", "waiting", "waiting"]
 
 
 def test_mtf_matches_alerts_bullish_only_after_price_closes_above_cloud():
     matches = mtf_matches(
-        111,
+        113,
         "Bullish",
         {"34": 100, "50": 110},
-        {"20": 80, "21": 90, "50": 104, "55": 106},
+        {"20": 108, "21": 112, "50": 104, "55": 106},
+        previous_price=105,
+        current_low=104,
+        current_high=112,
+        candle_complete=True,
     )
 
     assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 20/21", "Daily 50/55"]
@@ -127,6 +135,10 @@ def test_mtf_matches_alerts_bearish_only_after_price_closes_below_cloud():
         "Bearish",
         {"34": 100, "50": 110},
         {"20": 80, "21": 90, "50": 104, "55": 106},
+        previous_price=105,
+        current_low=98,
+        current_high=106,
+        candle_complete=True,
     )
 
     assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 50/55"]
@@ -150,10 +162,13 @@ def test_mtf_signal_matches_keeps_confirmed_bullish_breakout():
     matches = mtf_signal_matches(
         113,
         "Bullish",
-        [{"low": 99, "close": 113, "time": "2026-07-02T09:40:00"}],
+        [
+            {"low": 99, "high": 106, "close": 105, "time": "2026-07-02T09:30:00"},
+            {"low": 104, "high": 114, "close": 113, "time": "2026-07-02T09:40:00"},
+        ],
         {"5": 116, "12": 114, "34": 100, "50": 110},
         {"34": 100, "50": 110},
-        {"20": 80, "21": 90, "50": 104, "55": 106},
+        {"20": 108, "21": 112, "50": 104, "55": 106},
     )
 
     assert [match["label"] for match in matches][:3] == ["Hourly 34/50", "Daily 20/21", "Daily 50/55"]
@@ -166,7 +181,10 @@ def test_mtf_signal_matches_marks_incomplete_10m_candle_as_waiting():
     matches = mtf_signal_matches(
         105,
         "Bullish",
-        [{"low": 99, "close": 105, "source_count": 1, "time": "2026-07-02T09:40:00"}],
+        [
+            {"low": 94, "high": 98, "close": 95, "source_count": 2, "time": "2026-07-02T09:30:00"},
+            {"low": 99, "high": 106, "close": 105, "source_count": 1, "time": "2026-07-02T09:40:00"},
+        ],
         {"5": 116, "12": 114, "34": 100, "50": 110},
         {"34": 100, "50": 110},
         {"20": 80, "21": 90, "50": 104, "55": 106},
@@ -178,22 +196,56 @@ def test_mtf_signal_matches_marks_incomplete_10m_candle_as_waiting():
     assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
 
 
-def test_mtf_signal_matches_hides_incomplete_breakouts_until_candle_close():
+def test_mtf_signal_matches_waits_for_incomplete_breakouts_until_candle_close():
     matches = mtf_signal_matches(
         113,
         "Bullish",
-        [{"low": 99, "close": 113, "source_count": 1, "time": "2026-07-02T09:40:00"}],
+        [
+            {"low": 94, "high": 98, "close": 95, "source_count": 2, "time": "2026-07-02T09:30:00"},
+            {"low": 109, "high": 114, "close": 113, "source_count": 1, "time": "2026-07-02T09:40:00"},
+        ],
         {"5": 116, "12": 114, "34": 100, "50": 110},
         {"34": 100, "50": 110},
         {"20": 80, "21": 90, "50": 104, "55": 106},
     )
 
-    labels = [match["label"] for match in matches]
-    assert "Hourly 34/50" not in labels
-    assert "Daily 20/21" not in labels
-    assert "Daily 50/55" not in labels
-    assert labels[0] == "10m bounce 34/50"
-    assert matches[0]["status"] == "confirmed"
+    statuses = {match["label"]: match["status"] for match in matches}
+    assert statuses["Hourly 34/50"] == "waiting"
+    assert statuses["10m bounce 34/50"] == "confirmed"
+    assert "Daily 20/21" not in statuses
+    assert "Daily 50/55" not in statuses
+
+
+def test_mtf_signal_matches_does_not_alert_when_price_was_already_above_clouds():
+    matches = mtf_signal_matches(
+        113,
+        "Bullish",
+        [
+            {"low": 110, "high": 115, "close": 112, "source_count": 2, "time": "2026-07-02T09:30:00"},
+            {"low": 111, "high": 116, "close": 113, "source_count": 2, "time": "2026-07-02T09:40:00"},
+        ],
+        {"5": 116, "12": 114, "34": 100, "50": 110},
+        {"34": 100, "50": 110},
+        {"20": 80, "21": 90, "50": 104, "55": 106},
+    )
+
+    assert matches == []
+
+
+def test_mtf_signal_matches_does_not_wait_when_incomplete_candle_is_far_from_cloud():
+    matches = mtf_signal_matches(
+        130,
+        "Bullish",
+        [
+            {"low": 120, "high": 125, "close": 124, "source_count": 2, "time": "2026-07-02T09:30:00"},
+            {"low": 128, "high": 132, "close": 130, "source_count": 1, "time": "2026-07-02T09:40:00"},
+        ],
+        {"5": 116, "12": 114, "34": 100, "50": 110},
+        {"34": 100, "50": 110},
+        {"20": 80, "21": 90, "50": 104, "55": 106},
+    )
+
+    assert matches == []
 
 
 def test_ema_cloud_bounce_matches_alerts_when_10m_candle_closes_back_above_clouds():
