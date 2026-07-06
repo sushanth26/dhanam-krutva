@@ -173,7 +173,7 @@ export default function App() {
   }, [quotes]);
   const allMtfs = useMemo(() => {
     const matches = watchlists.flatMap((watchlist) => (
-      confirmedMtfQuotes(quotesByTab[watchlist.id] || [])
+      (quotesByTab[watchlist.id] || [])
         .filter((quote) => quote.mtf_matches?.length)
         .map((quote) => ({
           ...quote,
