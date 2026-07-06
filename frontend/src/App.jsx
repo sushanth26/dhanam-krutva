@@ -578,7 +578,6 @@ export default function App() {
               quotes={allMtfs}
               title="MTFs"
               showWatchlist
-              onRemoveQuote={(quote) => removeSymbolFromWatchlist(quote.symbol, quote.watchlist_id)}
             />
           </aside>
         </div>

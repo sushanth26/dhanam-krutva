@@ -934,10 +934,10 @@ select {
   display: grid;
   gap: 3px 10px;
   grid-template-areas:
-    "symbol list price action"
-    "symbol tags price action"
-    "symbol time price action";
-  grid-template-columns: 72px minmax(0, 1fr) 76px 34px;
+    "symbol list"
+    "symbol tags"
+    "symbol time";
+  grid-template-columns: 72px minmax(0, 1fr);
   padding: 12px 0;
 }
 
@@ -965,16 +965,6 @@ select {
 
 .global-mtf-panel .global-mtf-table .trigger-time {
   grid-area: time;
-}
-
-.global-mtf-panel .global-mtf-table .price-cell {
-  grid-area: price;
-  text-align: right;
-  width: auto;
-}
-
-.global-mtf-panel .global-mtf-table .row-action-cell {
-  grid-area: action;
 }
 
 .price-bucket {
