@@ -34,12 +34,14 @@ def test_mtf_notification_payload_lists_symbols_and_clouds():
 
     payload = mtf_notification_payload(quotes)
 
-    assert payload["title"] == "MTFs changed"
-    assert payload["body"] == "BE Hourly 34/50 | LLY Daily 20/21 + Daily 50/55"
+    assert payload["title"] == "2 MTF alerts: BE, LLY"
+    assert payload["body"] == "BE Hourly 34/50 • LLY Daily 20/21"
     assert payload["badgeCount"] == 2
     assert payload["badge_count"] == 2
+    assert payload["targetSymbol"] == "BE"
+    assert payload["url"] == "/?mtf=BE"
     assert payload["matches"][1]["labels"] == ["Daily 20/21", "Daily 50/55"]
-    assert describe_mtf_matches(quotes) in payload["body"]
+    assert describe_mtf_matches(quotes) == "BE Hourly 34/50 | LLY Daily 20/21 + Daily 50/55"
     assert mtf_signature(list(reversed(quotes))) == mtf_signature(quotes)
 
 
@@ -111,8 +113,11 @@ def test_filter_payload_by_strategies_removes_disabled_alerts():
         {"hourly-cloud": False, "daily-slow-cloud": True, "ten-minute-bounce-hourly": True},
     )
 
-    assert filtered["body"] == "BE 10m bounce Hourly 34/50 | LLY Daily 50/55"
+    assert filtered["title"] == "2 MTF alerts: BE, LLY"
+    assert filtered["body"] == "BE 10m bounce Hourly 34/50 • LLY Daily 50/55"
     assert filtered["badgeCount"] == 2
+    assert filtered["targetSymbol"] == "BE"
+    assert filtered["url"] == "/?mtf=BE"
     assert filtered["matches"][0]["labels"] == ["10m bounce Hourly 34/50"]
 
 

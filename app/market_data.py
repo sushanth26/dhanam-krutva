@@ -226,7 +226,12 @@ def snapshot_number(snapshot: dict[str, Any] | None, *keys: str) -> float | None
     return None
 
 
-def mtf_matches(price: float | None, ema_1h: dict[str, float | None], ema_daily: dict[str, float | None]) -> list[dict[str, Any]]:
+def mtf_matches(
+    price: float | None,
+    trend: str,
+    ema_1h: dict[str, float | None],
+    ema_daily: dict[str, float | None],
+) -> list[dict[str, Any]]:
     checks = [
         ("Hourly 34/50", ema_1h.get("34"), ema_1h.get("50")),
         ("Daily 20/21", ema_daily.get("20"), ema_daily.get("21")),
@@ -238,8 +243,23 @@ def mtf_matches(price: float | None, ema_1h: dict[str, float | None], ema_daily:
             continue
         low = min(first, second)
         high = max(first, second)
-        if low <= price <= high:
-            matches.append({"label": label, "low": round(low, 4), "high": round(high, 4)})
+        match = {
+            "label": label,
+            "low": round(low, 4),
+            "high": round(high, 4),
+            "trend": trend,
+            "type": "mtf_cloud_breakout",
+        }
+        if trend == "Bullish":
+            if price > high:
+                matches.append({**match, "status": "confirmed", "direction": "above"})
+            elif price >= low:
+                matches.append({**match, "status": "waiting", "direction": "above"})
+        elif trend == "Bearish":
+            if price < low:
+                matches.append({**match, "status": "confirmed", "direction": "below"})
+            elif price <= high:
+                matches.append({**match, "status": "waiting", "direction": "below"})
     return matches
 
 
@@ -259,14 +279,27 @@ def mtf_signal_matches(
     status = "confirmed" if is_complete_ten_minute_candle(candle) else "waiting"
     candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
     matches = [
-        *mtf_matches(price, ema_1h, ema_daily),
+        *mtf_matches(price, ten_minute_trend, ema_1h, ema_daily),
         *ema_cloud_bounce_matches(ten_minute_candles, ema_10m, ema_1h, ema_daily),
     ]
+    visible_matches = []
     for match in matches:
-        match["status"] = status
+        if is_immediate_alert_match(match):
+            match["status"] = "confirmed"
+        elif status == "waiting":
+            if match.get("type") == "mtf_cloud_breakout" and match.get("status") == "confirmed":
+                continue
+            match["status"] = "waiting"
+        else:
+            match.setdefault("status", "confirmed")
         if candle_time is not None:
             match.setdefault("candle_time", candle_time)
-    return matches
+        visible_matches.append(match)
+    return visible_matches
+
+
+def is_immediate_alert_match(match: dict[str, Any]) -> bool:
+    return match.get("label") == "10m bounce 34/50" and match.get("type") == "10m_cloud_bounce"
 
 
 def latest_complete_candle_time(candles: list[dict[str, Any]]) -> Any:
@@ -293,8 +326,10 @@ def ema_cloud_bounce_matches(
 
     close = candle.get("close")
     low = candle.get("low")
+    high = candle.get("high")
     if close is None or low is None:
         return []
+    high = high if high is not None else max(value for value in (candle.get("open"), close, low) if value is not None)
     candle_time = latest_complete_candle_time(ten_minute_candles)
 
     checks = [
@@ -310,7 +345,11 @@ def ema_cloud_bounce_matches(
             continue
         cloud_low = min(first, second)
         cloud_high = max(first, second)
-        if low <= cloud_high and close > cloud_high:
+        trend_value = trend[0] if trend else None
+        touched_cloud = low <= cloud_high and high >= cloud_low
+        if timeframe == "10m":
+            if trend_value not in {"Bullish", "Bearish"} or not touched_cloud:
+                continue
             matches.append(
                 {
                     "label": label,
@@ -318,10 +357,28 @@ def ema_cloud_bounce_matches(
                     "cloud_low": round(cloud_low, 4),
                     "cloud_high": round(cloud_high, 4),
                     "candle_low": round(low, 4),
+                    "candle_high": round(high, 4),
                     "candle_close": round(close, 4),
                     "candle_time": candle_time,
                     "type": "10m_cloud_bounce",
-                    **({"trend": trend[0]} if trend and trend[0] != "-" else {}),
+                    "trend": trend_value,
+                }
+            )
+            continue
+        closed_above_cloud = close > cloud_high
+        if touched_cloud and closed_above_cloud:
+            matches.append(
+                {
+                    "label": label,
+                    "timeframe": timeframe,
+                    "cloud_low": round(cloud_low, 4),
+                    "cloud_high": round(cloud_high, 4),
+                    "candle_low": round(low, 4),
+                    "candle_high": round(high, 4),
+                    "candle_close": round(close, 4),
+                    "candle_time": candle_time,
+                    "type": "10m_cloud_bounce",
+                    **({"trend": trend_value} if trend_value and trend_value != "-" else {}),
                 }
             )
     return matches

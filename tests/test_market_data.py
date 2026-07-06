@@ -97,14 +97,40 @@ def test_ema_values_returns_latest_values_by_period():
     assert values["20"] is None
 
 
-def test_mtf_matches_detects_price_inside_cloud_ranges():
+def test_mtf_matches_waits_when_price_is_inside_cloud_ranges():
     matches = mtf_matches(
         105,
+        "Bullish",
+        {"34": 100, "50": 110},
+        {"20": 80, "21": 90, "50": 104, "55": 106},
+    )
+
+    assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 20/21", "Daily 50/55"]
+    assert [match["status"] for match in matches] == ["waiting", "confirmed", "waiting"]
+
+
+def test_mtf_matches_alerts_bullish_only_after_price_closes_above_cloud():
+    matches = mtf_matches(
+        111,
+        "Bullish",
+        {"34": 100, "50": 110},
+        {"20": 80, "21": 90, "50": 104, "55": 106},
+    )
+
+    assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 20/21", "Daily 50/55"]
+    assert all(match["status"] == "confirmed" and match["direction"] == "above" for match in matches)
+
+
+def test_mtf_matches_alerts_bearish_only_after_price_closes_below_cloud():
+    matches = mtf_matches(
+        99,
+        "Bearish",
         {"34": 100, "50": 110},
         {"20": 80, "21": 90, "50": 104, "55": 106},
     )
 
     assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 50/55"]
+    assert all(match["status"] == "confirmed" and match["direction"] == "below" for match in matches)
 
 
 def test_mtf_signal_matches_skips_chop_trend():
@@ -120,9 +146,9 @@ def test_mtf_signal_matches_skips_chop_trend():
     assert matches == []
 
 
-def test_mtf_signal_matches_keeps_bullish_or_bearish_trend():
+def test_mtf_signal_matches_keeps_confirmed_bullish_breakout():
     matches = mtf_signal_matches(
-        105,
+        113,
         "Bullish",
         [{"low": 99, "close": 113, "time": "2026-07-02T09:40:00"}],
         {"5": 116, "12": 114, "34": 100, "50": 110},
@@ -130,15 +156,31 @@ def test_mtf_signal_matches_keeps_bullish_or_bearish_trend():
         {"20": 80, "21": 90, "50": 104, "55": 106},
     )
 
-    assert [match["label"] for match in matches][:2] == ["Hourly 34/50", "Daily 50/55"]
+    assert [match["label"] for match in matches][:3] == ["Hourly 34/50", "Daily 20/21", "Daily 50/55"]
     assert matches[0]["status"] == "confirmed"
     assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
-    assert matches[1]["candle_time"] == "2026-07-02T09:40:00"
+    assert matches[2]["candle_time"] == "2026-07-02T09:40:00"
 
 
 def test_mtf_signal_matches_marks_incomplete_10m_candle_as_waiting():
     matches = mtf_signal_matches(
         105,
+        "Bullish",
+        [{"low": 99, "close": 105, "source_count": 1, "time": "2026-07-02T09:40:00"}],
+        {"5": 116, "12": 114, "34": 100, "50": 110},
+        {"34": 100, "50": 110},
+        {"20": 80, "21": 90, "50": 104, "55": 106},
+    )
+
+    assert [match["label"] for match in matches][:2] == ["Hourly 34/50", "Daily 50/55"]
+    assert [match["status"] for match in matches[:2]] == ["waiting", "waiting"]
+    assert any(match["label"] == "10m bounce 34/50" and match["status"] == "confirmed" for match in matches)
+    assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
+
+
+def test_mtf_signal_matches_hides_incomplete_breakouts_until_candle_close():
+    matches = mtf_signal_matches(
+        113,
         "Bullish",
         [{"low": 99, "close": 113, "source_count": 1, "time": "2026-07-02T09:40:00"}],
         {"5": 116, "12": 114, "34": 100, "50": 110},
@@ -146,20 +188,23 @@ def test_mtf_signal_matches_marks_incomplete_10m_candle_as_waiting():
         {"20": 80, "21": 90, "50": 104, "55": 106},
     )
 
-    assert [match["label"] for match in matches][:2] == ["Hourly 34/50", "Daily 50/55"]
-    assert all(match["status"] == "waiting" for match in matches)
-    assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
+    labels = [match["label"] for match in matches]
+    assert "Hourly 34/50" not in labels
+    assert "Daily 20/21" not in labels
+    assert "Daily 50/55" not in labels
+    assert labels[0] == "10m bounce 34/50"
+    assert matches[0]["status"] == "confirmed"
 
 
 def test_ema_cloud_bounce_matches_alerts_when_10m_candle_closes_back_above_clouds():
     candles = [
         {"low": 93, "close": 97},
-        {"low": 99, "close": 112},
+        {"open": 111, "low": 99, "close": 112},
     ]
 
     matches = ema_cloud_bounce_matches(
         candles,
-        {"5": 101, "12": 102, "34": 100, "50": 110},
+        {"5": 113, "12": 112, "34": 100, "50": 110},
         {"34": 98, "50": 101},
         {"20": 102, "21": 103, "50": 104, "55": 105},
     )
@@ -171,7 +216,7 @@ def test_ema_cloud_bounce_matches_alerts_when_10m_candle_closes_back_above_cloud
         "10m bounce Daily 50/55",
     ]
     assert all(match["type"] == "10m_cloud_bounce" for match in matches)
-    assert matches[0]["trend"] == "Chop"
+    assert matches[0]["trend"] == "Bullish"
     assert matches[0]["candle_time"] is None
 
 
@@ -198,9 +243,9 @@ def test_ema_cloud_bounce_marks_10m_34_50_bullish_trend():
     assert matches[0]["trend"] == "Bullish"
 
 
-def test_ema_cloud_bounce_marks_10m_34_50_bearish_trend():
+def test_ema_cloud_bounce_alerts_10m_34_50_when_trend_is_bearish():
     matches = ema_cloud_bounce_matches(
-        [{"low": 99, "close": 113}],
+        [{"low": 99, "high": 108, "close": 96}],
         {"5": 90, "12": 95, "34": 100, "50": 110},
         {"34": 120, "50": 121},
         {"20": 122, "21": 123, "50": 124, "55": 125},
@@ -224,26 +269,27 @@ def test_ema_cloud_bounce_matches_uses_latest_10m_candle_not_previous_complete()
     assert matches == []
 
 
-def test_mtf_signal_matches_waits_on_incomplete_10m_bounce():
+def test_mtf_signal_matches_confirms_a_plus_plus_bounce_immediately():
     matches = mtf_signal_matches(
-        125,
+        113,
         "Bullish",
-        [{"low": 99, "close": 113, "source_count": 1, "time": "2026-07-02T09:50:00"}],
+        [{"open": 111, "low": 99, "close": 113, "source_count": 1, "time": "2026-07-02T09:50:00"}],
         {"5": 116, "12": 114, "34": 100, "50": 110},
         {"34": 120, "50": 121},
         {"20": 122, "21": 123, "50": 124, "55": 125},
     )
 
-    assert [match["label"] for match in matches] == ["Daily 50/55", "10m bounce 34/50"]
-    assert all(match["status"] == "waiting" for match in matches)
+    assert [match["label"] for match in matches] == ["10m bounce 34/50"]
+    assert all(match["status"] == "confirmed" for match in matches)
 
 
-def test_ema_cloud_bounce_requires_close_above_entire_cloud():
+def test_ema_cloud_bounce_alerts_10m_touch_without_waiting_for_close_above():
     matches = ema_cloud_bounce_matches(
-        [{"low": 99, "close": 105}],
-        {"34": 100, "50": 110},
+        [{"low": 99, "high": 106, "close": 105}],
+        {"5": 116, "12": 114, "34": 100, "50": 110},
         {"34": 111, "50": 112},
         {"20": 113, "21": 114, "50": 115, "55": 116},
     )
 
-    assert matches == []
+    assert [match["label"] for match in matches] == ["10m bounce 34/50"]
+    assert matches[0]["trend"] == "Bullish"

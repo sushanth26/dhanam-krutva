@@ -166,14 +166,15 @@ def build_monitored_quotes(settings: Settings) -> list[dict[str, Any]]:
 
 
 def mtf_notification_payload(quotes: list[dict[str, Any]]) -> dict[str, Any]:
-    matches = describe_mtf_matches(quotes)
+    notification = mtf_notification_details(quotes)
     return {
-        "title": "MTFs changed",
-        "body": matches or "No symbols are on MTF clouds now.",
-        "badgeCount": len(quotes),
-        "badge_count": len(quotes),
-        "tag": "mtf-update",
-        "url": "/",
+        "title": notification["title"],
+        "body": notification["body"],
+        "badgeCount": notification["badge_count"],
+        "badge_count": notification["badge_count"],
+        "tag": notification["tag"],
+        "targetSymbol": notification["target_symbol"],
+        "url": notification["url"],
         "matches": [
             {
                 "symbol": quote.get("symbol"),
@@ -195,6 +196,58 @@ def confirmed_mtf_quotes(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if matches:
             output.append({**quote, "mtf_matches": matches})
     return output
+
+
+def mtf_notification_details(quotes: list[dict[str, Any]]) -> dict[str, Any]:
+    matches = [
+        {
+            "symbol": quote.get("symbol"),
+            "labels": [match.get("label") for match in quote.get("mtf_matches", []) if match.get("label")],
+        }
+        for quote in quotes
+    ]
+    matches = [match for match in matches if match["symbol"] and match["labels"]]
+    target_symbol = str(matches[0]["symbol"]) if matches else ""
+
+    if not matches:
+        return {
+            "title": "No MTF alerts",
+            "body": "No symbols are on MTF clouds now.",
+            "badge_count": 0,
+            "tag": "mtf-empty",
+            "target_symbol": "",
+            "url": "/",
+        }
+
+    if len(matches) == 1:
+        match = matches[0]
+        symbol = str(match["symbol"])
+        labels = [str(label) for label in match["labels"]]
+        return {
+            "title": f"{symbol}: {labels[0]}",
+            "body": " + ".join(labels[1:]) if len(labels) > 1 else "Tap to open this MTF row.",
+            "badge_count": 1,
+            "tag": f"mtf-{symbol}",
+            "target_symbol": symbol,
+            "url": mtf_url(symbol),
+        }
+
+    symbols = [str(match["symbol"]) for match in matches]
+    symbol_text = ", ".join(symbols[:3])
+    if len(symbols) > 3:
+        symbol_text += "..."
+    return {
+        "title": f"{len(matches)} MTF alerts: {symbol_text}",
+        "body": " • ".join(f"{match['symbol']} {match['labels'][0]}" for match in matches[:3]),
+        "badge_count": len(matches),
+        "tag": "mtf-batch",
+        "target_symbol": target_symbol,
+        "url": mtf_url(target_symbol),
+    }
+
+
+def mtf_url(symbol: str) -> str:
+    return f"/?mtf={symbol}" if symbol else "/"
 
 
 def describe_mtf_matches(quotes: list[dict[str, Any]]) -> str:
@@ -270,15 +323,18 @@ def filter_payload_by_strategies(payload: dict[str, Any], strategy_state: dict[s
     if not filtered_matches:
         return None
 
-    body = " | ".join(
-        f"{item.get('symbol')} {' + '.join(item.get('labels', []))}"
+    notification = mtf_notification_details([
+        {"symbol": item.get("symbol"), "mtf_matches": [{"label": label} for label in item.get("labels", [])]}
         for item in filtered_matches
-        if item.get("labels")
-    )
+    ])
     return {
         **payload,
-        "body": body or payload.get("body", "MTFs changed"),
+        "title": notification["title"],
+        "body": notification["body"],
         "badgeCount": len(filtered_matches),
         "badge_count": len(filtered_matches),
+        "tag": notification["tag"],
+        "targetSymbol": notification["target_symbol"],
+        "url": notification["url"],
         "matches": filtered_matches,
     }

@@ -5,11 +5,11 @@ import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
 import { getJson, postJson } from "./lib/api";
 import { filterQuotesByStrategy, loadStrategyState, saveStrategyState } from "./lib/alertStrategies";
-import { cloudStatus, confirmedMtfQuotes, describeMtfMatches, findAccountId, flattenAccounts, isMarketRefreshWindow, mtfSignature } from "./lib/market";
+import { cloudStatus, confirmedMtfQuotes, findAccountId, flattenAccounts, isMarketRefreshWindow, mtfSignature } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
-const MARKET_REFRESH_INTERVAL_MS = 15000;
-const WATCHLIST_SYNC_INTERVAL_MS = 30000;
+const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const WATCHLIST_SYNC_INTERVAL_MS = 2 * 60 * 1000;
 const MAX_NOTIFICATIONS = 20;
 const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
 const WATCHLISTS_KEY = "dhanam-watchlists";
@@ -118,6 +118,63 @@ function mtfRowSignature(quote) {
   return `${quote.symbol}:${labels}`;
 }
 
+function mtfNotificationDetails(quotes) {
+  const matches = quotes
+    .map((quote) => ({
+      symbol: quote.symbol,
+      labels: (quote.mtf_matches || []).map((match) => match.label).filter(Boolean),
+    }))
+    .filter((quote) => quote.symbol && quote.labels.length);
+  const targetSymbol = matches[0]?.symbol || "";
+
+  if (!matches.length) {
+    return {
+      title: "No MTF alerts",
+      body: "No symbols are on MTF clouds now.",
+      badgeCount: 0,
+      tag: "mtf-empty",
+      targetSymbol: "",
+      url: "/",
+    };
+  }
+
+  if (matches.length === 1) {
+    const [match] = matches;
+    const firstLabel = match.labels[0];
+    return {
+      title: `${match.symbol}: ${firstLabel}`,
+      body: match.labels.length > 1 ? match.labels.slice(1).join(" + ") : "Tap to open this MTF row.",
+      badgeCount: 1,
+      tag: `mtf-${match.symbol}`,
+      targetSymbol: match.symbol,
+      url: mtfUrl(match.symbol),
+    };
+  }
+
+  const symbols = matches.map((match) => match.symbol);
+  return {
+    title: `${matches.length} MTF alerts: ${symbols.slice(0, 3).join(", ")}${symbols.length > 3 ? "..." : ""}`,
+    body: matches.slice(0, 3).map((match) => `${match.symbol} ${match.labels[0]}`).join(" • "),
+    badgeCount: matches.length,
+    tag: "mtf-batch",
+    targetSymbol,
+    url: mtfUrl(targetSymbol),
+  };
+}
+
+function mtfUrl(symbol) {
+  return symbol ? `/?mtf=${encodeURIComponent(symbol)}` : "/";
+}
+
+function quotesWithMatchStatus(quotes, status) {
+  return quotes
+    .map((quote) => ({
+      ...quote,
+      mtf_matches: (quote.mtf_matches || []).filter((match) => (match.status || "confirmed") === status),
+    }))
+    .filter((quote) => quote.mtf_matches.length);
+}
+
 export default function App() {
   const [watchlists, setWatchlists] = useState(loadWatchlists);
   const [status, setStatus] = useState(null);
@@ -127,7 +184,6 @@ export default function App() {
   const [updatedTextByTab, setUpdatedTextByTab] = useState(() => initialTabState(loadWatchlists(), "Webull polling stopped"));
   const [alert, setAlert] = useState("");
   const [liveAlert, setLiveAlert] = useState("");
-  const [liveRefreshActive, setLiveRefreshActive] = useState(false);
   const [notificationState, setNotificationState] = useState({
     supported: false,
     permission: "default",
@@ -140,13 +196,15 @@ export default function App() {
   const [watchlistTab, setWatchlistTab] = useState(OG_WATCHLIST_ID);
   const [symbolInputs, setSymbolInputs] = useState({});
   const [newMtfRows, setNewMtfRows] = useState({});
+  const [focusedMtfSymbol, setFocusedMtfSymbol] = useState("");
+  const [buyState, setBuyState] = useState({});
   const [loading, setLoading] = useState({
     shell: false,
     watchlists: false,
     prices: false,
     notifications: false,
   });
-  const liveTimer = useRef(null);
+  const passiveMarketTimer = useRef(null);
   const watchlistSyncTimer = useRef(null);
   const lastMtfSignature = useRef(initialTabState(loadWatchlists(), null));
   const lastMtfRows = useRef(initialTabState(loadWatchlists(), {}));
@@ -171,7 +229,7 @@ export default function App() {
       { bullish: [], bearish: [], chop: [] },
     );
   }, [quotes]);
-  const allMtfs = useMemo(() => {
+  const allMtfQuotes = useMemo(() => {
     const matches = watchlists.flatMap((watchlist) => (
       (quotesByTab[watchlist.id] || [])
         .filter((quote) => quote.mtf_matches?.length)
@@ -184,6 +242,8 @@ export default function App() {
     ));
     return filterQuotesByStrategy(matches, strategyState);
   }, [newMtfRows, quotesByTab, strategyState, watchlists]);
+  const allMtfs = useMemo(() => quotesWithMatchStatus(allMtfQuotes, "confirmed"), [allMtfQuotes]);
+  const waitingMtfs = useMemo(() => quotesWithMatchStatus(allMtfQuotes, "waiting"), [allMtfQuotes]);
   const unreadNotificationCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
 
   async function refreshShell() {
@@ -321,14 +381,13 @@ export default function App() {
       }));
     }
 
-    const matches = describeMtfMatches(nextMtfs);
-    const message = matches || "No symbols are on MTF clouds now.";
+    const notification = mtfNotificationDetails(nextMtfs);
     addNotification({
-      title: "MTFs changed",
-      message,
+      title: notification.title,
+      message: notification.body,
       kind: "changed",
     });
-    showMtfDeviceNotification(message, nextMtfs.length);
+    showMtfDeviceNotification(notification);
   }
 
   function addNotification({ title, message, kind = "update" }) {
@@ -361,6 +420,43 @@ export default function App() {
       delete next[id];
       return next;
     });
+  }
+
+  function focusMtfSymbol(symbol) {
+    const normalized = String(symbol || "").trim().toUpperCase();
+    if (!normalized) return;
+    setFocusedMtfSymbol(normalized);
+    const url = new URL(window.location.href);
+    url.searchParams.set("mtf", normalized);
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  async function buyMtfQuote(quote) {
+    const symbol = quote.symbol;
+    const accountId = selectedAccountId;
+    if (!accountId) {
+      setLiveAlert("Select a Webull account before buying.");
+      return;
+    }
+    if (quote.mtf_matches?.some((match) => match.status === "waiting")) {
+      setLiveAlert(`${symbol} is still waiting for the candle close.`);
+      return;
+    }
+    const confirmed = window.confirm(`Buy 1 share of ${symbol} with a market order in account ${accountId}?`);
+    if (!confirmed) return;
+
+    setBuyState((current) => ({ ...current, [symbol]: { status: "loading" } }));
+    try {
+      const payload = await postJson("/api/trade/buy", { account_id: accountId, symbol });
+      if (!payload.ok) {
+        throw new Error(payload.error || payload.preview?.error || payload.place?.error || `Webull rejected ${symbol} buy order.`);
+      }
+      setBuyState((current) => ({ ...current, [symbol]: { status: "ok" } }));
+      setLiveAlert(`Submitted buy order for 1 share of ${symbol}.`);
+    } catch (error) {
+      setBuyState((current) => ({ ...current, [symbol]: { status: "error" } }));
+      setLiveAlert(error.message);
+    }
   }
 
   function toggleStrategy(strategyId) {
@@ -500,14 +596,15 @@ export default function App() {
     await refreshAllPrices();
   }
 
-  function showMtfDeviceNotification(body, badgeCount) {
+  function showMtfDeviceNotification(notification) {
     if (!notificationState.appEnabled || notificationState.permission !== "granted") return;
     showDeviceNotification({
-      title: "MTFs changed",
-      body,
-      badgeCount,
-      tag: "mtf-update",
-      url: "/",
+      title: notification.title,
+      body: notification.body,
+      badgeCount: notification.badgeCount,
+      tag: notification.tag,
+      targetSymbol: notification.targetSymbol,
+      url: notification.url,
     }).catch((error) => setLiveAlert(error.message));
   }
 
@@ -549,23 +646,30 @@ export default function App() {
     }
   }
 
-  function startLiveRefresh() {
-    if (liveTimer.current) clearInterval(liveTimer.current);
-    setLiveRefreshActive(true);
-    loadLivePrices({ manual: true });
-    liveTimer.current = setInterval(() => loadLivePrices(), MARKET_REFRESH_INTERVAL_MS);
-  }
+  function pauseBackgroundRefresh() {
+    if (passiveMarketTimer.current) clearInterval(passiveMarketTimer.current);
+    if (watchlistSyncTimer.current) clearInterval(watchlistSyncTimer.current);
+    passiveMarketTimer.current = null;
+    watchlistSyncTimer.current = null;
 
-  function stopLiveRefresh() {
-    if (liveTimer.current) clearInterval(liveTimer.current);
-    liveTimer.current = null;
-    setLiveRefreshActive(false);
-    setUpdatedTextForTab(watchlistTabRef.current, "Webull polling stopped");
+    return () => {
+      if (!watchlistSyncTimer.current) {
+        watchlistSyncTimer.current = setInterval(() => refreshWatchlists(), WATCHLIST_SYNC_INTERVAL_MS);
+      }
+      if (!passiveMarketTimer.current) {
+        passiveMarketTimer.current = setInterval(() => {
+          if (isMarketRefreshWindow()) refreshAppMarketData();
+        }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
+      }
+    };
   }
 
   useEffect(() => {
     refreshShell();
     refreshAppMarketData();
+    passiveMarketTimer.current = setInterval(() => {
+      if (isMarketRefreshWindow()) refreshAppMarketData();
+    }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
     watchlistSyncTimer.current = setInterval(() => refreshWatchlists(), WATCHLIST_SYNC_INTERVAL_MS);
     loadNotificationState()
       .then(setNotificationState)
@@ -573,7 +677,7 @@ export default function App() {
         setNotificationState((current) => ({ ...current, supported: false }));
       });
     return () => {
-      if (liveTimer.current) clearInterval(liveTimer.current);
+      if (passiveMarketTimer.current) clearInterval(passiveMarketTimer.current);
       if (watchlistSyncTimer.current) clearInterval(watchlistSyncTimer.current);
     };
   }, []);
@@ -599,12 +703,27 @@ export default function App() {
     if (!("serviceWorker" in navigator)) return undefined;
     function handleServiceWorkerMessage(event) {
       if (event.data?.type !== "MTF_PUSH_UPDATE") return;
+      const targetSymbol = event.data.payload?.targetSymbol;
+      if (targetSymbol) focusMtfSymbol(targetSymbol);
       refreshAppMarketData();
     }
 
     navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
     return () => navigator.serviceWorker.removeEventListener("message", handleServiceWorkerMessage);
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const symbol = params.get("mtf");
+    if (symbol) focusMtfSymbol(symbol);
+  }, []);
+
+  useEffect(() => {
+    if (!focusedMtfSymbol || !allMtfs.some((quote) => quote.symbol === focusedMtfSymbol)) return;
+    window.requestAnimationFrame(() => {
+      document.getElementById(`mtf-row-${focusedMtfSymbol}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [allMtfs, focusedMtfSymbol]);
 
   useEffect(() => {
     const canBadge = notificationState.appEnabled && notificationState.permission === "granted";
@@ -634,12 +753,9 @@ export default function App() {
         status={status}
         accounts={accounts}
         selectedAccountId={selectedAccountId}
-        liveRefreshActive={liveRefreshActive}
         loading={loading}
         pageLoading={pageLoading}
         onRefresh={refreshShell}
-        onStart={startLiveRefresh}
-        onStop={stopLiveRefresh}
         onSelectAccount={setSelectedAccountId}
         notificationState={notificationState}
         onEnableNotifications={enableAppNotifications}
@@ -649,9 +765,15 @@ export default function App() {
         strategyState={strategyState}
         onToggleStrategy={toggleStrategy}
       />
-      {pageLoading ? <div className="loading-blocker" aria-hidden="true"></div> : null}
+      {pageLoading ? (
+        <div className="loading-blocker" aria-live="polite" aria-busy="true">
+          <div className="page-loader">
+            <span className="loading-spinner" aria-hidden="true"></span>
+            <strong>Loading</strong>
+          </div>
+        </div>
+      ) : null}
       <main className="shell">
-        {pageLoading ? <div className="top-loading-bar" aria-label="Loading"></div> : null}
         {alert ? <div className="alert app-alert">{alert}</div> : null}
 
         <div className="homepage-market-grid">
@@ -676,7 +798,7 @@ export default function App() {
               </div>
               <div className="live-price-actions">
                 <button type="button" onClick={() => loadLivePrices({ manual: true })} disabled={loading.prices}>
-                  {loading.prices ? <LoadingLabel label="Refreshing" /> : "Refresh Prices"}
+                  Refresh Prices
                 </button>
               </div>
             </div>
@@ -685,9 +807,9 @@ export default function App() {
 
             <div className="active-watchlist-tables">
               <div className="trend-price-grid">
-                <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" loading={loading.prices} onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
-                <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" loading={loading.prices} onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
-                <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" loading={loading.prices} onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
+                <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
+                <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
+                <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
               </div>
               <p className="muted">{updatedText}</p>
             </div>
@@ -697,8 +819,17 @@ export default function App() {
               quotes={allMtfs}
               title="MTFs"
               showWatchlist
-              loading={loading.prices || loading.watchlists}
+              buyState={buyState}
+              focusedSymbol={focusedMtfSymbol}
+              onBuy={buyMtfQuote}
               onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
+            />
+            <MtfTable
+              quotes={waitingMtfs}
+              title="Wait"
+              showWatchlist
+              emptyText="No waiting MTF cloud setups right now."
+              focusedSymbol={focusedMtfSymbol}
             />
           </aside>
         </div>
@@ -762,7 +893,7 @@ function WatchlistTabs({
           onClick={onRefreshAll}
           disabled={loading}
         >
-          {loading ? <LoadingLabel label="Loading" /> : "Refresh All"}
+          Refresh All
         </button>
       </div>
       <div className="daily-list-editor">
@@ -773,18 +904,9 @@ function WatchlistTabs({
             value={symbolInput}
             onChange={(event) => onSymbolInput(event.target.value)}
           />
-          <button type="submit" disabled={loading}>{loading ? <LoadingLabel label="Saving" /> : "Add"}</button>
+          <button type="submit" disabled={loading}>Add</button>
         </form>
       </div>
     </section>
-  );
-}
-
-function LoadingLabel({ label }) {
-  return (
-    <span className="loading-label">
-      <span className="loading-spinner" aria-hidden="true"></span>
-      {label}
-    </span>
   );
 }
