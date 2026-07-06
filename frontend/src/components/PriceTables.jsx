@@ -1,7 +1,7 @@
 import { CloudTag, MtfTag } from "./Tags";
 import { cloudStatus, formatPrice, groupBySector, sectorSlug } from "../lib/market";
 
-export function MtfTable({ quotes, showWatchlist = false, title = "MTFs" }) {
+export function MtfTable({ quotes, showWatchlist = false, title = "MTFs", onDismissNew }) {
   return (
     <section className="price-bucket mtf-bucket">
       <div className="bucket-heading">
@@ -24,6 +24,7 @@ export function MtfTable({ quotes, showWatchlist = false, title = "MTFs" }) {
                 key={`${quote.watchlist_id || "tab"}-${quote.symbol}`}
                 quote={quote}
                 showWatchlist={showWatchlist}
+                onDismissNew={onDismissNew}
               />
             )) : (
               <tr><td colSpan={showWatchlist ? "4" : "3"}>No stocks are on hourly or daily EMA clouds right now.</td></tr>
@@ -77,11 +78,16 @@ function SectorRows({ sector, quotes, onRemoveSymbol }) {
   );
 }
 
-function MtfRow({ quote, showWatchlist }) {
+function MtfRow({ quote, showWatchlist, onDismissNew }) {
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
   return (
     <BaseRow quote={quote} showPrice={false}>
-      {showWatchlist ? <td className="watchlist-cell">{quote.watchlist_name || "-"}</td> : null}
+      {showWatchlist ? (
+        <td className="watchlist-cell">
+          {quote.watchlist_name || "-"}
+          {quote.is_new ? <NewTag onDismiss={() => onDismissNew?.(quote)} symbol={quote.symbol} /> : null}
+        </td>
+      ) : null}
       <td className="mtf-tags">
         {quote.mtf_matches.map((match) => (
           <span key={match.label} className="mtf-tag-group">
@@ -92,6 +98,14 @@ function MtfRow({ quote, showWatchlist }) {
       </td>
       <td className="trigger-time">{triggerTime}</td>
     </BaseRow>
+  );
+}
+
+function NewTag({ onDismiss, symbol }) {
+  return (
+    <button type="button" className="new-mtf-tag" onClick={onDismiss} aria-label={`Clear new alert for ${symbol}`}>
+      NEW
+    </button>
   );
 }
 

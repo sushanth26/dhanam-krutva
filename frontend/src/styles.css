@@ -1089,9 +1089,42 @@ select {
 }
 
 .watchlist-cell {
+  align-items: center;
   color: #4d5a55;
+  display: flex;
   font-size: 12px;
   font-weight: 900;
+  gap: 6px;
+  min-width: 0;
+}
+
+.new-mtf-tag {
+  animation: new-alert-pulse 1s ease-in-out infinite;
+  background: #ffdf2f;
+  border: 1px solid #bd7b00;
+  border-radius: 999px;
+  box-shadow: 0 0 0 0 rgba(255, 174, 0, 0.45);
+  color: #3f2b00;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 900;
+  min-height: 22px;
+  padding: 3px 7px;
+}
+
+@keyframes new-alert-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 174, 0, 0.45);
+    transform: scale(1);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(255, 174, 0, 0);
+    transform: scale(1.04);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 174, 0, 0);
+    transform: scale(1);
+  }
 }
 
 .trigger-time {

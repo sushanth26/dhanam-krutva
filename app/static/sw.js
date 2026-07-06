@@ -13,7 +13,7 @@ self.addEventListener("push", (event) => {
       payload = { ...fallback, body: event.data.text() };
     }
   }
-  event.waitUntil(Promise.all([setBadgeFromPayload(payload), showNotification(payload)]));
+  event.waitUntil(Promise.all([setBadgeFromPayload(payload), showNotification(payload), notifyOpenClients(payload)]));
 });
 
 self.addEventListener("message", (event) => {
@@ -58,5 +58,13 @@ function showNotification(payload) {
     tag: payload.tag || "mtf-update",
     renotify: true,
     data: { url: payload.url || "/" },
+  });
+}
+
+function notifyOpenClients(payload) {
+  return self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    for (const client of clients) {
+      client.postMessage({ type: "MTF_PUSH_UPDATE", payload });
+    }
   });
 }

@@ -109,6 +109,15 @@ function shouldPromoteLocalWatchlists(serverWatchlists, localWatchlists) {
   return serverOnlyDefaultOg && localHasCustomState;
 }
 
+function mtfRowId(tab, symbol) {
+  return `${tab}:${symbol}`;
+}
+
+function mtfRowSignature(quote) {
+  const labels = (quote.mtf_matches || []).map((match) => match.label).sort().join("|");
+  return `${quote.symbol}:${labels}`;
+}
+
 export default function App() {
   const [watchlists, setWatchlists] = useState(loadWatchlists);
   const [status, setStatus] = useState(null);
@@ -130,9 +139,12 @@ export default function App() {
   const [strategyState, setStrategyState] = useState(loadStrategyState);
   const [watchlistTab, setWatchlistTab] = useState(OG_WATCHLIST_ID);
   const [symbolInputs, setSymbolInputs] = useState({});
+  const [newMtfRows, setNewMtfRows] = useState({});
   const liveTimer = useRef(null);
   const watchlistSyncTimer = useRef(null);
   const lastMtfSignature = useRef(initialTabState(loadWatchlists(), null));
+  const lastMtfRows = useRef(initialTabState(loadWatchlists(), {}));
+  const lastFocusRefreshAt = useRef(0);
   const strategyStateRef = useRef(strategyState);
   const watchlistTabRef = useRef(watchlistTab);
   const watchlistsRef = useRef(watchlists);
@@ -160,10 +172,11 @@ export default function App() {
           ...quote,
           watchlist_id: watchlist.id,
           watchlist_name: watchlist.name,
+          is_new: Boolean(newMtfRows[mtfRowId(watchlist.id, quote.symbol)]),
         }))
     ));
     return filterQuotesByStrategy(matches, strategyState);
-  }, [quotesByTab, strategyState, watchlists]);
+  }, [newMtfRows, quotesByTab, strategyState, watchlists]);
   const unreadNotificationCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
 
   async function refreshShell() {
@@ -203,8 +216,10 @@ export default function App() {
       const next = serverWatchlists;
       saveWatchlists(next);
       applyWatchlists(next);
+      return next;
     } catch (error) {
       setLiveAlert(error.message);
+      return null;
     }
   }
 
@@ -268,11 +283,24 @@ export default function App() {
   function notifyMtfUpdate(tab, nextMtfs) {
     const signature = mtfSignature(nextMtfs);
     const previousSignature = lastMtfSignature.current[tab];
+    const previousRows = lastMtfRows.current[tab] || {};
+    const nextRows = Object.fromEntries(nextMtfs.map((quote) => [quote.symbol, mtfRowSignature(quote)]));
     const hasMatches = nextMtfs.length > 0;
     const firstMatchLoad = previousSignature === null && hasMatches;
     const changed = previousSignature !== null && signature !== previousSignature;
     lastMtfSignature.current = { ...lastMtfSignature.current, [tab]: signature };
+    lastMtfRows.current = { ...lastMtfRows.current, [tab]: nextRows };
     if (!firstMatchLoad && !changed) return;
+
+    const freshRowIds = nextMtfs
+      .filter((quote) => previousRows[quote.symbol] !== nextRows[quote.symbol])
+      .map((quote) => mtfRowId(tab, quote.symbol));
+    if (freshRowIds.length) {
+      setNewMtfRows((current) => ({
+        ...current,
+        ...Object.fromEntries(freshRowIds.map((id) => [id, true])),
+      }));
+    }
 
     const matches = describeMtfMatches(nextMtfs);
     const message = matches || "No symbols are on MTF clouds now.";
@@ -300,6 +328,16 @@ export default function App() {
 
   function markNotificationsRead() {
     setNotifications((current) => current.map((item) => ({ ...item, read: true })));
+  }
+
+  function dismissNewMtfRow(tab, symbol) {
+    const id = mtfRowId(tab, symbol);
+    setNewMtfRows((current) => {
+      if (!current[id]) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
   }
 
   function toggleStrategy(strategyId) {
@@ -335,6 +373,10 @@ export default function App() {
       [tab]: (current[tab] || []).filter((quote) => quote.symbol !== symbol),
     }));
     lastMtfSignature.current = { ...lastMtfSignature.current, [tab]: null };
+    const tabRows = { ...(lastMtfRows.current[tab] || {}) };
+    delete tabRows[symbol];
+    lastMtfRows.current = { ...lastMtfRows.current, [tab]: tabRows };
+    dismissNewMtfRow(tab, symbol);
   }
 
   function addWatchlist() {
@@ -372,6 +414,12 @@ export default function App() {
     const nextSignatures = { ...lastMtfSignature.current };
     delete nextSignatures[id];
     lastMtfSignature.current = nextSignatures;
+    const nextRows = { ...lastMtfRows.current };
+    delete nextRows[id];
+    lastMtfRows.current = nextRows;
+    setNewMtfRows((current) => Object.fromEntries(
+      Object.entries(current).filter(([rowId]) => !rowId.startsWith(`${id}:`)),
+    ));
     if (watchlistTab === id) {
       setWatchlistTab(OG_WATCHLIST_ID);
     }
@@ -420,6 +468,11 @@ export default function App() {
       return updated;
     });
     setWatchlistTab((current) => next.some((item) => item.id === current) ? current : OG_WATCHLIST_ID);
+  }
+
+  async function refreshAppMarketData() {
+    await refreshWatchlists();
+    await refreshAllPrices();
   }
 
   function showMtfDeviceNotification(body, badgeCount) {
@@ -481,7 +534,7 @@ export default function App() {
 
   useEffect(() => {
     refreshShell();
-    refreshWatchlists();
+    refreshAppMarketData();
     watchlistSyncTimer.current = setInterval(() => refreshWatchlists(), WATCHLIST_SYNC_INTERVAL_MS);
     loadNotificationState()
       .then(setNotificationState)
@@ -492,6 +545,34 @@ export default function App() {
       if (liveTimer.current) clearInterval(liveTimer.current);
       if (watchlistSyncTimer.current) clearInterval(watchlistSyncTimer.current);
     };
+  }, []);
+
+  useEffect(() => {
+    function refreshWhenVisible() {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastFocusRefreshAt.current < 10000) return;
+      lastFocusRefreshAt.current = now;
+      refreshAppMarketData();
+    }
+
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    window.addEventListener("focus", refreshWhenVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.removeEventListener("focus", refreshWhenVisible);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return undefined;
+    function handleServiceWorkerMessage(event) {
+      if (event.data?.type !== "MTF_PUSH_UPDATE") return;
+      refreshAppMarketData();
+    }
+
+    navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", handleServiceWorkerMessage);
   }, []);
 
   useEffect(() => {
@@ -578,6 +659,7 @@ export default function App() {
               quotes={allMtfs}
               title="MTFs"
               showWatchlist
+              onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
             />
           </aside>
         </div>
