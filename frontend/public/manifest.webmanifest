@@ -1,8 +1,9 @@
 {
   "name": "Dhanam Krutva",
   "short_name": "Dhanam",
+  "id": "/?app=dhanam-krutva",
   "description": "Personal Webull MTF dashboard",
-  "start_url": "/",
+  "start_url": "/?app=dhanam-krutva",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f5f7f3",

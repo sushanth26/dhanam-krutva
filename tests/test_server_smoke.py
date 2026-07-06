@@ -89,10 +89,23 @@ def test_uvicorn_serves_react_shell_and_protected_api():
             assert response.status == 200
             assert '<div id="root"></div>' in html
             assert "/static/assets/" in html
+            assert response.headers["cache-control"] == "no-store, no-cache, must-revalidate, max-age=0"
+
+        with request("/static/manifest.webmanifest", auth_header()) as response:
+            manifest = json.loads(response.read())
+            assert response.status == 200
+            assert manifest["id"] == "/?app=dhanam-krutva"
+            assert manifest["start_url"] == "/?app=dhanam-krutva"
+            assert response.headers["cache-control"] == "no-store, no-cache, must-revalidate, max-age=0"
+
+        with request("/static/sw.js", auth_header()) as response:
+            assert response.status == 200
+            assert response.headers["cache-control"] == "no-store, no-cache, must-revalidate, max-age=0"
 
         asset_path = html.split('src="')[1].split('"')[0]
         with request(asset_path, auth_header()) as response:
             assert response.status == 200
+            assert response.headers["cache-control"] == "public, max-age=31536000, immutable"
             assert len(response.read()) > 1000
 
         with request("/api/status", auth_header()) as response:
