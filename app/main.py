@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
 
 from app.auth import is_authorized
 from app.config import get_settings
@@ -12,10 +13,26 @@ from app.routers import accounts, notifications, strategy, trade, tradingview, w
 
 STATIC_DIR = Path("app/static")
 INDEX_FILE = STATIC_DIR / "index.html"
+NO_STORE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+STATIC_REVALIDATE_FILES = {"sw.js", "manifest.webmanifest"}
+
+
+class AppStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope) -> Response:
+        response = await super().get_response(path, scope)
+        if path in STATIC_REVALIDATE_FILES:
+            response.headers.update(NO_STORE_HEADERS)
+        elif path.startswith("assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
 
 
 app = FastAPI(title="Dhanam Krutva Webull Dashboard")
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/static", AppStaticFiles(directory=STATIC_DIR), name="static")
 app.include_router(accounts.router)
 app.include_router(notifications.router)
 app.include_router(webull.router)
@@ -60,9 +77,9 @@ def health():
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(INDEX_FILE)
+    return FileResponse(INDEX_FILE, headers=NO_STORE_HEADERS)
 
 
 @app.get("/{path:path}", include_in_schema=False)
 def spa_fallback(path: str) -> FileResponse:
-    return FileResponse(INDEX_FILE)
+    return FileResponse(INDEX_FILE, headers=NO_STORE_HEADERS)

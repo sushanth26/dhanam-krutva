@@ -1,7 +1,16 @@
 import { CloudTag, MtfTag } from "./Tags";
 import { cloudStatus, formatPrice } from "../lib/market";
 
-export function MtfTable({ quotes, showWatchlist = false, title = "MTFs", loading = false, onDismissNew }) {
+export function MtfTable({
+  quotes,
+  showWatchlist = false,
+  title = "MTFs",
+  buyState = {},
+  emptyText = "No stocks are on hourly or daily EMA clouds right now.",
+  focusedSymbol = "",
+  onBuy,
+  onDismissNew,
+}) {
   return (
     <section className="price-bucket mtf-bucket">
       <div className="bucket-heading">
@@ -16,20 +25,22 @@ export function MtfTable({ quotes, showWatchlist = false, title = "MTFs", loadin
               {showWatchlist ? <th>List</th> : null}
               <th>On EMA</th>
               <th>Time</th>
+              <th className="action-col" aria-label="Actions"></th>
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <LoadingRow colSpan={showWatchlist ? "4" : "3"} label="Loading MTFs" />
-            ) : quotes.length ? quotes.map((quote) => (
+            {quotes.length ? quotes.map((quote) => (
               <MtfRow
                 key={`${quote.watchlist_id || "tab"}-${quote.symbol}`}
+                buyState={buyState[quote.symbol]}
+                focused={quote.symbol === focusedSymbol}
                 quote={quote}
                 showWatchlist={showWatchlist}
+                onBuy={onBuy}
                 onDismissNew={onDismissNew}
               />
             )) : (
-              <tr><td colSpan={showWatchlist ? "4" : "3"}>No stocks are on hourly or daily EMA clouds right now.</td></tr>
+              <tr><td colSpan={showWatchlist ? 5 : 4}>{emptyText}</td></tr>
             )}
           </tbody>
         </table>
@@ -38,7 +49,7 @@ export function MtfTable({ quotes, showWatchlist = false, title = "MTFs", loadin
   );
 }
 
-export function PriceBucket({ title, quotes, kind, loading = false, onRemoveSymbol }) {
+export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
   return (
     <section className="price-bucket">
       <div className="bucket-heading">
@@ -56,9 +67,7 @@ export function PriceBucket({ title, quotes, kind, loading = false, onRemoveSymb
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <LoadingRow colSpan={onRemoveSymbol ? "4" : "3"} label={`Loading ${title}`} />
-            ) : quotes.length ? quotes.map((quote) => (
+            {quotes.length ? quotes.map((quote) => (
               <PriceRow key={quote.symbol} quote={quote} onRemoveSymbol={onRemoveSymbol} />
             )) : (
               <tr><td colSpan={onRemoveSymbol ? "4" : "3"}>No {kind} stocks right now.</td></tr>
@@ -70,24 +79,27 @@ export function PriceBucket({ title, quotes, kind, loading = false, onRemoveSymb
   );
 }
 
-function LoadingRow({ colSpan, label }) {
-  return (
-    <tr>
-      <td className="table-loading-cell" colSpan={colSpan}>
-        <span className="loading-label">
-          <span className="loading-spinner" aria-hidden="true"></span>
-          {label}
-        </span>
-      </td>
-    </tr>
-  );
-}
-
-function MtfRow({ quote, showWatchlist, onDismissNew }) {
+function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }) {
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
   const dismissNew = quote.is_new ? () => onDismissNew?.(quote) : undefined;
+  const waiting = quote.mtf_matches?.some((match) => match.status === "waiting");
   return (
-    <BaseRow quote={quote} showPrice={false} onClick={dismissNew}>
+    <BaseRow
+      className={focused ? "focused-mtf-row" : ""}
+      id={`mtf-row-${quote.symbol}`}
+      quote={quote}
+      showPrice={false}
+      onClick={dismissNew}
+      action={(
+        <BuyCell
+          buyState={buyState}
+          disabled={!onBuy}
+          onBuy={() => onBuy?.(quote)}
+          symbol={quote.symbol}
+          waiting={waiting}
+        />
+      )}
+    >
       {showWatchlist ? (
         <td className="watchlist-cell">
           {quote.watchlist_name || "-"}
@@ -98,13 +110,38 @@ function MtfRow({ quote, showWatchlist, onDismissNew }) {
         {quote.mtf_matches.map((match) => (
           <span key={match.label} className="mtf-tag-group">
             <MtfTag label={match.label} />
-            {match.status === "waiting" ? <CloudTag status="Waiting" /> : null}
             {match.trend ? <CloudTag status={match.trend} /> : null}
           </span>
         ))}
       </td>
       <td className="trigger-time">{triggerTime}</td>
     </BaseRow>
+  );
+}
+
+function BuyCell({ buyState, disabled, onBuy, symbol, waiting }) {
+  if (waiting) {
+    return <td className="row-action-cell buy-action-cell" aria-label="Waiting for candle close"></td>;
+  }
+  const loading = buyState?.status === "loading";
+  const title = `Buy 1 share of ${symbol}`;
+  return (
+    <td className="row-action-cell buy-action-cell">
+      <button
+        type="button"
+        className={`buy-one ${buyState?.status === "ok" ? "success" : ""} ${buyState?.status === "error" ? "error" : ""}`}
+        disabled={disabled || loading}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onBuy?.();
+        }}
+        title={title}
+        aria-label={title}
+      >
+        {loading ? "Buying" : "Buy"}
+      </button>
+    </td>
   );
 }
 
@@ -137,10 +174,10 @@ function PriceRow({ quote, onRemoveSymbol }) {
   );
 }
 
-function BaseRow({ quote, children, trend = "", action = null, showPrice = true, onClick }) {
-  const rowClass = trend ? `trend-${String(trend).toLowerCase()}` : "";
+function BaseRow({ quote, children, trend = "", action = null, className = "", id, showPrice = true, onClick }) {
+  const rowClass = [trend ? `trend-${String(trend).toLowerCase()}` : "", className].filter(Boolean).join(" ");
   return (
-    <tr className={`stock-row ${rowClass}`} onClick={onClick}>
+    <tr className={`stock-row ${rowClass}`} id={id} onClick={onClick}>
       <td><strong>{quote.symbol}</strong></td>
       {children}
       {showPrice ? <td className="price-cell">{formatPrice(quote.price)}</td> : null}

@@ -143,31 +143,30 @@ class WebullService:
 
     def buy_one_market_order(self, account_id: str, symbol: str) -> dict[str, Any]:
         symbol = symbol.strip().upper()
-        preview_order = self._stock_order_payload(symbol=symbol, quantity="1")
-        place_order = {
-            **preview_order,
-            "client_order_id": uuid.uuid4().hex,
-        }
+        client_order_id = uuid.uuid4().hex
+        order = self._stock_order_payload(symbol=symbol, quantity="1", client_order_id=client_order_id)
+        new_orders = [order]
 
-        preview = self._call(lambda: self._trade_client().order_v2.preview_order(account_id, preview_order))
+        preview = self._call(lambda: self._trade_client().order_v3.preview_order(account_id, new_orders))
         if not preview.get("ok"):
             return {
                 "ok": False,
                 "stage": "preview",
                 "symbol": symbol,
                 "quantity": 1,
+                "client_order_id": client_order_id,
                 "preview": preview,
                 "place": None,
             }
 
         time.sleep(1.1)
-        place = self._call(lambda: self._trade_client().order_v2.place_order(account_id, place_order))
+        place = self._call(lambda: self._trade_client().order_v3.place_order(account_id, new_orders))
         return {
             "ok": bool(place.get("ok")),
             "stage": "place",
             "symbol": symbol,
             "quantity": 1,
-            "client_order_id": place_order["client_order_id"],
+            "client_order_id": client_order_id,
             "preview": preview,
             "place": place,
         }
@@ -276,14 +275,16 @@ class WebullService:
             yield
 
     @staticmethod
-    def _stock_order_payload(symbol: str, quantity: str) -> dict[str, str]:
+    def _stock_order_payload(symbol: str, quantity: str, client_order_id: str) -> dict[str, str]:
         return {
+            "combo_type": "NORMAL",
+            "client_order_id": client_order_id,
             "symbol": symbol,
             "instrument_type": "EQUITY",
             "market": "US",
             "order_type": "MARKET",
             "quantity": quantity,
-            "support_trading_session": "N",
+            "support_trading_session": "CORE",
             "side": "BUY",
             "time_in_force": "DAY",
             "entrust_type": "QTY",

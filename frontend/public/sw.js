@@ -27,8 +27,14 @@ self.addEventListener("notificationclick", (event) => {
   const targetUrl = new URL(event.notification.data?.url || "/", self.location.origin).href;
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      const existing = clients.find((client) => client.url === targetUrl);
-      if (existing) return existing.focus();
+      const existing = clients.find((client) => new URL(client.url).origin === self.location.origin);
+      if (existing) {
+        existing.postMessage({ type: "MTF_PUSH_UPDATE", payload: event.notification.data || {} });
+        if (existing.url !== targetUrl && "navigate" in existing) {
+          return existing.navigate(targetUrl).then((client) => client?.focus());
+        }
+        return existing.focus();
+      }
       return self.clients.openWindow(targetUrl);
     }),
   );
@@ -57,7 +63,7 @@ function showNotification(payload) {
     icon: "/static/icon.svg",
     tag: payload.tag || "mtf-update",
     renotify: true,
-    data: { url: payload.url || "/" },
+    data: { ...payload, url: payload.url || "/" },
   });
 }
 

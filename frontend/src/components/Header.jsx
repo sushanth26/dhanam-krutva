@@ -7,12 +7,9 @@ export function Header({
   status,
   accounts,
   selectedAccountId,
-  liveRefreshActive,
   loading,
   pageLoading,
   onRefresh,
-  onStart,
-  onStop,
   onSelectAccount,
   notificationState,
   onEnableNotifications,
@@ -73,26 +70,6 @@ export function Header({
           <h1>Dhanam Krutva</h1>
         </div>
         <div className="top-actions">
-          <button
-            type="button"
-            className="icon-button"
-            onClick={onStart}
-            disabled={liveRefreshActive || pageLoading}
-            aria-label={liveRefreshActive ? "Webull running" : "Start Webull"}
-            title={liveRefreshActive ? "Webull running" : "Start Webull"}
-          >
-            <span aria-hidden="true">{liveRefreshActive ? "ON" : "▶"}</span>
-          </button>
-          <button
-            type="button"
-            className="icon-button secondary-button"
-            onClick={onStop}
-            disabled={!liveRefreshActive || pageLoading}
-            aria-label="Stop Webull"
-            title="Stop Webull"
-          >
-            <span aria-hidden="true">■</span>
-          </button>
           <div className="strategy-menu-anchor" ref={strategiesAnchorRef}>
             <button
               type="button"

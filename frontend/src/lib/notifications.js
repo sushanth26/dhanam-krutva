@@ -139,7 +139,10 @@ export async function syncNotificationPreferences(alertStrategies = {}) {
 }
 
 async function registerNotificationWorker() {
-  const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, { scope: "/static/" });
+  const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, {
+    scope: "/static/",
+    updateViaCache: "none",
+  });
   registration.update().catch(() => {});
   return registration;
 }
