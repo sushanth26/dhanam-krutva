@@ -1,11 +1,17 @@
+from types import SimpleNamespace
+
+import app.notifications as notifications
 from app.notifications import (
     PushSubscriptionStore,
+    build_monitored_quotes,
     confirmed_mtf_quotes,
     describe_mtf_matches,
     filter_payload_by_strategies,
+    monitored_symbols,
     mtf_notification_payload,
     mtf_signature,
 )
+from app.watchlists import WatchlistStore
 
 
 def test_push_subscription_store_upserts_and_removes_by_endpoint(tmp_path):
@@ -54,6 +60,40 @@ def test_confirmed_mtf_quotes_removes_waiting_matches():
     assert len(confirmed) == 1
     assert confirmed[0]["symbol"] == "BE"
     assert confirmed[0]["mtf_matches"] == [{"label": "Daily 50/55", "status": "confirmed"}]
+
+
+def test_monitored_symbols_use_saved_watchlists_not_static_og(tmp_path):
+    watchlist_file = tmp_path / "watchlists.json"
+    WatchlistStore(watchlist_file).replace(
+        [
+            {"id": "og", "symbols": ["BE", "PLTR"]},
+            {"name": "Daily", "symbols": ["PLTR", "NVDA"]},
+        ]
+    )
+    settings = SimpleNamespace(watchlist_file=watchlist_file)
+
+    assert monitored_symbols(settings) == ["BE", "PLTR", "NVDA"]
+
+
+def test_build_monitored_quotes_omits_deleted_symbols(tmp_path, monkeypatch):
+    watchlist_file = tmp_path / "watchlists.json"
+    WatchlistStore(watchlist_file).replace([{"id": "og", "symbols": ["BE", "PLTR"]}])
+    settings = SimpleNamespace(watchlist_file=watchlist_file)
+    requested_symbols = []
+
+    monkeypatch.setattr(notifications, "service", lambda: object())
+
+    def fake_build_live_prices(_webull, symbols):
+        requested_symbols.extend(symbols.split(","))
+        return {"quotes": [{"symbol": symbol, "mtf_matches": []} for symbol in symbols.split(",")]}
+
+    monkeypatch.setattr(notifications, "build_live_prices", fake_build_live_prices)
+
+    quotes = build_monitored_quotes(settings)
+
+    assert requested_symbols == ["BE", "PLTR"]
+    assert "AAOI" not in requested_symbols
+    assert [quote["symbol"] for quote in quotes] == ["BE", "PLTR"]
 
 
 def test_filter_payload_by_strategies_removes_disabled_alerts():

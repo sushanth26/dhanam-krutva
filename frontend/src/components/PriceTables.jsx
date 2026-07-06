@@ -1,7 +1,7 @@
 import { CloudTag, MtfTag } from "./Tags";
-import { cloudStatus, formatPrice, groupBySector, sectorSlug } from "../lib/market";
+import { cloudStatus, formatPrice } from "../lib/market";
 
-export function MtfTable({ quotes, showWatchlist = false, title = "MTFs", onDismissNew }) {
+export function MtfTable({ quotes, showWatchlist = false, title = "MTFs", loading = false, onDismissNew }) {
   return (
     <section className="price-bucket mtf-bucket">
       <div className="bucket-heading">
@@ -19,7 +19,9 @@ export function MtfTable({ quotes, showWatchlist = false, title = "MTFs", onDism
             </tr>
           </thead>
           <tbody>
-            {quotes.length ? quotes.map((quote) => (
+            {loading ? (
+              <LoadingRow colSpan={showWatchlist ? "4" : "3"} label="Loading MTFs" />
+            ) : quotes.length ? quotes.map((quote) => (
               <MtfRow
                 key={`${quote.watchlist_id || "tab"}-${quote.symbol}`}
                 quote={quote}
@@ -36,8 +38,7 @@ export function MtfTable({ quotes, showWatchlist = false, title = "MTFs", onDism
   );
 }
 
-export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
-  const grouped = groupBySector(quotes);
+export function PriceBucket({ title, quotes, kind, loading = false, onRemoveSymbol }) {
   return (
     <section className="price-bucket">
       <div className="bucket-heading">
@@ -55,8 +56,10 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
             </tr>
           </thead>
           <tbody>
-            {quotes.length ? Object.entries(grouped).map(([sector, sectorQuotes]) => (
-              <SectorRows key={sector} sector={sector} quotes={sectorQuotes} onRemoveSymbol={onRemoveSymbol} />
+            {loading ? (
+              <LoadingRow colSpan={onRemoveSymbol ? "4" : "3"} label={`Loading ${title}`} />
+            ) : quotes.length ? quotes.map((quote) => (
+              <PriceRow key={quote.symbol} quote={quote} onRemoveSymbol={onRemoveSymbol} />
             )) : (
               <tr><td colSpan={onRemoveSymbol ? "4" : "3"}>No {kind} stocks right now.</td></tr>
             )}
@@ -67,14 +70,16 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
   );
 }
 
-function SectorRows({ sector, quotes, onRemoveSymbol }) {
+function LoadingRow({ colSpan, label }) {
   return (
-    <>
-      <tr className={`sector-row sector-${sectorSlug(sector)}`}>
-        <td colSpan={onRemoveSymbol ? "4" : "3"}>{sector}</td>
-      </tr>
-      {quotes.map((quote) => <PriceRow key={quote.symbol} quote={quote} onRemoveSymbol={onRemoveSymbol} />)}
-    </>
+    <tr>
+      <td className="table-loading-cell" colSpan={colSpan}>
+        <span className="loading-label">
+          <span className="loading-spinner" aria-hidden="true"></span>
+          {label}
+        </span>
+      </td>
+    </tr>
   );
 }
 
