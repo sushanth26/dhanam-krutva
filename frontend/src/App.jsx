@@ -5,7 +5,7 @@ import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
 import { getJson, postJson } from "./lib/api";
 import { filterQuotesByStrategy, loadStrategyState, saveStrategyState } from "./lib/alertStrategies";
-import { cloudStatus, describeMtfMatches, findAccountId, flattenAccounts, isMarketRefreshWindow, mtfSignature } from "./lib/market";
+import { cloudStatus, confirmedMtfQuotes, describeMtfMatches, findAccountId, flattenAccounts, isMarketRefreshWindow, mtfSignature } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
 const MARKET_REFRESH_INTERVAL_MS = 15000;
@@ -265,7 +265,7 @@ export default function App() {
     const updatedAt = new Date().toLocaleTimeString();
     setQuotesForTab(watchlist.id, nextQuotes);
     setUpdatedTextForTab(watchlist.id, `Updated ${updatedAt} from ${payload.source || "webull"}`);
-    notifyMtfUpdate(watchlist.id, filterQuotesByStrategy(nextQuotes.filter((quote) => quote.mtf_matches?.length), strategyStateRef.current));
+    notifyMtfUpdate(watchlist.id, filterQuotesByStrategy(confirmedMtfQuotes(nextQuotes), strategyStateRef.current));
 
     if (payload.errors?.length) {
       setLiveAlert(`Some data failed: ${payload.errors.map((item) => item.source).join(", ")}`);

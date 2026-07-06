@@ -88,7 +88,7 @@ class MtfPushMonitor:
 
     def check_once(self) -> dict[str, Any] | None:
         payload = build_live_prices(service(), ",".join(LIVE_WATCHLIST))
-        quotes = [quote for quote in payload.get("quotes", []) if quote.get("mtf_matches")]
+        quotes = confirmed_mtf_quotes(payload.get("quotes", []))
         signature = mtf_signature(quotes)
         changed = self.last_signature is not None and signature != self.last_signature
         self.last_signature = signature
@@ -159,6 +159,19 @@ def mtf_notification_payload(quotes: list[dict[str, Any]]) -> dict[str, Any]:
             for quote in quotes
         ],
     }
+
+
+def confirmed_mtf_quotes(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    output = []
+    for quote in quotes:
+        matches = [
+            match
+            for match in quote.get("mtf_matches", [])
+            if match.get("status", "confirmed") == "confirmed"
+        ]
+        if matches:
+            output.append({**quote, "mtf_matches": matches})
+    return output
 
 
 def describe_mtf_matches(quotes: list[dict[str, Any]]) -> str:

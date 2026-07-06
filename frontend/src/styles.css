@@ -1167,6 +1167,11 @@ select {
   color: #343083;
 }
 
+.cloud-tag.waiting {
+  background: #fff5cf;
+  color: #735100;
+}
+
 .cloud-tag.unknown {
   background: #eef2f5;
   color: #68766c;
