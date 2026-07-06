@@ -9,7 +9,8 @@ from pywebpush import WebPushException, webpush
 
 from app.config import Settings
 from app.dependencies import service
-from app.market_data import LIVE_WATCHLIST, build_live_prices
+from app.market_data import WEBULL_BATCH_BAR_LIMIT, build_live_prices, symbol_chunks
+from app.watchlists import WatchlistStore
 
 
 DEFAULT_ALERT_STRATEGIES = {
@@ -87,8 +88,7 @@ class MtfPushMonitor:
             await asyncio.sleep(self.settings.mtf_push_poll_seconds)
 
     def check_once(self) -> dict[str, Any] | None:
-        payload = build_live_prices(service(), ",".join(LIVE_WATCHLIST))
-        quotes = confirmed_mtf_quotes(payload.get("quotes", []))
+        quotes = confirmed_mtf_quotes(build_monitored_quotes(self.settings))
         signature = mtf_signature(quotes)
         changed = self.last_signature is not None and signature != self.last_signature
         self.last_signature = signature
@@ -140,6 +140,29 @@ def webpush_subscription_info(subscription: dict[str, Any]) -> dict[str, Any]:
         "endpoint": subscription.get("endpoint"),
         "keys": subscription.get("keys", {}),
     }
+
+
+def monitored_symbols(settings: Settings) -> list[str]:
+    symbols = []
+    seen = set()
+    for watchlist in WatchlistStore(settings.watchlist_file).all():
+        for symbol in watchlist.get("symbols", []):
+            symbol_text = str(symbol or "").strip().upper()
+            if symbol_text and symbol_text not in seen:
+                symbols.append(symbol_text)
+                seen.add(symbol_text)
+    return symbols
+
+
+def build_monitored_quotes(settings: Settings) -> list[dict[str, Any]]:
+    quotes = []
+    webull = service()
+    for chunk in symbol_chunks(monitored_symbols(settings), WEBULL_BATCH_BAR_LIMIT):
+        if not chunk:
+            continue
+        payload = build_live_prices(webull, ",".join(chunk))
+        quotes.extend(payload.get("quotes", []))
+    return quotes
 
 
 def mtf_notification_payload(quotes: list[dict[str, Any]]) -> dict[str, Any]:
