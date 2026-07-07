@@ -141,10 +141,11 @@ class WebullService:
             "quote": quote,
         }
 
-    def buy_one_market_order(self, account_id: str, symbol: str) -> dict[str, Any]:
+    def buy_market_order(self, account_id: str, symbol: str, quantity: int = 1) -> dict[str, Any]:
         symbol = symbol.strip().upper()
+        quantity = max(1, int(quantity))
         client_order_id = uuid.uuid4().hex
-        order = self._stock_order_payload(symbol=symbol, quantity="1", client_order_id=client_order_id)
+        order = self._stock_order_payload(symbol=symbol, quantity=str(quantity), client_order_id=client_order_id)
         new_orders = [order]
 
         preview = self._call(lambda: self._trade_client().order_v3.preview_order(account_id, new_orders))
@@ -153,7 +154,7 @@ class WebullService:
                 "ok": False,
                 "stage": "preview",
                 "symbol": symbol,
-                "quantity": 1,
+                "quantity": quantity,
                 "client_order_id": client_order_id,
                 "preview": preview,
                 "place": None,
@@ -165,75 +166,108 @@ class WebullService:
             "ok": bool(place.get("ok")),
             "stage": "place",
             "symbol": symbol,
-            "quantity": 1,
+            "quantity": quantity,
             "client_order_id": client_order_id,
             "preview": preview,
             "place": place,
         }
 
-    def buy_one_with_take_profit(
+    def buy_one_market_order(self, account_id: str, symbol: str) -> dict[str, Any]:
+        return self.buy_market_order(account_id=account_id, symbol=symbol, quantity=1)
+
+    def buy_with_bracket(
         self,
         account_id: str,
         symbol: str,
+        quantity: int,
         entry_price: float,
         stop_price: float,
         target_price: float,
     ) -> dict[str, Any]:
         symbol = symbol.strip().upper()
-        buy = self.buy_one_market_order(account_id=account_id, symbol=symbol)
-        if not buy.get("ok"):
-            return {
-                "ok": False,
-                "stage": "buy",
-                "symbol": symbol,
-                "quantity": 1,
-                "entry_price": entry_price,
-                "stop_price": stop_price,
-                "target_price": target_price,
-                "risk_per_share": round(abs(entry_price - stop_price), 4),
-                "buy": buy,
-                "sell": None,
-            }
-
-        sell_client_order_id = uuid.uuid4().hex
-        sell_order = self._stock_order_payload(
-            symbol=symbol,
-            quantity="1",
-            client_order_id=sell_client_order_id,
-            side="SELL",
-            order_type="LIMIT",
-            price=target_price,
+        quantity = max(1, int(quantity))
+        client_combo_order_id = uuid.uuid4().hex
+        buy_client_order_id = uuid.uuid4().hex
+        target_client_order_id = uuid.uuid4().hex
+        stop_client_order_id = uuid.uuid4().hex
+        bracket_orders = [
+            self._stock_order_payload(
+                symbol=symbol,
+                quantity=str(quantity),
+                client_order_id=buy_client_order_id,
+                combo_type="MASTER",
+            ),
+            self._stock_order_payload(
+                symbol=symbol,
+                quantity=str(quantity),
+                client_order_id=target_client_order_id,
+                side="SELL",
+                order_type="LIMIT",
+                combo_type="STOP_PROFIT",
+                limit_price=target_price,
+            ),
+            self._stock_order_payload(
+                symbol=symbol,
+                quantity=str(quantity),
+                client_order_id=stop_client_order_id,
+                side="SELL",
+                order_type="STOP_LOSS",
+                combo_type="STOP_LOSS",
+                stop_price=stop_price,
+            ),
+        ]
+        preview = self._call(
+            lambda: self._trade_client().order_v3.preview_order(
+                account_id,
+                bracket_orders,
+                client_combo_order_id=client_combo_order_id,
+            )
         )
-        sell_orders = [sell_order]
-        time.sleep(1.1)
-        sell_preview = self._call(lambda: self._trade_client().order_v3.preview_order(account_id, sell_orders))
-        if not sell_preview.get("ok"):
+        if not preview.get("ok"):
             return {
                 "ok": False,
-                "stage": "sell_preview",
+                "stage": "preview",
                 "symbol": symbol,
-                "quantity": 1,
+                "quantity": quantity,
                 "entry_price": entry_price,
                 "stop_price": stop_price,
                 "target_price": target_price,
                 "risk_per_share": round(abs(entry_price - stop_price), 4),
-                "buy": buy,
-                "sell": {"preview": sell_preview, "place": None, "client_order_id": sell_client_order_id},
+                "client_combo_order_id": client_combo_order_id,
+                "orders": {
+                    "buy": {"client_order_id": buy_client_order_id},
+                    "target": {"client_order_id": target_client_order_id},
+                    "stop": {"client_order_id": stop_client_order_id},
+                },
+                "preview": preview,
+                "place": None,
             }
 
         time.sleep(1.1)
-        sell_place = self._call(lambda: self._trade_client().order_v3.place_order(account_id, sell_orders))
+        place = self._call(
+            lambda: self._trade_client().order_v3.place_order(
+                account_id,
+                bracket_orders,
+                client_combo_order_id=client_combo_order_id,
+            )
+        )
         return {
-            "ok": bool(sell_place.get("ok")),
-            "stage": "complete" if sell_place.get("ok") else "sell_place",
+            "ok": bool(place.get("ok")),
+            "stage": "complete" if place.get("ok") else "place",
             "symbol": symbol,
-            "quantity": 1,
+            "quantity": quantity,
             "entry_price": entry_price,
             "stop_price": stop_price,
             "target_price": target_price,
             "risk_per_share": round(abs(entry_price - stop_price), 4),
-            "buy": buy,
-            "sell": {"preview": sell_preview, "place": sell_place, "client_order_id": sell_client_order_id},
+            "client_combo_order_id": client_combo_order_id,
+            "orders": {
+                "buy": {"client_order_id": buy_client_order_id},
+                "target": {"client_order_id": target_client_order_id},
+                "stop": {"client_order_id": stop_client_order_id},
+            },
+            "preview": preview,
+            "place": place,
         }
 
     def snapshot(self, account_id: str | None = None) -> dict[str, Any]:
@@ -346,10 +380,12 @@ class WebullService:
         client_order_id: str,
         side: str = "BUY",
         order_type: str = "MARKET",
-        price: float | None = None,
+        combo_type: str = "NORMAL",
+        limit_price: float | None = None,
+        stop_price: float | None = None,
     ) -> dict[str, str]:
         payload = {
-            "combo_type": "NORMAL",
+            "combo_type": combo_type,
             "client_order_id": client_order_id,
             "symbol": symbol,
             "instrument_type": "EQUITY",
@@ -361,8 +397,10 @@ class WebullService:
             "time_in_force": "DAY",
             "entrust_type": "QTY",
         }
-        if price is not None:
-            payload["price"] = f"{float(price):.2f}"
+        if limit_price is not None:
+            payload["limit_price"] = f"{float(limit_price):.2f}"
+        if stop_price is not None:
+            payload["stop_price"] = f"{float(stop_price):.2f}"
         return payload
 
     @staticmethod

@@ -326,9 +326,12 @@ function autoLongTradePlan(tab, quote, riskSettings, autoTradeSettings) {
   const target = outcomePlan?.target;
   if (!Number.isFinite(entry) || !Number.isFinite(stop) || stop >= entry) return null;
   if (!Number.isFinite(target) || target <= entry) return null;
+  const quantity = Number(match.risk_plan?.shares);
+  if (!Number.isInteger(quantity) || quantity < 1) return null;
 
   return {
     key: autoTradeKey(tab, quote.symbol, match),
+    quantity,
     entry: roundMoney(entry),
     stop: roundMoney(stop),
     target: roundMoney(target),
@@ -746,6 +749,7 @@ export default function App() {
         const payload = await postJson("/api/trade/auto-long", {
           account_id: accountId,
           symbol: quote.symbol,
+          quantity: plan.quantity,
           entry_price: plan.entry,
           stop_price: plan.stop,
           target_price: plan.target,
@@ -753,12 +757,12 @@ export default function App() {
           candle_time: plan.candleTime,
         });
         if (!payload.ok) {
-          throw new Error(payload.error || payload.buy?.error || payload.sell?.preview?.error || payload.sell?.place?.error || `Webull rejected ${quote.symbol} auto-buy.`);
+          throw new Error(payload.error || payload.preview?.error || payload.place?.error || `Webull rejected ${quote.symbol} auto-buy.`);
         }
         setBuyState((current) => ({ ...current, [quote.symbol]: { status: "ok" } }));
         addNotification({
           title: `Auto bought ${quote.symbol}`,
-          message: `1 share long @ ${formatPrice(plan.entry)}, sell limit ${formatPrice(plan.target)}.`,
+          message: `${plan.quantity} shares long @ ${formatPrice(plan.entry)}, target ${formatPrice(plan.target)}, SL ${formatPrice(plan.stop)}.`,
           kind: "trade",
         });
       } catch (error) {
@@ -1472,7 +1476,7 @@ function AutoTradePanel({ accountId, autoTrade, disabled, onChange }) {
           />
           <span>
             <strong>Auto Long</strong>
-            <small>Buys 1 share on selected long strategies and places a 1:1 sell limit.</small>
+            <small>Buys calculated size on selected long strategies with linked 1:1 target and SL exits.</small>
           </span>
         </label>
         <em>{accountId ? `${enabledCount} strategy${enabledCount === 1 ? "" : "ies"}` : "Select account"}</em>

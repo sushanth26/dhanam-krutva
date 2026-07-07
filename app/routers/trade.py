@@ -16,6 +16,7 @@ class BuyRequest(BaseModel):
 
 
 class AutoLongRequest(BuyRequest):
+    quantity: int = Field(ge=1)
     entry_price: float = Field(gt=0)
     stop_price: float = Field(gt=0)
     target_price: float = Field(gt=0)
@@ -48,16 +49,17 @@ def buy_one_share(request: BuyRequest):
 
 
 @router.post("/auto-long")
-def auto_buy_one_share_with_take_profit(request: AutoLongRequest):
+def auto_buy_with_bracket(request: AutoLongRequest):
     symbol = request.symbol.strip().upper()
     if symbol not in approved_trade_symbols():
         raise HTTPException(status_code=400, detail="Symbol is not in the approved strategy watchlist.")
     try:
         webull = service()
         require_margin_account(webull, request.account_id)
-        return webull.buy_one_with_take_profit(
+        return webull.buy_with_bracket(
             account_id=request.account_id,
             symbol=symbol,
+            quantity=request.quantity,
             entry_price=round(request.entry_price, 4),
             stop_price=round(request.stop_price, 4),
             target_price=round(request.target_price, 4),
