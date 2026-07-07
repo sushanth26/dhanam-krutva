@@ -176,6 +176,15 @@ function quotesWithMatchStatus(quotes, status) {
     .filter((quote) => quote.mtf_matches.length);
 }
 
+function quotesWithTradeAction(quotes, action) {
+  return quotes
+    .map((quote) => ({
+      ...quote,
+      mtf_matches: (quote.mtf_matches || []).filter((match) => match.trade_action === action),
+    }))
+    .filter((quote) => quote.mtf_matches.length);
+}
+
 function loadRiskSettings() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(RISK_SETTINGS_KEY) || "{}");
@@ -274,6 +283,8 @@ export default function App() {
     return filterQuotesByStrategy(matches, strategyState);
   }, [newMtfRows, quotesByTab, strategyState, watchlists]);
   const allMtfs = useMemo(() => quotesWithMatchStatus(allMtfQuotes, "confirmed"), [allMtfQuotes]);
+  const longMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Long"), [allMtfs]);
+  const shortMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Short"), [allMtfs]);
   const waitingMtfs = useMemo(() => quotesWithMatchStatus(allMtfQuotes, "waiting"), [allMtfQuotes]);
   const unreadNotificationCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
 
@@ -875,13 +886,26 @@ export default function App() {
           </section>
           <aside className="global-mtf-panel" aria-label="MTFs from all tabs">
             <MtfTable
-              quotes={allMtfs}
-              title="MTFs"
+              quotes={longMtfs}
+              title="Long"
               showWatchlist
               buyState={buyState}
+              emptyText="No long MTF setups right now."
               focusedSymbol={focusedMtfSymbol}
               onBuy={buyMtfQuote}
               onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
+              showSignalTags={false}
+            />
+            <MtfTable
+              quotes={shortMtfs}
+              title="Short"
+              showWatchlist
+              buyState={buyState}
+              emptyText="No short MTF setups right now."
+              focusedSymbol={focusedMtfSymbol}
+              onBuy={buyMtfQuote}
+              onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
+              showSignalTags={false}
             />
             <MtfTable
               quotes={waitingMtfs}

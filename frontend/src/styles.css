@@ -1030,6 +1030,10 @@ select {
   margin-bottom: 0;
 }
 
+.global-mtf-panel .mtf-bucket + .mtf-bucket {
+  margin-top: 18px;
+}
+
 .global-mtf-panel .global-mtf-table {
   display: block;
 }

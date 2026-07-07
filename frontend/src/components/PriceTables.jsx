@@ -4,6 +4,7 @@ import { cloudStatus, formatPrice } from "../lib/market";
 export function MtfTable({
   quotes,
   showWatchlist = false,
+  showSignalTags = true,
   title = "MTFs",
   buyState = {},
   emptyText = "No stocks are on hourly or daily EMA clouds right now.",
@@ -35,6 +36,7 @@ export function MtfTable({
                 buyState={buyState[quote.symbol]}
                 focused={quote.symbol === focusedSymbol}
                 quote={quote}
+                showSignalTags={showSignalTags}
                 showWatchlist={showWatchlist}
                 onBuy={onBuy}
                 onDismissNew={onDismissNew}
@@ -79,7 +81,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
   );
 }
 
-function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }) {
+function MtfRow({ buyState, focused, quote, showSignalTags, showWatchlist, onBuy, onDismissNew }) {
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
   const riskPlan = aPlusPlusRiskPlan(quote.mtf_matches);
   const tradeAction = tradeActionForMatches(quote.mtf_matches);
@@ -113,8 +115,8 @@ function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }
         {quote.mtf_matches.map((match) => (
           <span key={match.label} className="mtf-tag-group">
             <MtfTag label={match.label} />
-            {match.trend ? <CloudTag status={match.trend} /> : null}
-            {match.trade_action ? <TradeTag action={match.trade_action} /> : null}
+            {showSignalTags && match.trend ? <CloudTag status={match.trend} /> : null}
+            {showSignalTags && match.trade_action ? <TradeTag action={match.trade_action} /> : null}
           </span>
         ))}
         {riskPlan ? <RiskPlan plan={riskPlan} /> : null}
