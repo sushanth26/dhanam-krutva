@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { AlertStrategies } from "./AlertStrategies";
-import { findAccountId } from "../lib/market";
+import { accountTypeText, findAccountId, isMarginAccount } from "../lib/market";
 
 export function Header({
   status,
@@ -211,15 +211,19 @@ function AccountMenu({
         <span>Accounts {accounts.length}</span>
         {accounts.length ? accounts.map((account, index) => {
           const accountId = findAccountId(account);
+          const accountType = accountTypeText(account) || "WEBULL";
+          const canTrade = isMarginAccount(account);
           return (
             <button
               key={accountId || index}
-              className={`account-chip ${accountId === selectedAccountId ? "active" : ""}`}
+              className={`account-chip ${accountId === selectedAccountId ? "active" : ""} ${canTrade ? "" : "view-only"}`}
               type="button"
+              disabled={!canTrade}
+              title={canTrade ? "Margin account for trading" : "Cash account is view-only for this app"}
               onClick={() => onSelectAccount(accountId)}
             >
               <b>{accountId || "Unknown account"}</b>
-              <small>{account.account_type || account.accountType || account.broker || "Webull"}</small>
+              <small>{canTrade ? accountType : `${accountType} · VIEW ONLY`}</small>
             </button>
           );
         }) : <strong>-</strong>}

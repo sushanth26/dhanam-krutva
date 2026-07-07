@@ -34,6 +34,53 @@ export function flattenAccounts(data) {
   return [data];
 }
 
+export function accountTypeText(value) {
+  if (!value) return "";
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = accountTypeText(item);
+      if (found) return found;
+    }
+    return "";
+  }
+  if (typeof value === "object") {
+    for (const key of ["account_type", "accountType", "accountTypeName", "type", "broker"]) {
+      if (value[key]) return String(value[key]).toUpperCase();
+    }
+    for (const item of Object.values(value)) {
+      const found = accountTypeText(item);
+      if (found) return found;
+    }
+  }
+  return "";
+}
+
+export function isMarginAccount(account) {
+  return accountTypeText(account).includes("MARGIN");
+}
+
+export function findAccountById(accounts, accountId) {
+  if (!accountId) return null;
+  return flattenAccounts(accounts).find((account) => findAccountId(account) === accountId) || null;
+}
+
+export function findMarginAccountId(accounts) {
+  const marginAccount = flattenAccounts(accounts).find((account) => isMarginAccount(account));
+  return findAccountId(marginAccount);
+}
+
+export function preferredAccountId(accounts, selectedAccountId = null) {
+  const selectedAccount = findAccountById(accounts, selectedAccountId);
+  if (isMarginAccount(selectedAccount)) return selectedAccountId;
+  return findMarginAccountId(accounts) || selectedAccountId || findAccountId(accounts);
+}
+
+export function marginTradingAccountId(accounts, selectedAccountId = null) {
+  const selectedAccount = findAccountById(accounts, selectedAccountId);
+  if (isMarginAccount(selectedAccount)) return selectedAccountId;
+  return findMarginAccountId(accounts);
+}
+
 export function cloudStatus(emaSet, fastKeys, slowKeys) {
   const fastValues = fastKeys.map((key) => Number(emaSet?.[key]));
   const slowValues = slowKeys.map((key) => Number(emaSet?.[key]));

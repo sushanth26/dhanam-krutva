@@ -171,6 +171,71 @@ class WebullService:
             "place": place,
         }
 
+    def buy_one_with_take_profit(
+        self,
+        account_id: str,
+        symbol: str,
+        entry_price: float,
+        stop_price: float,
+        target_price: float,
+    ) -> dict[str, Any]:
+        symbol = symbol.strip().upper()
+        buy = self.buy_one_market_order(account_id=account_id, symbol=symbol)
+        if not buy.get("ok"):
+            return {
+                "ok": False,
+                "stage": "buy",
+                "symbol": symbol,
+                "quantity": 1,
+                "entry_price": entry_price,
+                "stop_price": stop_price,
+                "target_price": target_price,
+                "risk_per_share": round(abs(entry_price - stop_price), 4),
+                "buy": buy,
+                "sell": None,
+            }
+
+        sell_client_order_id = uuid.uuid4().hex
+        sell_order = self._stock_order_payload(
+            symbol=symbol,
+            quantity="1",
+            client_order_id=sell_client_order_id,
+            side="SELL",
+            order_type="LIMIT",
+            price=target_price,
+        )
+        sell_orders = [sell_order]
+        time.sleep(1.1)
+        sell_preview = self._call(lambda: self._trade_client().order_v3.preview_order(account_id, sell_orders))
+        if not sell_preview.get("ok"):
+            return {
+                "ok": False,
+                "stage": "sell_preview",
+                "symbol": symbol,
+                "quantity": 1,
+                "entry_price": entry_price,
+                "stop_price": stop_price,
+                "target_price": target_price,
+                "risk_per_share": round(abs(entry_price - stop_price), 4),
+                "buy": buy,
+                "sell": {"preview": sell_preview, "place": None, "client_order_id": sell_client_order_id},
+            }
+
+        time.sleep(1.1)
+        sell_place = self._call(lambda: self._trade_client().order_v3.place_order(account_id, sell_orders))
+        return {
+            "ok": bool(sell_place.get("ok")),
+            "stage": "complete" if sell_place.get("ok") else "sell_place",
+            "symbol": symbol,
+            "quantity": 1,
+            "entry_price": entry_price,
+            "stop_price": stop_price,
+            "target_price": target_price,
+            "risk_per_share": round(abs(entry_price - stop_price), 4),
+            "buy": buy,
+            "sell": {"preview": sell_preview, "place": sell_place, "client_order_id": sell_client_order_id},
+        }
+
     def snapshot(self, account_id: str | None = None) -> dict[str, Any]:
         accounts = self.account_list()
         selected_account_id = account_id or self._first_account_id(accounts.get("data"))
@@ -275,20 +340,30 @@ class WebullService:
             yield
 
     @staticmethod
-    def _stock_order_payload(symbol: str, quantity: str, client_order_id: str) -> dict[str, str]:
-        return {
+    def _stock_order_payload(
+        symbol: str,
+        quantity: str,
+        client_order_id: str,
+        side: str = "BUY",
+        order_type: str = "MARKET",
+        price: float | None = None,
+    ) -> dict[str, str]:
+        payload = {
             "combo_type": "NORMAL",
             "client_order_id": client_order_id,
             "symbol": symbol,
             "instrument_type": "EQUITY",
             "market": "US",
-            "order_type": "MARKET",
+            "order_type": order_type,
             "quantity": quantity,
             "support_trading_session": "CORE",
-            "side": "BUY",
+            "side": side,
             "time_in_force": "DAY",
             "entrust_type": "QTY",
         }
+        if price is not None:
+            payload["price"] = f"{float(price):.2f}"
+        return payload
 
     @staticmethod
     def _response_body(response: Any) -> Any:
