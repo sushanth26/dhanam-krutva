@@ -324,23 +324,24 @@ def mtf_signal_matches(
         current_low=candle_low,
         candle_complete=status == "confirmed",
     )
-    if status == "confirmed":
-        matches.extend(
-            ema_cloud_bounce_matches(
-                ten_minute_candles,
-                ema_10m,
-                ema_1h,
-                ema_daily,
-                daily_candles=daily_candles,
-                risk_amount=risk_amount,
-                stop_mode=stop_mode,
-                fixed_stop_buffer=fixed_stop_buffer,
-            )
+    matches.extend(
+        ema_cloud_bounce_matches(
+            ten_minute_candles,
+            ema_10m,
+            ema_1h,
+            ema_daily,
+            daily_candles=daily_candles,
+            previous_price=previous_price,
+            risk_amount=risk_amount,
+            stop_mode=stop_mode,
+            fixed_stop_buffer=fixed_stop_buffer,
         )
+    )
     visible_matches = []
     for match in matches:
         if status == "waiting":
-            if match.get("type") == "mtf_cloud_breakout" and match.get("status") == "confirmed":
+            if match.get("status") == "confirmed":
+                visible_matches.append(match)
                 continue
             match["status"] = "waiting"
         else:
@@ -414,6 +415,7 @@ def ema_cloud_bounce_matches(
     ema_1h: dict[str, float | None],
     ema_daily: dict[str, float | None],
     daily_candles: list[dict[str, Any]] | None = None,
+    previous_price: float | None = None,
     risk_amount: float = A_PLUS_PLUS_MAX_RISK,
     stop_mode: str = A_PLUS_PLUS_STOP_MODE_FIXED,
     fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
@@ -421,8 +423,7 @@ def ema_cloud_bounce_matches(
     candle = latest_ten_minute_candle(ten_minute_candles)
     if not candle:
         return []
-    if not is_complete_ten_minute_candle(candle):
-        return []
+    candle_complete = is_complete_ten_minute_candle(candle)
 
     close = candle.get("close")
     low = candle.get("low")
@@ -453,11 +454,15 @@ def ema_cloud_bounce_matches(
         if trend_value == "Bullish":
             confirmed_bounce = close > cloud_high
         elif trend_value == "Bearish":
-            confirmed_bounce = close < cloud_low
+            confirmed_bounce = candle_complete and close < cloud_low
         else:
             confirmed_bounce = False
         if timeframe == "10m":
-            if not touched_cloud or not confirmed_bounce:
+            if trend_value == "Bullish":
+                should_enter = touched_cloud and confirmed_bounce and (previous_price is None or previous_price <= cloud_high)
+            else:
+                should_enter = touched_cloud and confirmed_bounce
+            if not should_enter:
                 continue
             risk_plan = a_plus_plus_risk_plan(
                 entry=close,
@@ -482,13 +487,14 @@ def ema_cloud_bounce_matches(
                     "entry_price": round(close, 4),
                     "candle_time": candle_time,
                     "type": "10m_cloud_bounce",
+                    "status": "confirmed",
                     "trend": trend_value,
                     "trade_action": trade_action,
                     **({"risk_plan": risk_plan} if risk_plan else {}),
                 }
             )
             continue
-        if touched_cloud and confirmed_bounce:
+        if candle_complete and touched_cloud and confirmed_bounce:
             matches.append(
                 {
                     "label": label,
