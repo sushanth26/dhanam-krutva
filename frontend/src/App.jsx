@@ -8,7 +8,7 @@ import { filterQuotesByStrategy, loadStrategyState, saveStrategyState } from "./
 import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, findAccountId, flattenAccounts, formatPrice, isMarketRefreshWindow, matchEntryPrice, notificationMatchText, mtfSignature } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
-const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
 const WATCHLIST_SYNC_INTERVAL_MS = 2 * 60 * 1000;
 const MAX_NOTIFICATIONS = 20;
 const MAX_ALERT_LOG = 500;
@@ -296,7 +296,6 @@ export default function App() {
   const watchlistSyncTimer = useRef(null);
   const lastMtfSignature = useRef(initialTabState(loadWatchlists(), null));
   const lastMtfRows = useRef(initialTabState(loadWatchlists(), {}));
-  const lastFocusRefreshAt = useRef(0);
   const strategyStateRef = useRef(strategyState);
   const riskSettingsRef = useRef(riskSettings);
   const watchlistTabRef = useRef(watchlistTab);
@@ -362,8 +361,8 @@ export default function App() {
     }
   }
 
-  async function refreshWatchlists() {
-    setLoadingKey("watchlists", true);
+  async function refreshWatchlists({ showLoading = true } = {}) {
+    if (showLoading) setLoadingKey("watchlists", true);
     try {
       const payload = await getJson("/api/webull/watchlists");
       const serverWatchlists = normalizeWatchlists(payload.watchlists || []);
@@ -383,18 +382,18 @@ export default function App() {
       setLiveAlert(error.message);
       return null;
     } finally {
-      setLoadingKey("watchlists", false);
+      if (showLoading) setLoadingKey("watchlists", false);
     }
   }
 
-  async function loadLivePrices({ manual = false } = {}) {
+  async function loadLivePrices({ manual = false, showLoading = true } = {}) {
     if (!manual && !isMarketRefreshWindow()) {
       setUpdatedTextForTab(watchlistTabRef.current, "Auto-refresh paused until premarket open");
       return;
     }
 
     setLiveAlert("");
-    setLoadingKey("prices", true);
+    if (showLoading) setLoadingKey("prices", true);
     try {
       const activeTab = watchlistTabRef.current;
       const selectedWatchlist = watchlistsRef.current.find((item) => item.id === activeTab);
@@ -402,13 +401,13 @@ export default function App() {
     } catch (error) {
       setLiveAlert(error.message);
     } finally {
-      setLoadingKey("prices", false);
+      if (showLoading) setLoadingKey("prices", false);
     }
   }
 
-  async function refreshAllPrices() {
+  async function refreshAllPrices({ showLoading = true } = {}) {
     setLiveAlert("");
-    setLoadingKey("prices", true);
+    if (showLoading) setLoadingKey("prices", true);
     try {
       const lists = watchlistsRef.current;
       for (const watchlist of lists) {
@@ -417,7 +416,7 @@ export default function App() {
     } catch (error) {
       setLiveAlert(error.message);
     } finally {
-      setLoadingKey("prices", false);
+      if (showLoading) setLoadingKey("prices", false);
     }
   }
 
@@ -723,9 +722,9 @@ export default function App() {
     setWatchlistTab((current) => next.some((item) => item.id === current) ? current : OG_WATCHLIST_ID);
   }
 
-  async function refreshAppMarketData() {
-    await refreshWatchlists();
-    await refreshAllPrices();
+  async function refreshAppMarketData({ showLoading = true } = {}) {
+    await refreshWatchlists({ showLoading });
+    await refreshAllPrices({ showLoading });
   }
 
   function showMtfDeviceNotification(notification) {
@@ -786,11 +785,11 @@ export default function App() {
 
     return () => {
       if (!watchlistSyncTimer.current) {
-        watchlistSyncTimer.current = setInterval(() => refreshWatchlists(), WATCHLIST_SYNC_INTERVAL_MS);
+        watchlistSyncTimer.current = setInterval(() => refreshWatchlists({ showLoading: false }), WATCHLIST_SYNC_INTERVAL_MS);
       }
       if (!passiveMarketTimer.current) {
         passiveMarketTimer.current = setInterval(() => {
-          if (isMarketRefreshWindow()) refreshAppMarketData();
+          if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false });
         }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
       }
     };
@@ -800,9 +799,9 @@ export default function App() {
     refreshShell();
     refreshAppMarketData();
     passiveMarketTimer.current = setInterval(() => {
-      if (isMarketRefreshWindow()) refreshAppMarketData();
+      if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false });
     }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
-    watchlistSyncTimer.current = setInterval(() => refreshWatchlists(), WATCHLIST_SYNC_INTERVAL_MS);
+    watchlistSyncTimer.current = setInterval(() => refreshWatchlists({ showLoading: false }), WATCHLIST_SYNC_INTERVAL_MS);
     loadNotificationState()
       .then(setNotificationState)
       .catch(() => {
@@ -815,29 +814,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    function refreshWhenVisible() {
-      if (document.visibilityState !== "visible") return;
-      const now = Date.now();
-      if (now - lastFocusRefreshAt.current < 10000) return;
-      lastFocusRefreshAt.current = now;
-      refreshAppMarketData();
-    }
-
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-    window.addEventListener("focus", refreshWhenVisible);
-    return () => {
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
-      window.removeEventListener("focus", refreshWhenVisible);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!("serviceWorker" in navigator)) return undefined;
     function handleServiceWorkerMessage(event) {
       if (event.data?.type !== "MTF_PUSH_UPDATE") return;
       const targetSymbol = event.data.payload?.targetSymbol;
       if (targetSymbol) focusMtfSymbol(targetSymbol);
-      refreshAppMarketData();
+      refreshAppMarketData({ showLoading: false });
     }
 
     navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
