@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 from fastapi import HTTPException
@@ -20,7 +21,7 @@ def test_approved_trade_symbols_use_saved_watchlists(tmp_path, monkeypatch):
     assert {"BE", "PLTR", "AAOI"}.issubset(trade.approved_trade_symbols())
 
 
-def test_auto_long_uses_saved_watchlist_and_places_full_size_bracket_payload(tmp_path, monkeypatch):
+def test_auto_long_uses_saved_watchlist_and_places_full_size_exit_payload(tmp_path, monkeypatch):
     watchlist_file = tmp_path / "watchlists.json"
     WatchlistStore(watchlist_file).replace([{"id": "og", "symbols": ["AAOI"]}])
     monkeypatch.setattr(trade, "get_settings", lambda: SimpleNamespace(watchlist_file=watchlist_file))
@@ -104,19 +105,25 @@ def test_auto_long_rejects_symbols_outside_saved_watchlists(tmp_path, monkeypatc
         raise AssertionError("auto long should reject symbols outside saved watchlists")
 
 
-def test_auto_long_places_linked_target_and_stop_for_full_size(monkeypatch):
+def test_auto_long_buys_first_then_places_linked_target_and_stop_for_full_size(monkeypatch):
     captured = {}
+    calls = []
 
     class FakeResponse:
         status_code = 200
         headers = {}
 
+        def __init__(self, body=None):
+            self.body = body or {"ok": True}
+
         def json(self):
-            return {"ok": True}
+            return self.body
 
     class FakeOrderV3:
         def preview_order(self, account_id, new_orders, client_combo_order_id=None):
-            captured["preview"] = {
+            calls.append(("preview", len(new_orders), client_combo_order_id))
+            key = "exit_preview" if client_combo_order_id else "buy_preview"
+            captured[key] = {
                 "account_id": account_id,
                 "new_orders": new_orders,
                 "client_combo_order_id": client_combo_order_id,
@@ -124,12 +131,19 @@ def test_auto_long_places_linked_target_and_stop_for_full_size(monkeypatch):
             return FakeResponse()
 
         def place_order(self, account_id, new_orders, client_combo_order_id=None):
-            captured["place"] = {
+            calls.append(("place", len(new_orders), client_combo_order_id))
+            key = "exit_place" if client_combo_order_id else "buy_place"
+            captured[key] = {
                 "account_id": account_id,
                 "new_orders": new_orders,
                 "client_combo_order_id": client_combo_order_id,
             }
             return FakeResponse()
+
+        def get_order_detail(self, account_id, client_order_id):
+            calls.append(("detail", client_order_id, None))
+            captured["buy_detail"] = {"account_id": account_id, "client_order_id": client_order_id}
+            return FakeResponse({"order_status": "FILLED", "symbol": "AAOI", "filledQuantity": 7})
 
     service = WebullService.__new__(WebullService)
     service._trade_client = lambda: SimpleNamespace(order_v3=FakeOrderV3())
@@ -144,18 +158,31 @@ def test_auto_long_places_linked_target_and_stop_for_full_size(monkeypatch):
         target_price=105,
     )
 
-    preview = captured["preview"]
-    place = captured["place"]
+    buy_place = captured["buy_place"]
+    exit_preview = captured["exit_preview"]
+    exit_place = captured["exit_place"]
+    buy = buy_place["new_orders"][0]
     assert response["ok"] is True
+    assert response["stage"] == "complete"
     assert response["quantity"] == 7
-    assert preview["client_combo_order_id"] == place["client_combo_order_id"]
-    assert len(place["new_orders"]) == 3
+    assert response["buy_fill"]["symbol"] == "AAOI"
+    assert response["buy_fill"]["filled_quantity"] == 7
+    assert calls == [
+        ("preview", 1, None),
+        ("place", 1, None),
+        ("detail", response["orders"]["buy"]["client_order_id"], None),
+        ("preview", 2, exit_preview["client_combo_order_id"]),
+        ("place", 2, exit_place["client_combo_order_id"]),
+    ]
+    assert exit_preview["client_combo_order_id"] == exit_place["client_combo_order_id"]
+    assert response["exit_combo_order_id"] == exit_place["client_combo_order_id"]
 
-    master, target, stop = place["new_orders"]
-    assert master["combo_type"] == "MASTER"
-    assert master["side"] == "BUY"
-    assert master["order_type"] == "MARKET"
-    assert master["quantity"] == "7"
+    assert buy["combo_type"] == "NORMAL"
+    assert buy["side"] == "BUY"
+    assert buy["order_type"] == "MARKET"
+    assert buy["quantity"] == "7"
+
+    target, stop = exit_place["new_orders"]
     assert target["combo_type"] == "STOP_PROFIT"
     assert target["side"] == "SELL"
     assert target["order_type"] == "LIMIT"
@@ -166,6 +193,149 @@ def test_auto_long_places_linked_target_and_stop_for_full_size(monkeypatch):
     assert stop["order_type"] == "STOP_LOSS"
     assert stop["quantity"] == "7"
     assert stop["stop_price"] == "95.00"
+
+
+def test_auto_long_does_not_place_exits_until_buy_is_filled(monkeypatch):
+    calls = []
+
+    class FakeResponse:
+        status_code = 200
+        headers = {}
+
+        def __init__(self, body=None):
+            self.body = body or {"ok": True}
+
+        def json(self):
+            return self.body
+
+    class FakeOrderV3:
+        def preview_order(self, account_id, new_orders, client_combo_order_id=None):
+            calls.append(("preview", len(new_orders), client_combo_order_id))
+            return FakeResponse()
+
+        def place_order(self, account_id, new_orders, client_combo_order_id=None):
+            calls.append(("place", len(new_orders), client_combo_order_id))
+            return FakeResponse()
+
+        def get_order_detail(self, account_id, client_order_id):
+            calls.append(("detail", client_order_id, None))
+            return FakeResponse({"order_status": "SUBMITTED"})
+
+    service = WebullService.__new__(WebullService)
+    service._trade_client = lambda: SimpleNamespace(order_v3=FakeOrderV3())
+    monkeypatch.setattr("app.webull_service.time.sleep", lambda _seconds: None)
+
+    response = service.buy_with_bracket(
+        account_id="acct-1",
+        symbol="AAOI",
+        quantity=7,
+        entry_price=100,
+        stop_price=95,
+        target_price=105,
+    )
+
+    assert response["ok"] is False
+    assert response["stage"] == "buy_fill_timeout"
+    assert response["buy_fill"]["status"] == "SUBMITTED"
+    assert response["exit_preview"] is None
+    assert response["exit_place"] is None
+    assert calls[:2] == [("preview", 1, None), ("place", 1, None)]
+    assert len([call for call in calls if call[0] == "detail"]) == 20
+    assert not any(call[0] in {"preview", "place"} and call[1] == 2 for call in calls)
+
+
+def test_auto_long_uses_filled_quantity_for_exits(monkeypatch):
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+        headers = {}
+
+        def __init__(self, body=None):
+            self.body = body or {"ok": True}
+
+        def json(self):
+            return self.body
+
+    class FakeOrderV3:
+        def preview_order(self, account_id, new_orders, client_combo_order_id=None):
+            if client_combo_order_id:
+                captured["exit_preview_orders"] = new_orders
+            return FakeResponse()
+
+        def place_order(self, account_id, new_orders, client_combo_order_id=None):
+            if client_combo_order_id:
+                captured["exit_place_orders"] = new_orders
+            return FakeResponse()
+
+        def get_order_detail(self, account_id, client_order_id):
+            return FakeResponse({"order_status": "FILLED", "symbol": "AAOI", "filledQuantity": 5})
+
+    service = WebullService.__new__(WebullService)
+    service._trade_client = lambda: SimpleNamespace(order_v3=FakeOrderV3())
+    monkeypatch.setattr("app.webull_service.time.sleep", lambda _seconds: None)
+
+    response = service.buy_with_bracket(
+        account_id="acct-1",
+        symbol="AAOI",
+        quantity=7,
+        entry_price=100,
+        stop_price=95,
+        target_price=105,
+    )
+
+    assert response["ok"] is True
+    assert response["buy_fill"]["filled_quantity"] == 5
+    target, stop = captured["exit_place_orders"]
+    assert target["quantity"] == "5"
+    assert stop["quantity"] == "5"
+
+
+def test_auto_long_rejects_exit_when_filled_symbol_does_not_match(monkeypatch):
+    calls = []
+
+    class FakeResponse:
+        status_code = 200
+        headers = {}
+
+        def __init__(self, body=None):
+            self.body = body or {"ok": True}
+
+        def json(self):
+            return self.body
+
+    class FakeOrderV3:
+        def preview_order(self, account_id, new_orders, client_combo_order_id=None):
+            calls.append(("preview", len(new_orders), client_combo_order_id))
+            return FakeResponse()
+
+        def place_order(self, account_id, new_orders, client_combo_order_id=None):
+            calls.append(("place", len(new_orders), client_combo_order_id))
+            return FakeResponse()
+
+        def get_order_detail(self, account_id, client_order_id):
+            calls.append(("detail", client_order_id, None))
+            return FakeResponse({"order_status": "FILLED", "symbol": "MSFT", "filledQuantity": 7})
+
+    service = WebullService.__new__(WebullService)
+    service._trade_client = lambda: SimpleNamespace(order_v3=FakeOrderV3())
+    monkeypatch.setattr("app.webull_service.time.sleep", lambda _seconds: None)
+
+    response = service.buy_with_bracket(
+        account_id="acct-1",
+        symbol="AAOI",
+        quantity=7,
+        entry_price=100,
+        stop_price=95,
+        target_price=105,
+    )
+
+    assert response["ok"] is False
+    assert response["stage"] == "buy_fill_symbol_mismatch"
+    assert response["buy_fill"]["symbol"] == "MSFT"
+    assert response["exit_preview"] is None
+    assert response["exit_place"] is None
+    assert not any(call[0] in {"preview", "place"} and call[1] == 2 for call in calls)
 
 
 def test_sell_limit_payload_uses_target_price():
@@ -202,3 +372,92 @@ def test_sell_stop_payload_uses_stop_price_for_full_size():
     assert payload["order_type"] == "STOP_LOSS"
     assert payload["quantity"] == "7"
     assert payload["stop_price"] == "95.00"
+
+
+def test_auto_trade_orders_buckets_buy_sell_open_and_filled(monkeypatch):
+    service = WebullService.__new__(WebullService)
+    captured = {}
+    today = date.today().isoformat()
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+
+    def fake_order_history(account_id, page_size=50, days=30):
+        captured["history_days"] = days
+        return {
+            "ok": True,
+            "data": {
+                "orders": [
+                    {
+                        "clientOrderId": "buy-1",
+                        "symbol": "AAOI",
+                        "side": "BUY",
+                        "orderStatus": "FILLED",
+                        "orderType": "MARKET",
+                        "quantity": "7",
+                        "filledQuantity": "7",
+                        "createdAt": f"{today}T10:00:00",
+                    },
+                    {
+                        "clientOrderId": "sell-1",
+                        "symbol": "AAOI",
+                        "side": "SELL",
+                        "orderStatus": "FILLED",
+                        "orderType": "LIMIT",
+                        "quantity": "7",
+                        "filledQuantity": "7",
+                        "filledTime": f"{today}T10:30:00",
+                    },
+                    {
+                        "clientOrderId": "old-buy-1",
+                        "symbol": "MSFT",
+                        "side": "BUY",
+                        "orderStatus": "FILLED",
+                        "orderType": "MARKET",
+                        "quantity": "1",
+                        "filledQuantity": "1",
+                        "createdAt": f"{yesterday}T10:00:00",
+                    },
+                ]
+            },
+        }
+
+    def fake_open_orders(account_id, page_size=50):
+        return {
+            "ok": True,
+            "data": [
+                {
+                    "clientOrderId": "stop-1",
+                    "symbol": "AAOI",
+                    "side": "SELL",
+                    "orderStatus": "SUBMITTED",
+                    "orderType": "STOP_LOSS",
+                    "quantity": "7",
+                    "stopPrice": "95",
+                    "placedTime": f"{today}T10:31:00",
+                },
+                {
+                    "clientOrderId": "old-stop-1",
+                    "symbol": "MSFT",
+                    "side": "SELL",
+                    "orderStatus": "SUBMITTED",
+                    "orderType": "STOP_LOSS",
+                    "quantity": "1",
+                    "stopPrice": "400",
+                    "placedTime": f"{yesterday}T10:31:00",
+                }
+            ],
+        }
+
+    service.order_history = fake_order_history
+    service.open_orders = fake_open_orders
+    monkeypatch.setattr("app.webull_service.time.sleep", lambda _seconds: None)
+
+    response = service.auto_trade_orders("acct-1")
+
+    assert response["ok"] is True
+    assert captured["history_days"] == 1
+    assert response["trade_date"] == today
+    assert response["counts"] == {"buy": 1, "sell": 2, "open": 1, "filled": 2}
+    assert [order["client_order_id"] for order in response["buckets"]["buy"]] == ["buy-1"]
+    assert {order["client_order_id"] for order in response["buckets"]["sell"]} == {"sell-1", "stop-1"}
+    assert [order["client_order_id"] for order in response["buckets"]["open"]] == ["stop-1"]
+    assert {order["client_order_id"] for order in response["buckets"]["filled"]} == {"buy-1", "sell-1"}

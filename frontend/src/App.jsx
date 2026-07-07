@@ -107,6 +107,15 @@ function initialTabState(watchlists, value) {
   return watchlists.reduce((state, watchlist) => ({ ...state, [watchlist.id]: value }), {});
 }
 
+function emptyAutoTradeOrders() {
+  return {
+    ok: true,
+    orders: [],
+    buckets: { buy: [], sell: [], open: [], filled: [] },
+    counts: { buy: 0, sell: 0, open: 0, filled: 0 },
+  };
+}
+
 function shouldPromoteLocalWatchlists(serverWatchlists, localWatchlists) {
   const serverOnlyDefaultOg = serverWatchlists.length === 1
     && serverWatchlists[0]?.id === OG_WATCHLIST_ID
@@ -386,7 +395,13 @@ export default function App() {
   });
   const [notifications, setNotifications] = useState([]);
   const [alertLog, setAlertLog] = useState(loadAlertLog);
-  const [activePage, setActivePage] = useState(() => window.location.hash === "#alerts" ? "alerts" : "home");
+  const [activePage, setActivePage] = useState(() => {
+    if (window.location.hash === "#alerts") return "alerts";
+    if (window.location.hash === "#trades") return "trades";
+    return "home";
+  });
+  const [autoTradeOrders, setAutoTradeOrders] = useState(() => emptyAutoTradeOrders());
+  const [autoTradeAlert, setAutoTradeAlert] = useState("");
   const [strategyState, setStrategyState] = useState(loadStrategyState);
   const [riskSettings, setRiskSettings] = useState(loadRiskSettings);
   const [autoTrade, setAutoTrade] = useState(loadAutoTradeSettings);
@@ -400,6 +415,7 @@ export default function App() {
     watchlists: false,
     prices: false,
     notifications: false,
+    trades: false,
   });
   const passiveMarketTimer = useRef(null);
   const watchlistSyncTimer = useRef(null);
@@ -416,8 +432,9 @@ export default function App() {
   const activeWatchlist = watchlists.find((item) => item.id === watchlistTab) || watchlists[0];
   const quotes = quotesByTab[watchlistTab] || [];
   const updatedText = updatedTextByTab[watchlistTab] || "";
-  const pageLoading = loading.shell || loading.watchlists || loading.prices || loading.notifications;
+  const pageLoading = loading.shell || loading.watchlists || loading.prices || loading.notifications || loading.trades;
   const tradingAccountId = useMemo(() => marginTradingAccountId(accounts, selectedAccountId), [accounts, selectedAccountId]);
+  const autoTradeOrderCount = autoTradeOrders.counts?.open ?? autoTradeOrders.buckets?.open?.length ?? 0;
 
   const trendBuckets = useMemo(() => {
     return quotes.reduce(
@@ -542,6 +559,29 @@ export default function App() {
     }
   }
 
+  async function refreshAutoTrades({ showLoading = true } = {}) {
+    const accountId = tradingAccountId;
+    setAutoTradeAlert("");
+    if (!accountId) {
+      setAutoTradeOrders(emptyAutoTradeOrders());
+      setAutoTradeAlert("Select a Webull margin account to view trades.");
+      return;
+    }
+    if (showLoading) setLoadingKey("trades", true);
+    try {
+      const payload = await getJson(`/api/account/${accountId}/auto-trades?page_size=50&days=1`);
+      if (!payload.ok) {
+        setAutoTradeAlert(payload.history?.error || payload.open_orders?.error || `Webull returned order data with errors.`);
+      }
+      setAutoTradeOrders(payload);
+    } catch (error) {
+      setAutoTradeOrders(emptyAutoTradeOrders());
+      setAutoTradeAlert(error.message);
+    } finally {
+      if (showLoading) setLoadingKey("trades", false);
+    }
+  }
+
   async function refreshWatchlistPrices(watchlist) {
     if (!watchlist) return;
     const selectedSymbols = watchlist.symbols || [];
@@ -660,7 +700,8 @@ export default function App() {
 
   function navigatePage(page) {
     setActivePage(page);
-    window.history.replaceState(null, "", page === "alerts" ? "#alerts" : window.location.pathname);
+    const hash = page === "alerts" ? "#alerts" : page === "trades" ? "#trades" : "";
+    window.history.replaceState(null, "", hash || window.location.pathname);
   }
 
   function addNotification({ title, message, kind = "update" }) {
@@ -774,6 +815,7 @@ export default function App() {
           message: `${plan.quantity} shares long @ ${formatPrice(plan.entry)}, target ${formatPrice(plan.target)}, SL ${formatPrice(plan.stop)}.`,
           kind: "trade",
         });
+        if (activePage === "trades") refreshAutoTrades({ showLoading: false });
       } catch (error) {
         setBuyState((current) => ({ ...current, [quote.symbol]: { status: "error" } }));
         addNotification({
@@ -1090,6 +1132,10 @@ export default function App() {
     syncNotificationPreferences(strategyState).catch(() => {});
   }, [notificationState.appEnabled, strategyState]);
 
+  useEffect(() => {
+    if (activePage === "trades") refreshAutoTrades();
+  }, [activePage, tradingAccountId]);
+
   return (
     <>
       <Header
@@ -1107,6 +1153,7 @@ export default function App() {
         onMarkNotificationsRead={markNotificationsRead}
         activePage={activePage}
         alertLogCount={alertLog.length}
+        autoTradeOrderCount={autoTradeOrderCount}
         onNavigate={navigatePage}
         settingsBadge={autoTrade.enabled ? "Auto" : enabledStrategyCount}
         settingsControls={(
@@ -1145,6 +1192,14 @@ export default function App() {
               navigatePage("home");
             }}
           />
+        ) : activePage === "trades" ? (
+          <AutoTradesPage
+            accountId={tradingAccountId}
+            alert={autoTradeAlert}
+            loading={loading.trades}
+            orders={autoTradeOrders}
+            onRefresh={refreshAutoTrades}
+          />
         ) : (
           <div className="homepage-market-grid">
             <section className="live-prices-panel">
@@ -1166,12 +1221,6 @@ export default function App() {
                 onApply={refreshAllPrices}
                 riskSettings={riskSettings}
                 onChange={updateRiskSettings}
-              />
-              <AutoTradePanel
-                accountId={tradingAccountId}
-                autoTrade={autoTrade}
-                disabled={loading.prices}
-                onChange={updateAutoTradeSettings}
               />
               <div className="section-heading">
                 <div>
@@ -1233,6 +1282,133 @@ export default function App() {
       </main>
     </>
   );
+}
+
+function AutoTradesPage({ accountId, alert, loading, orders, onRefresh }) {
+  const buckets = orders?.buckets || emptyAutoTradeOrders().buckets;
+  const counts = orders?.counts || emptyAutoTradeOrders().counts;
+  return (
+    <section className="auto-trades-page">
+      <div className="auto-trades-header">
+        <div>
+          <h2>Auto Trades</h2>
+          <p className="muted">
+            {accountId ? `Today's Webull orders for ${accountId}` : "Select a margin account to view today's broker orders."}
+          </p>
+        </div>
+        <button type="button" className="secondary-button" onClick={() => onRefresh()} disabled={loading || !accountId}>
+          {loading ? "Refreshing" : "Refresh"}
+        </button>
+      </div>
+      {alert ? <div className="alert">{alert}</div> : null}
+      <div className="auto-trade-summary-grid" aria-label="Auto trade order counts">
+        <SummaryTile label="Buy Orders" value={counts.buy || 0} />
+        <SummaryTile label="Sell Orders" value={counts.sell || 0} />
+        <SummaryTile label="Open Orders" value={counts.open || 0} />
+        <SummaryTile label="Filled Orders" value={counts.filled || 0} />
+      </div>
+      <div className="auto-trade-buckets">
+        <OrderBucket title="Buy" items={buckets.buy || []} />
+        <OrderBucket title="Sell" items={buckets.sell || []} />
+        <OrderBucket title="Open" items={buckets.open || []} />
+        <OrderBucket title="Filled" items={buckets.filled || []} />
+      </div>
+    </section>
+  );
+}
+
+function SummaryTile({ label, value }) {
+  return (
+    <article className="auto-trade-summary-tile">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
+  );
+}
+
+function OrderBucket({ title, items }) {
+  return (
+    <section className="auto-trade-bucket">
+      <div className="auto-trade-bucket-heading">
+        <h3>{title}</h3>
+        <span>{items.length}</span>
+      </div>
+      <div className="auto-trade-table-wrap">
+        <table className="auto-trade-table">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Side</th>
+              <th>Status</th>
+              <th>Qty</th>
+              <th>Order</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.length ? items.map((item, index) => (
+              <tr key={orderRowKey(item, index)}>
+                <td data-label="Symbol"><strong>{item.symbol || "-"}</strong></td>
+                <td data-label="Side"><span className={`order-side-pill ${orderSideClass(item.side)}`}>{item.side || "-"}</span></td>
+                <td data-label="Status"><span className={`order-status-pill ${orderStatusClass(item.status)}`}>{item.status || "-"}</span></td>
+                <td data-label="Qty">{orderQuantityText(item)}</td>
+                <td data-label="Order">
+                  <div className="auto-trade-order-detail">
+                    <strong>{item.order_type || "-"}</strong>
+                    <span>{orderPriceText(item)}</span>
+                    <small>{item.client_order_id || item.order_id || "-"}</small>
+                  </div>
+                </td>
+                <td data-label="Time">{orderTimeText(item)}</td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan="6" className="alert-log-empty-cell">No {title.toLowerCase()} orders found</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function orderRowKey(item, index) {
+  return item.client_order_id || item.order_id || `${item.symbol || "order"}-${item.side || ""}-${item.status || ""}-${index}`;
+}
+
+function orderSideClass(side) {
+  const normalized = String(side || "").toLowerCase();
+  if (normalized === "buy") return "buy";
+  if (normalized === "sell") return "sell";
+  return "unknown";
+}
+
+function orderStatusClass(status) {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "filled") return "filled";
+  if (normalized.includes("submit") || normalized.includes("open") || normalized.includes("partial") || normalized.includes("working")) return "open";
+  if (normalized.includes("cancel") || normalized.includes("fail") || normalized.includes("reject")) return "error";
+  return "unknown";
+}
+
+function orderQuantityText(item) {
+  const quantity = item.quantity ?? "-";
+  const filled = item.filled_quantity;
+  return filled != null ? `${filled}/${quantity}` : String(quantity);
+}
+
+function orderPriceText(item) {
+  const parts = [];
+  if (item.avg_price != null) parts.push(`Avg ${formatPrice(item.avg_price)}`);
+  if (item.limit_price != null) parts.push(`Limit ${formatPrice(item.limit_price)}`);
+  if (item.stop_price != null) parts.push(`Stop ${formatPrice(item.stop_price)}`);
+  return parts.length ? parts.join(" · ") : "-";
+}
+
+function orderTimeText(item) {
+  const value = item.updated_at || item.created_at;
+  return value ? formatDateTime(value) : "-";
 }
 
 function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
