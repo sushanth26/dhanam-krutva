@@ -16,6 +16,9 @@ const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
 const WATCHLISTS_KEY = "dhanam-watchlists";
 const RISK_SETTINGS_KEY = "dhanam-risk-settings";
 const ALERT_LOG_KEY = "dhanam-alert-log";
+const AUTO_TRADE_KEY = "dhanam-auto-trade";
+const AUTO_TRADE_EXECUTIONS_KEY = "dhanam-auto-trade-executions";
+const MAX_AUTO_TRADE_EXECUTIONS = 500;
 const OG_WATCHLIST_ID = "og";
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
@@ -211,6 +214,32 @@ function saveRiskSettings(settings) {
   window.localStorage.setItem(RISK_SETTINGS_KEY, JSON.stringify(settings));
 }
 
+function loadAutoTradeSettings() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(AUTO_TRADE_KEY) || "{}");
+    return { enabled: Boolean(saved?.enabled) };
+  } catch {
+    return { enabled: false };
+  }
+}
+
+function saveAutoTradeSettings(settings) {
+  window.localStorage.setItem(AUTO_TRADE_KEY, JSON.stringify({ enabled: Boolean(settings.enabled) }));
+}
+
+function loadAutoTradeExecutions() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(AUTO_TRADE_EXECUTIONS_KEY) || "[]");
+    return Array.isArray(saved) ? saved.filter(Boolean).slice(0, MAX_AUTO_TRADE_EXECUTIONS) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveAutoTradeExecutions(keys) {
+  window.localStorage.setItem(AUTO_TRADE_EXECUTIONS_KEY, JSON.stringify([...keys].slice(-MAX_AUTO_TRADE_EXECUTIONS)));
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -260,6 +289,42 @@ function alertLogEntries(tab, quotes, watchlists) {
   ));
 }
 
+function autoTradeKey(tab, symbol, match) {
+  return `${tab}:${symbol}:${match.label || displayMtfLabel(match)}:${match.candle_time || ""}`;
+}
+
+function autoLongTradePlan(tab, quote, riskSettings) {
+  const match = (quote.mtf_matches || []).find((item) => (
+    (item.status || "confirmed") === "confirmed"
+    && item.trade_action === "Long"
+  ));
+  if (!match) return null;
+
+  const entry = Number(matchEntryPrice(match) ?? quote.price);
+  const riskPlan = match.risk_plan || null;
+  const stop = riskPlan?.stop != null
+    ? Number(riskPlan.stop)
+    : Number(match.low) - Number(riskSettings?.fixedStopBuffer || 1);
+  if (!Number.isFinite(entry) || !Number.isFinite(stop) || stop >= entry) return null;
+
+  const riskPerShare = entry - stop;
+  const target = entry + riskPerShare;
+  if (!Number.isFinite(target) || target <= entry) return null;
+
+  return {
+    key: autoTradeKey(tab, quote.symbol, match),
+    entry: roundMoney(entry),
+    stop: roundMoney(stop),
+    target: roundMoney(target),
+    setup: displayMtfLabel(match),
+    candleTime: match.candle_time || "",
+  };
+}
+
+function roundMoney(value) {
+  return Math.round(Number(value) * 100) / 100;
+}
+
 export default function App() {
   const [watchlists, setWatchlists] = useState(loadWatchlists);
   const [status, setStatus] = useState(null);
@@ -281,6 +346,7 @@ export default function App() {
   const [activePage, setActivePage] = useState(() => window.location.hash === "#alerts" ? "alerts" : "home");
   const [strategyState, setStrategyState] = useState(loadStrategyState);
   const [riskSettings, setRiskSettings] = useState(loadRiskSettings);
+  const [autoTrade, setAutoTrade] = useState(loadAutoTradeSettings);
   const [watchlistTab, setWatchlistTab] = useState(OG_WATCHLIST_ID);
   const [symbolInputs, setSymbolInputs] = useState({});
   const [newMtfRows, setNewMtfRows] = useState({});
@@ -298,6 +364,9 @@ export default function App() {
   const lastMtfRows = useRef(initialTabState(loadWatchlists(), {}));
   const strategyStateRef = useRef(strategyState);
   const riskSettingsRef = useRef(riskSettings);
+  const autoTradeRef = useRef(autoTrade);
+  const autoTradeExecutionsRef = useRef(new Set(loadAutoTradeExecutions()));
+  const selectedAccountIdRef = useRef(selectedAccountId);
   const watchlistTabRef = useRef(watchlistTab);
   const watchlistsRef = useRef(watchlists);
   const activeWatchlist = watchlists.find((item) => item.id === watchlistTab) || watchlists[0];
@@ -467,9 +536,8 @@ export default function App() {
     lastMtfRows.current = { ...lastMtfRows.current, [tab]: nextRows };
     if (!firstMatchLoad && !changed) return;
 
-    const freshRowIds = nextMtfs
-      .filter((quote) => previousRows[quote.symbol] !== nextRows[quote.symbol])
-      .map((quote) => mtfRowId(tab, quote.symbol));
+    const freshQuotes = nextMtfs.filter((quote) => previousRows[quote.symbol] !== nextRows[quote.symbol]);
+    const freshRowIds = freshQuotes.map((quote) => mtfRowId(tab, quote.symbol));
     if (freshRowIds.length) {
       setNewMtfRows((current) => ({
         ...current,
@@ -485,6 +553,7 @@ export default function App() {
       kind: "changed",
     });
     showMtfDeviceNotification(notification);
+    if (changed) autoBuyLongAlerts(tab, freshQuotes);
   }
 
   function appendAlertLog(entries) {
@@ -580,6 +649,61 @@ export default function App() {
       setBuyState((current) => ({ ...current, [symbol]: { status: "error" } }));
       setLiveAlert(error.message);
     }
+  }
+
+  async function autoBuyLongAlerts(tab, quotes) {
+    if (!autoTradeRef.current.enabled) return;
+    const accountId = selectedAccountIdRef.current;
+    if (!accountId) {
+      addNotification({
+        title: "Auto-buy skipped",
+        message: "Select a Webull account before enabling auto-buy.",
+        kind: "system",
+      });
+      return;
+    }
+
+    for (const quote of quotes) {
+      const plan = autoLongTradePlan(tab, quote, riskSettingsRef.current);
+      if (!plan || autoTradeExecutionsRef.current.has(plan.key)) continue;
+      autoTradeExecutionsRef.current.add(plan.key);
+      saveAutoTradeExecutions(autoTradeExecutionsRef.current);
+      setBuyState((current) => ({ ...current, [quote.symbol]: { status: "loading" } }));
+      try {
+        const payload = await postJson("/api/trade/auto-long", {
+          account_id: accountId,
+          symbol: quote.symbol,
+          entry_price: plan.entry,
+          stop_price: plan.stop,
+          target_price: plan.target,
+          setup: plan.setup,
+          candle_time: plan.candleTime,
+        });
+        if (!payload.ok) {
+          throw new Error(payload.error || payload.buy?.error || payload.sell?.preview?.error || payload.sell?.place?.error || `Webull rejected ${quote.symbol} auto-buy.`);
+        }
+        setBuyState((current) => ({ ...current, [quote.symbol]: { status: "ok" } }));
+        addNotification({
+          title: `Auto bought ${quote.symbol}`,
+          message: `1 share long @ ${formatPrice(plan.entry)}, sell limit ${formatPrice(plan.target)}.`,
+          kind: "trade",
+        });
+      } catch (error) {
+        setBuyState((current) => ({ ...current, [quote.symbol]: { status: "error" } }));
+        addNotification({
+          title: `Auto-buy failed ${quote.symbol}`,
+          message: error.message,
+          kind: "trade",
+        });
+      }
+    }
+  }
+
+  function updateAutoTradeSettings(nextSettings) {
+    const normalized = { enabled: Boolean(nextSettings.enabled) };
+    setAutoTrade(normalized);
+    autoTradeRef.current = normalized;
+    saveAutoTradeSettings(normalized);
   }
 
   function toggleStrategy(strategyId) {
@@ -853,6 +977,14 @@ export default function App() {
   }, [riskSettings]);
 
   useEffect(() => {
+    autoTradeRef.current = autoTrade;
+  }, [autoTrade]);
+
+  useEffect(() => {
+    selectedAccountIdRef.current = selectedAccountId;
+  }, [selectedAccountId]);
+
+  useEffect(() => {
     watchlistTabRef.current = watchlistTab;
   }, [watchlistTab]);
 
@@ -927,6 +1059,12 @@ export default function App() {
                 onApply={refreshAllPrices}
                 riskSettings={riskSettings}
                 onChange={updateRiskSettings}
+              />
+              <AutoTradePanel
+                accountId={selectedAccountId}
+                autoTrade={autoTrade}
+                disabled={loading.prices}
+                onChange={updateAutoTradeSettings}
               />
               <div className="section-heading">
                 <div>
@@ -1117,6 +1255,26 @@ function RiskSettingsPanel({ disabled, riskSettings, onApply, onChange }) {
       <button type="button" className="risk-apply-button" disabled={disabled} onClick={onApply}>
         Apply
       </button>
+    </section>
+  );
+}
+
+function AutoTradePanel({ accountId, autoTrade, disabled, onChange }) {
+  return (
+    <section className={`auto-trade-panel ${autoTrade.enabled ? "enabled" : ""}`} aria-label="Auto long trading">
+      <label className="auto-trade-toggle">
+        <input
+          type="checkbox"
+          checked={autoTrade.enabled}
+          disabled={disabled || !accountId}
+          onChange={(event) => onChange({ enabled: event.target.checked })}
+        />
+        <span>
+          <strong>Auto Long</strong>
+          <small>Buys 1 share on long alerts and places a 1:1 sell limit.</small>
+        </span>
+      </label>
+      <em>{accountId ? "Long only" : "Select account"}</em>
     </section>
   );
 }

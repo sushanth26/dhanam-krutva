@@ -1001,6 +1001,93 @@ select {
   padding: 0 12px;
 }
 
+.auto-trade-panel {
+  align-items: center;
+  background: #f8faf7;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px;
+}
+
+.auto-trade-panel.enabled {
+  background: #eaf8ef;
+  border-color: #12664f;
+}
+
+.auto-trade-toggle {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.auto-trade-toggle input {
+  appearance: none;
+  background: #d9e0dc;
+  border: 0;
+  border-radius: 999px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  position: relative;
+  width: 42px;
+}
+
+.auto-trade-toggle input:after {
+  background: #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 1px 4px rgba(25, 33, 31, 0.24);
+  content: "";
+  height: 18px;
+  left: 3px;
+  position: absolute;
+  top: 3px;
+  transition: transform 0.16s ease;
+  width: 18px;
+}
+
+.auto-trade-toggle input:checked {
+  background: #12664f;
+}
+
+.auto-trade-toggle input:checked:after {
+  transform: translate(18px);
+}
+
+.auto-trade-toggle strong,
+.auto-trade-toggle small {
+  display: block;
+}
+
+.auto-trade-toggle strong {
+  font-size: 14px;
+}
+
+.auto-trade-toggle small {
+  color: #68766c;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+  margin-top: 2px;
+}
+
+.auto-trade-panel em {
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 999px;
+  color: #68766c;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  padding: 4px 8px;
+}
+
 .trend-price-grid {
   display: grid;
   gap: 16px;
