@@ -296,6 +296,7 @@ function alertLogEntries(tab, quotes, watchlists, riskSettings) {
         entryPrice: matchEntryPrice(match),
         status: match.status || "confirmed",
         price: quote.price ?? null,
+        lastPrice: quote.price ?? null,
         riskPlan: match.risk_plan || null,
         stopPrice: outcomePlan?.stop ?? null,
         targetPrice: outcomePlan?.target ?? null,
@@ -626,13 +627,18 @@ export default function App() {
         if (!Number.isFinite(price) || !Number.isFinite(stop) || !Number.isFinite(target)) return item;
         const hitTarget = item.action === "Long" ? price >= target : price <= target;
         const hitStop = item.action === "Long" ? price <= stop : price >= stop;
-        if (!hitTarget && !hitStop) return item;
+        if (!hitTarget && !hitStop) {
+          if (item.lastPrice === price) return item;
+          changed = true;
+          return { ...item, lastPrice: price };
+        }
         changed = true;
         return {
           ...item,
           outcome: hitTarget ? "Target" : "SL",
           outcomeAt: new Date().toISOString(),
           outcomePrice: price,
+          lastPrice: price,
         };
       });
       if (changed) saveAlertLog(next);
@@ -1204,7 +1210,8 @@ export default function App() {
 
 function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
   const [query, setQuery] = useState("");
-  const filtered = useMemo(() => {
+  const [outcomeFilter, setOutcomeFilter] = useState("all");
+  const searched = useMemo(() => {
     const needle = query.trim().toUpperCase();
     if (!needle) return alertLog;
     return alertLog.filter((item) => (
@@ -1215,6 +1222,20 @@ function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
       || String(item.outcome || "").toUpperCase().includes(needle)
     ));
   }, [alertLog, query]);
+  const outcomeCounts = useMemo(() => ({
+    all: searched.length,
+    open: searched.filter((item) => !item.outcome).length,
+    target: searched.filter((item) => item.outcome === "Target").length,
+    sl: searched.filter((item) => item.outcome === "SL").length,
+  }), [searched]);
+  const filtered = useMemo(() => {
+    if (outcomeFilter === "open") return searched.filter((item) => !item.outcome);
+    if (outcomeFilter === "target") return searched.filter((item) => item.outcome === "Target");
+    if (outcomeFilter === "sl") return searched.filter((item) => item.outcome === "SL");
+    return searched;
+  }, [outcomeFilter, searched]);
+  const longAlerts = useMemo(() => filtered.filter((item) => item.action === "Long"), [filtered]);
+  const shortAlerts = useMemo(() => filtered.filter((item) => item.action === "Short"), [filtered]);
 
   return (
     <section className="alert-log-page">
@@ -1235,46 +1256,133 @@ function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
         />
         <strong>{filtered.length}</strong>
       </div>
-      <div className="alert-log-list">
-        {filtered.length ? filtered.map((item) => (
-          <article key={item.id} className={`alert-log-item ${String(item.action).toLowerCase()}`}>
-            <button type="button" onClick={() => onSelectSymbol(item.symbol)}>{item.symbol}</button>
-            <div>
-              <div className="alert-log-title">
-                <strong>{item.action || "-"}</strong>
-                <span>{item.reason}</span>
-                {item.outcome ? <em className={`outcome-tag ${String(item.outcome).toLowerCase()}`}>{item.outcome}</em> : null}
-              </div>
-              <div className="alert-log-meta">
-                <time dateTime={item.alertedAt}>Alerted {formatDateTime(item.alertedAt)}</time>
-                {item.candleTime ? <time dateTime={item.candleTime}>Candle {formatDateTime(item.candleTime)}</time> : null}
-                {item.outcomeAt ? <time dateTime={item.outcomeAt}>Hit {formatDateTime(item.outcomeAt)}</time> : null}
-                <span>{item.watchlistName}</span>
-                {item.entryPrice != null ? <span>Entry {formatPrice(item.entryPrice)}</span> : null}
-                {item.price != null ? <span>Price {formatPrice(item.price)}</span> : null}
-                {item.stopPrice != null ? <span>SL {formatPrice(item.stopPrice)}</span> : null}
-                {item.targetPrice != null ? <span>Target {formatPrice(item.targetPrice)}</span> : null}
-                {item.outcomePrice != null ? <span>Hit px {formatPrice(item.outcomePrice)}</span> : null}
-              </div>
-              {item.riskPlan ? (
-                <div className="alert-log-risk">
-                  <span>Qty {item.riskPlan.shares}</span>
-                  <span>SL {formatPrice(item.riskPlan.stop)}</span>
-                  <span>Risk/sh {formatPrice(item.riskPlan.risk_per_share)}</span>
-                  {item.riskPlan.volatility?.grade ? <span>{item.riskPlan.volatility.grade} {formatPrice(item.riskPlan.volatility.average_range)} avg</span> : null}
-                </div>
-              ) : null}
-            </div>
-          </article>
-        )) : (
-          <article className="alert-log-empty">
-            <strong>No alerts found</strong>
-            <span>New MTF alerts will appear here with the time they were alerted.</span>
-          </article>
-        )}
+      <div className="alert-log-tabs" role="tablist" aria-label="Alert outcome filter">
+        <button
+          type="button"
+          className={outcomeFilter === "all" ? "active" : ""}
+          onClick={() => setOutcomeFilter("all")}
+          role="tab"
+          aria-selected={outcomeFilter === "all"}
+        >
+          All <span>{outcomeCounts.all}</span>
+        </button>
+        <button
+          type="button"
+          className={outcomeFilter === "open" ? "active open" : "open"}
+          onClick={() => setOutcomeFilter("open")}
+          role="tab"
+          aria-selected={outcomeFilter === "open"}
+        >
+          Open <span>{outcomeCounts.open}</span>
+        </button>
+        <button
+          type="button"
+          className={outcomeFilter === "target" ? "active target" : "target"}
+          onClick={() => setOutcomeFilter("target")}
+          role="tab"
+          aria-selected={outcomeFilter === "target"}
+        >
+          Target <span>{outcomeCounts.target}</span>
+        </button>
+        <button
+          type="button"
+          className={outcomeFilter === "sl" ? "active sl" : "sl"}
+          onClick={() => setOutcomeFilter("sl")}
+          role="tab"
+          aria-selected={outcomeFilter === "sl"}
+        >
+          SL <span>{outcomeCounts.sl}</span>
+        </button>
+      </div>
+      <div className="alert-log-tables">
+        <AlertLogTable title="Long" items={longAlerts} onSelectSymbol={onSelectSymbol} />
+        <AlertLogTable title="Short" items={shortAlerts} onSelectSymbol={onSelectSymbol} />
       </div>
     </section>
   );
+}
+
+function AlertLogTable({ title, items, onSelectSymbol }) {
+  return (
+    <section className={`alert-log-table-card ${title.toLowerCase()}`}>
+      <div className="alert-log-table-heading">
+        <h3>{title}</h3>
+        <span>{items.length}</span>
+        <em>R:R 1:1</em>
+      </div>
+      <div className="alert-log-table-wrap">
+        <table className="alert-log-table">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Entry</th>
+              <th>Exit</th>
+              <th>Alert</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.length ? items.map((item) => (
+              <tr key={item.id} className={alertOutcomeRowClass(item)}>
+                <td data-label="Symbol">
+                  <button type="button" onClick={() => onSelectSymbol(item.symbol)}>{item.symbol}</button>
+                </td>
+                <td data-label="Entry">{item.entryPrice != null ? formatPrice(item.entryPrice) : "-"}</td>
+                <td data-label="Exit">
+                  <div className="alert-log-exit">
+                    {item.outcome ? (
+                      <>
+                        <span>{alertExitPrice(item)}</span>
+                        <em className={`outcome-tag ${String(item.outcome).toLowerCase()}`}>{item.outcome}</em>
+                      </>
+                    ) : (
+                      <>
+                        <span>{alertLastPrice(item)}</span>
+                        {item.targetPrice != null ? <small>Target {formatPrice(item.targetPrice)}</small> : null}
+                        {item.stopPrice != null ? <small>SL {formatPrice(item.stopPrice)}</small> : null}
+                      </>
+                    )}
+                  </div>
+                </td>
+                <td data-label="Alert">
+                  <div className="alert-log-alert">
+                    <strong>{item.reason}</strong>
+                    <span>{item.watchlistName}</span>
+                  </div>
+                </td>
+                <td data-label="Timestamp">
+                  <div className="alert-log-time">
+                    <time dateTime={item.alertedAt}>{formatDateTime(item.alertedAt)}</time>
+                    {item.outcomeAt ? <small>Hit {formatDateTime(item.outcomeAt)}</small> : null}
+                  </div>
+                </td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan="5" className="alert-log-empty-cell">No {title.toLowerCase()} alerts found</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function alertExitPrice(item) {
+  const fallback = item.outcome === "Target" ? item.targetPrice : item.stopPrice;
+  const exitPrice = item.outcomePrice ?? fallback;
+  return exitPrice != null ? formatPrice(exitPrice) : "-";
+}
+
+function alertLastPrice(item) {
+  const lastPrice = item.lastPrice ?? item.price;
+  return lastPrice != null ? `Last ${formatPrice(lastPrice)}` : "-";
+}
+
+function alertOutcomeRowClass(item) {
+  const outcome = String(item.outcome || "").toLowerCase();
+  return outcome === "target" || outcome === "sl" ? `hit-${outcome}` : "";
 }
 
 function RiskSettingsPanel({ disabled, riskSettings, onApply, onChange }) {
