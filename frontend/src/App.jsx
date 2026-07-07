@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { AlertStrategies } from "./components/AlertStrategies";
 import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
@@ -447,6 +448,14 @@ export default function App() {
   const longMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Long"), [allMtfs]);
   const shortMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Short"), [allMtfs]);
   const waitingMtfs = useMemo(() => quotesWithMatchStatus(allMtfQuotes, "waiting"), [allMtfQuotes]);
+  const enabledStrategyCount = useMemo(
+    () => Object.values(strategyState || {}).filter((enabled) => enabled !== false).length,
+    [strategyState],
+  );
+  const autoLongEnabledCount = useMemo(
+    () => ALERT_STRATEGIES.filter((strategy) => autoTrade.strategies?.[strategy.id]).length,
+    [autoTrade.strategies],
+  );
   const unreadNotificationCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
 
   async function refreshShell() {
@@ -1099,8 +1108,22 @@ export default function App() {
         activePage={activePage}
         alertLogCount={alertLog.length}
         onNavigate={navigatePage}
-        strategyState={strategyState}
-        onToggleStrategy={toggleStrategy}
+        settingsBadge={autoTrade.enabled ? "Auto" : enabledStrategyCount}
+        settingsControls={(
+          <SettingsMenu
+            accountId={tradingAccountId}
+            autoTrade={autoTrade}
+            autoLongEnabledCount={autoLongEnabledCount}
+            disabled={loading.prices}
+            enabledStrategyCount={enabledStrategyCount}
+            onApplyRisk={refreshAllPrices}
+            onAutoTradeChange={updateAutoTradeSettings}
+            onRiskChange={updateRiskSettings}
+            onToggleStrategy={toggleStrategy}
+            riskSettings={riskSettings}
+            strategyState={strategyState}
+          />
+        )}
       />
       {pageLoading ? (
         <div className="loading-blocker" aria-live="polite" aria-busy="true">
@@ -1449,6 +1472,46 @@ function RiskSettingsPanel({ disabled, riskSettings, onApply, onChange }) {
         Apply
       </button>
     </section>
+  );
+}
+
+function SettingsMenu({
+  accountId,
+  autoTrade,
+  autoLongEnabledCount,
+  disabled,
+  enabledStrategyCount,
+  onApplyRisk,
+  onAutoTradeChange,
+  onRiskChange,
+  onToggleStrategy,
+  riskSettings,
+  strategyState,
+}) {
+  return (
+    <div className="settings-menu-content">
+      <div className="settings-menu-heading">
+        <div>
+          <h2>Settings</h2>
+          <p className="muted">
+            {enabledStrategyCount} alert strategies active · {autoTrade.enabled ? "Auto Long on" : "Auto Long off"} · {autoLongEnabledCount} auto strategies
+          </p>
+        </div>
+      </div>
+      <RiskSettingsPanel
+        disabled={disabled}
+        onApply={onApplyRisk}
+        onChange={onRiskChange}
+        riskSettings={riskSettings}
+      />
+      <AutoTradePanel
+        accountId={accountId}
+        autoTrade={autoTrade}
+        disabled={disabled}
+        onChange={onAutoTradeChange}
+      />
+      <AlertStrategies strategyState={strategyState} onToggleStrategy={onToggleStrategy} />
+    </div>
   );
 }
 

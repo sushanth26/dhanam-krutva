@@ -243,7 +243,8 @@ button:hover {
 }
 
 .account-menu-anchor,
-.strategy-menu-anchor {
+.strategy-menu-anchor,
+.settings-menu-anchor {
   position: relative;
 }
 
@@ -293,7 +294,8 @@ button:hover {
   z-index: 190;
 }
 
-.strategy-menu {
+.strategy-menu,
+.settings-menu {
   background: #ffffff;
   border: 1px solid #dbe2d8;
   border-radius: 8px;
@@ -306,6 +308,31 @@ button:hover {
   top: calc(100% + 12px);
   width: min(620px, calc(100vw - 24px));
   z-index: 195;
+}
+
+.settings-menu {
+  width: min(720px, calc(100vw - 24px));
+}
+
+.settings-menu-content {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.settings-menu-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.settings-menu-heading h2 {
+  color: #184d36;
+  font-size: 20px;
+}
+
+.settings-menu .risk-settings-panel {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .account-menu-header {
@@ -2004,12 +2031,14 @@ pre {
 }
 
 .account-menu-anchor,
-.strategy-menu-anchor {
+.strategy-menu-anchor,
+.settings-menu-anchor {
   position: static;
 }
 
 .account-menu,
-.strategy-menu {
+.strategy-menu,
+.settings-menu {
   left: 12px;
   right: 12px;
   top: 70px;
@@ -2051,7 +2080,8 @@ h1 {
   flex: 1 1 130px;
 }
 
-  .risk-settings-panel {
+  .risk-settings-panel,
+  .settings-menu .risk-settings-panel {
     grid-template-columns: 1fr;
   }
 
@@ -2381,7 +2411,8 @@ h1 {
   }
 
   .account-menu-anchor,
-  .strategy-menu-anchor {
+  .strategy-menu-anchor,
+  .settings-menu-anchor {
     position: relative;
   }
 
@@ -2392,11 +2423,19 @@ h1 {
     width: min(430px, calc(100vw - 24px));
   }
 
-  .strategy-menu {
+  .strategy-menu,
+  .settings-menu {
     left: auto;
     right: 0;
     top: calc(100% + 12px);
+  }
+
+  .strategy-menu {
     width: min(620px, calc(100vw - 24px));
+  }
+
+  .settings-menu {
+    width: min(720px, calc(100vw - 24px));
   }
 
   .notification-drawer {
