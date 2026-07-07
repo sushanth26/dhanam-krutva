@@ -161,7 +161,7 @@ def test_mtf_signal_matches_skips_chop_trend():
     assert matches == []
 
 
-def test_mtf_signal_matches_keeps_confirmed_bullish_breakout():
+def test_mtf_signal_matches_prefers_confirmed_bounce_over_matching_breakout_name():
     matches = mtf_signal_matches(
         113,
         "Bullish",
@@ -174,10 +174,44 @@ def test_mtf_signal_matches_keeps_confirmed_bullish_breakout():
         {"20": 108, "21": 112, "50": 104, "55": 106},
     )
 
-    assert [match["label"] for match in matches][:3] == ["Hourly 34/50", "Daily 20/21", "Daily 50/55"]
+    assert [match["label"] for match in matches][:3] == [
+        "10m bounce Hourly 34/50",
+        "10m bounce Daily 20/21",
+        "10m bounce Daily 50/55",
+    ]
+    assert "Hourly 34/50" not in [match["label"] for match in matches]
+    assert "Daily 20/21" not in [match["label"] for match in matches]
+    assert "Daily 50/55" not in [match["label"] for match in matches]
     assert matches[0]["status"] == "confirmed"
     assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
     assert matches[2]["candle_time"] == "2026-07-02T09:40:00"
+
+
+def test_mtf_signal_matches_dedupes_bearish_rejection_and_matching_breakout_name():
+    matches = mtf_signal_matches(
+        97,
+        "Bearish",
+        [
+            {"low": 113, "high": 121, "close": 118, "time": "2026-07-02T09:30:00"},
+            {"open": 102, "high": 111, "low": 98, "close": 97, "time": "2026-07-02T09:40:00"},
+        ],
+        {"5": 94, "12": 95, "34": 100, "50": 110},
+        {"34": 104, "50": 108},
+        {"20": 105, "21": 107, "50": 106, "55": 109},
+    )
+
+    labels = [match["label"] for match in matches]
+    assert labels == [
+        "10m bounce Hourly 34/50",
+        "10m bounce Daily 20/21",
+        "10m bounce Daily 50/55",
+        "10m bounce 34/50",
+    ]
+    assert "Hourly 34/50" not in labels
+    assert "Daily 20/21" not in labels
+    assert "Daily 50/55" not in labels
+    assert all(match["display_label"].replace("10m rejection", "10m bounce") == match["label"] for match in matches)
+    assert all(match["trade_action"] == "Short" for match in matches)
 
 
 def test_mtf_signal_matches_marks_incomplete_10m_candle_as_waiting():

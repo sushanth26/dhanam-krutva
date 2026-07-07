@@ -154,7 +154,7 @@ function BuyCell({ buyState, disabled, onBuy, symbol, tradeAction, waiting }) {
     );
   }
   const loading = buyState?.status === "loading";
-  const title = `Buy 1 share of ${symbol}`;
+  const title = `Auto buy calculated size for ${symbol}`;
   return (
     <td className="row-action-cell buy-action-cell">
       <button
