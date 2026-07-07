@@ -640,7 +640,7 @@ export default function App() {
           ...item,
           outcome: hitTarget ? "Target" : "SL",
           outcomeAt: new Date().toISOString(),
-          outcomePrice: price,
+          outcomePrice: price > 0 ? price : (hitTarget ? target : stop),
           lastPrice: price,
         };
       });
@@ -1375,7 +1375,8 @@ function AlertLogTable({ title, items, onSelectSymbol }) {
 
 function alertExitPrice(item) {
   const fallback = item.outcome === "Target" ? item.targetPrice : item.stopPrice;
-  const exitPrice = item.outcomePrice ?? fallback;
+  const outcomePrice = Number(item.outcomePrice);
+  const exitPrice = Number.isFinite(outcomePrice) && outcomePrice > 0 ? outcomePrice : fallback;
   return exitPrice != null ? formatPrice(exitPrice) : "-";
 }
 
