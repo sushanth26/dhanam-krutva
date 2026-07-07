@@ -1002,19 +1002,24 @@ select {
 }
 
 .auto-trade-panel {
-  align-items: center;
   background: #f8faf7;
   border: 1px solid #dbe2d8;
   border-radius: 8px;
-  display: flex;
+  display: grid;
   gap: 10px;
-  justify-content: space-between;
   padding: 10px;
 }
 
 .auto-trade-panel.enabled {
   background: #eaf8ef;
   border-color: #12664f;
+}
+
+.auto-trade-topline {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
 }
 
 .auto-trade-toggle {
@@ -1086,6 +1091,45 @@ select {
   font-style: normal;
   font-weight: 900;
   padding: 4px 8px;
+}
+
+.auto-strategy-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.auto-strategy-chip {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 999px;
+  color: #68766c;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 5px;
+  min-height: 28px;
+  padding: 4px 8px;
+}
+
+.auto-strategy-chip.enabled {
+  background: #dff4e9;
+  border-color: #12664f;
+  color: #075747;
+}
+
+.auto-strategy-chip input {
+  accent-color: #12664f;
+  height: 13px;
+  min-height: 13px;
+  padding: 0;
+  width: 13px;
+}
+
+.auto-strategy-chip input:disabled + span {
+  opacity: 0.6;
 }
 
 .trend-price-grid {
@@ -1206,6 +1250,24 @@ select {
   font-size: 11px;
   font-weight: 900;
   padding: 4px 7px;
+}
+
+.outcome-tag {
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  padding: 4px 7px;
+}
+
+.outcome-tag.target {
+  background: #dff4e9;
+  color: #075747;
+}
+
+.outcome-tag.sl {
+  background: #ffe1e1;
+  color: #8a2424;
 }
 
 .alert-log-title span {

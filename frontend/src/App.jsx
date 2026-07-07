@@ -4,7 +4,7 @@ import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
 import { getJson, postJson } from "./lib/api";
-import { filterQuotesByStrategy, loadStrategyState, saveStrategyState } from "./lib/alertStrategies";
+import { ALERT_STRATEGIES, filterQuotesByStrategy, loadStrategyState, saveStrategyState, strategyIdForMatch } from "./lib/alertStrategies";
 import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, findAccountId, flattenAccounts, formatPrice, isMarketRefreshWindow, matchEntryPrice, notificationMatchText, mtfSignature } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
@@ -215,16 +215,27 @@ function saveRiskSettings(settings) {
 }
 
 function loadAutoTradeSettings() {
+  const defaults = defaultAutoTradeStrategies();
   try {
     const saved = JSON.parse(window.localStorage.getItem(AUTO_TRADE_KEY) || "{}");
-    return { enabled: Boolean(saved?.enabled) };
+    return {
+      enabled: Boolean(saved?.enabled),
+      strategies: { ...defaults, ...(saved?.strategies || {}) },
+    };
   } catch {
-    return { enabled: false };
+    return { enabled: false, strategies: defaults };
   }
 }
 
 function saveAutoTradeSettings(settings) {
-  window.localStorage.setItem(AUTO_TRADE_KEY, JSON.stringify({ enabled: Boolean(settings.enabled) }));
+  window.localStorage.setItem(AUTO_TRADE_KEY, JSON.stringify({
+    enabled: Boolean(settings.enabled),
+    strategies: { ...defaultAutoTradeStrategies(), ...(settings.strategies || {}) },
+  }));
+}
+
+function defaultAutoTradeStrategies() {
+  return Object.fromEntries(ALERT_STRATEGIES.map((strategy) => [strategy.id, false]));
 }
 
 function loadAutoTradeExecutions() {
@@ -266,26 +277,33 @@ function saveAlertLog(items) {
   window.localStorage.setItem(ALERT_LOG_KEY, JSON.stringify(items.slice(0, MAX_ALERT_LOG)));
 }
 
-function alertLogEntries(tab, quotes, watchlists) {
+function alertLogEntries(tab, quotes, watchlists, riskSettings) {
   const alertedAt = new Date().toISOString();
   const watchlist = watchlists.find((item) => item.id === tab);
   return quotes.flatMap((quote) => (
-    (quote.mtf_matches || []).map((match) => ({
-      id: `${alertedAt}-${tab}-${quote.symbol}-${match.label}`,
-      alertedAt,
-      candleTime: match.candle_time || "",
-      symbol: quote.symbol,
-      watchlistId: tab,
-      watchlistName: watchlist?.name || tab,
-      action: match.trade_action || "",
-      label: match.label || "",
-      reason: displayMtfLabel(match),
-      entryPrice: matchEntryPrice(match),
-      status: match.status || "confirmed",
-      price: quote.price ?? null,
-      riskPlan: match.risk_plan || null,
-      trend: match.trend || "",
-    }))
+    (quote.mtf_matches || []).map((match) => {
+      const outcomePlan = alertOutcomePlan(match, quote.price, riskSettings);
+      return {
+        id: `${alertedAt}-${tab}-${quote.symbol}-${match.label}`,
+        alertedAt,
+        candleTime: match.candle_time || "",
+        symbol: quote.symbol,
+        watchlistId: tab,
+        watchlistName: watchlist?.name || tab,
+        action: match.trade_action || "",
+        label: match.label || "",
+        reason: displayMtfLabel(match),
+        entryPrice: matchEntryPrice(match),
+        status: match.status || "confirmed",
+        price: quote.price ?? null,
+        riskPlan: match.risk_plan || null,
+        stopPrice: outcomePlan?.stop ?? null,
+        targetPrice: outcomePlan?.target ?? null,
+        outcome: "",
+        outcomeAt: "",
+        trend: match.trend || "",
+      };
+    })
   ));
 }
 
@@ -293,22 +311,19 @@ function autoTradeKey(tab, symbol, match) {
   return `${tab}:${symbol}:${match.label || displayMtfLabel(match)}:${match.candle_time || ""}`;
 }
 
-function autoLongTradePlan(tab, quote, riskSettings) {
+function autoLongTradePlan(tab, quote, riskSettings, autoTradeSettings) {
   const match = (quote.mtf_matches || []).find((item) => (
     (item.status || "confirmed") === "confirmed"
     && item.trade_action === "Long"
+    && autoTradeSettings?.strategies?.[strategyIdForMatch(item)] === true
   ));
   if (!match) return null;
 
-  const entry = Number(matchEntryPrice(match) ?? quote.price);
-  const riskPlan = match.risk_plan || null;
-  const stop = riskPlan?.stop != null
-    ? Number(riskPlan.stop)
-    : Number(match.low) - Number(riskSettings?.fixedStopBuffer || 1);
+  const outcomePlan = alertOutcomePlan(match, quote.price, riskSettings);
+  const entry = outcomePlan?.entry;
+  const stop = outcomePlan?.stop;
+  const target = outcomePlan?.target;
   if (!Number.isFinite(entry) || !Number.isFinite(stop) || stop >= entry) return null;
-
-  const riskPerShare = entry - stop;
-  const target = entry + riskPerShare;
   if (!Number.isFinite(target) || target <= entry) return null;
 
   return {
@@ -323,6 +338,29 @@ function autoLongTradePlan(tab, quote, riskSettings) {
 
 function roundMoney(value) {
   return Math.round(Number(value) * 100) / 100;
+}
+
+function alertOutcomePlan(match, fallbackPrice, riskSettings) {
+  const action = match.trade_action;
+  const entry = Number(matchEntryPrice(match) ?? fallbackPrice);
+  if (!Number.isFinite(entry) || !["Long", "Short"].includes(action)) return null;
+  const riskPlan = match.risk_plan || null;
+  const cloudLow = Number(match.low ?? match.cloud_low);
+  const cloudHigh = Number(match.high ?? match.cloud_high);
+  const fixedBuffer = Number(riskSettings?.fixedStopBuffer || 1);
+  const stop = riskPlan?.stop != null
+    ? Number(riskPlan.stop)
+    : action === "Long"
+      ? cloudLow - fixedBuffer
+      : cloudHigh + fixedBuffer;
+  if (!Number.isFinite(stop)) return null;
+  const risk = Math.abs(entry - stop);
+  if (!Number.isFinite(risk) || risk <= 0) return null;
+  return {
+    entry: roundMoney(entry),
+    stop: roundMoney(stop),
+    target: roundMoney(action === "Long" ? entry + risk : entry - risk),
+  };
 }
 
 export default function App() {
@@ -508,6 +546,7 @@ export default function App() {
     const nextQuotes = payload.quotes || [];
     const updatedAt = new Date().toLocaleTimeString();
     setQuotesForTab(watchlist.id, nextQuotes);
+    updateAlertOutcomes(nextQuotes);
     setUpdatedTextForTab(watchlist.id, `Updated ${updatedAt} from ${payload.source || "webull"}`);
     notifyMtfUpdate(watchlist.id, filterQuotesByStrategy(confirmedMtfQuotes(nextQuotes), strategyStateRef.current));
 
@@ -545,7 +584,7 @@ export default function App() {
       }));
     }
 
-    appendAlertLog(alertLogEntries(tab, nextMtfs, watchlistsRef.current));
+    appendAlertLog(alertLogEntries(tab, nextMtfs, watchlistsRef.current, riskSettingsRef.current));
     const notification = mtfNotificationDetails(nextMtfs);
     addNotification({
       title: notification.title,
@@ -571,6 +610,32 @@ export default function App() {
   function clearAlertLog() {
     setAlertLog([]);
     saveAlertLog([]);
+  }
+
+  function updateAlertOutcomes(nextQuotes) {
+    const prices = Object.fromEntries(nextQuotes.map((quote) => [quote.symbol, Number(quote.price)]));
+    setAlertLog((current) => {
+      let changed = false;
+      const next = current.map((item) => {
+        if (item.outcome || !["Long", "Short"].includes(item.action)) return item;
+        const price = prices[item.symbol];
+        const stop = Number(item.stopPrice ?? item.riskPlan?.stop);
+        const target = Number(item.targetPrice);
+        if (!Number.isFinite(price) || !Number.isFinite(stop) || !Number.isFinite(target)) return item;
+        const hitTarget = item.action === "Long" ? price >= target : price <= target;
+        const hitStop = item.action === "Long" ? price <= stop : price >= stop;
+        if (!hitTarget && !hitStop) return item;
+        changed = true;
+        return {
+          ...item,
+          outcome: hitTarget ? "Target" : "SL",
+          outcomeAt: new Date().toISOString(),
+          outcomePrice: price,
+        };
+      });
+      if (changed) saveAlertLog(next);
+      return changed ? next : current;
+    });
   }
 
   function navigatePage(page) {
@@ -664,7 +729,7 @@ export default function App() {
     }
 
     for (const quote of quotes) {
-      const plan = autoLongTradePlan(tab, quote, riskSettingsRef.current);
+      const plan = autoLongTradePlan(tab, quote, riskSettingsRef.current, autoTradeRef.current);
       if (!plan || autoTradeExecutionsRef.current.has(plan.key)) continue;
       autoTradeExecutionsRef.current.add(plan.key);
       saveAutoTradeExecutions(autoTradeExecutionsRef.current);
@@ -700,7 +765,10 @@ export default function App() {
   }
 
   function updateAutoTradeSettings(nextSettings) {
-    const normalized = { enabled: Boolean(nextSettings.enabled) };
+    const normalized = {
+      enabled: Boolean(nextSettings.enabled),
+      strategies: { ...defaultAutoTradeStrategies(), ...(nextSettings.strategies || autoTradeRef.current.strategies || {}) },
+    };
     setAutoTrade(normalized);
     autoTradeRef.current = normalized;
     saveAutoTradeSettings(normalized);
@@ -1138,6 +1206,7 @@ function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
       || item.reason.toUpperCase().includes(needle)
       || item.action.toUpperCase().includes(needle)
       || item.watchlistName.toUpperCase().includes(needle)
+      || String(item.outcome || "").toUpperCase().includes(needle)
     ));
   }, [alertLog, query]);
 
@@ -1168,13 +1237,18 @@ function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
               <div className="alert-log-title">
                 <strong>{item.action || "-"}</strong>
                 <span>{item.reason}</span>
+                {item.outcome ? <em className={`outcome-tag ${String(item.outcome).toLowerCase()}`}>{item.outcome}</em> : null}
               </div>
               <div className="alert-log-meta">
                 <time dateTime={item.alertedAt}>Alerted {formatDateTime(item.alertedAt)}</time>
                 {item.candleTime ? <time dateTime={item.candleTime}>Candle {formatDateTime(item.candleTime)}</time> : null}
+                {item.outcomeAt ? <time dateTime={item.outcomeAt}>Hit {formatDateTime(item.outcomeAt)}</time> : null}
                 <span>{item.watchlistName}</span>
                 {item.entryPrice != null ? <span>Entry {formatPrice(item.entryPrice)}</span> : null}
                 {item.price != null ? <span>Price {formatPrice(item.price)}</span> : null}
+                {item.stopPrice != null ? <span>SL {formatPrice(item.stopPrice)}</span> : null}
+                {item.targetPrice != null ? <span>Target {formatPrice(item.targetPrice)}</span> : null}
+                {item.outcomePrice != null ? <span>Hit px {formatPrice(item.outcomePrice)}</span> : null}
               </div>
               {item.riskPlan ? (
                 <div className="alert-log-risk">
@@ -1260,21 +1334,48 @@ function RiskSettingsPanel({ disabled, riskSettings, onApply, onChange }) {
 }
 
 function AutoTradePanel({ accountId, autoTrade, disabled, onChange }) {
+  function toggleStrategy(strategyId) {
+    onChange({
+      ...autoTrade,
+      strategies: {
+        ...(autoTrade.strategies || {}),
+        [strategyId]: autoTrade.strategies?.[strategyId] !== true,
+      },
+    });
+  }
+
+  const enabledCount = ALERT_STRATEGIES.filter((strategy) => autoTrade.strategies?.[strategy.id]).length;
+
   return (
     <section className={`auto-trade-panel ${autoTrade.enabled ? "enabled" : ""}`} aria-label="Auto long trading">
-      <label className="auto-trade-toggle">
-        <input
-          type="checkbox"
-          checked={autoTrade.enabled}
-          disabled={disabled || !accountId}
-          onChange={(event) => onChange({ enabled: event.target.checked })}
-        />
-        <span>
-          <strong>Auto Long</strong>
-          <small>Buys 1 share on long alerts and places a 1:1 sell limit.</small>
-        </span>
-      </label>
-      <em>{accountId ? "Long only" : "Select account"}</em>
+      <div className="auto-trade-topline">
+        <label className="auto-trade-toggle">
+          <input
+            type="checkbox"
+            checked={autoTrade.enabled}
+            disabled={disabled || !accountId}
+            onChange={(event) => onChange({ ...autoTrade, enabled: event.target.checked })}
+          />
+          <span>
+            <strong>Auto Long</strong>
+            <small>Buys 1 share on selected long strategies and places a 1:1 sell limit.</small>
+          </span>
+        </label>
+        <em>{accountId ? `${enabledCount} strategy${enabledCount === 1 ? "" : "ies"}` : "Select account"}</em>
+      </div>
+      <div className="auto-strategy-grid">
+        {ALERT_STRATEGIES.map((strategy) => (
+          <label key={strategy.id} className={`auto-strategy-chip ${autoTrade.strategies?.[strategy.id] ? "enabled" : ""}`}>
+            <input
+              type="checkbox"
+              checked={autoTrade.strategies?.[strategy.id] === true}
+              disabled={disabled || !accountId}
+              onChange={() => toggleStrategy(strategy.id)}
+            />
+            <span>{strategy.name}</span>
+          </label>
+        ))}
+      </div>
     </section>
   );
 }
