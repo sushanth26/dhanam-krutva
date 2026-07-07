@@ -5,14 +5,17 @@ import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
 import { getJson, postJson } from "./lib/api";
 import { filterQuotesByStrategy, loadStrategyState, saveStrategyState } from "./lib/alertStrategies";
-import { cloudStatus, confirmedMtfQuotes, findAccountId, flattenAccounts, isMarketRefreshWindow, mtfSignature } from "./lib/market";
+import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, findAccountId, flattenAccounts, formatPrice, isMarketRefreshWindow, matchEntryPrice, notificationMatchText, mtfSignature } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
 const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const WATCHLIST_SYNC_INTERVAL_MS = 2 * 60 * 1000;
 const MAX_NOTIFICATIONS = 20;
+const MAX_ALERT_LOG = 500;
 const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
 const WATCHLISTS_KEY = "dhanam-watchlists";
+const RISK_SETTINGS_KEY = "dhanam-risk-settings";
+const ALERT_LOG_KEY = "dhanam-alert-log";
 const OG_WATCHLIST_ID = "og";
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
@@ -114,7 +117,7 @@ function mtfRowId(tab, symbol) {
 }
 
 function mtfRowSignature(quote) {
-  const labels = (quote.mtf_matches || []).map((match) => match.label).sort().join("|");
+  const labels = (quote.mtf_matches || []).map((match) => `${match.label}:${matchEntryPrice(match) ?? ""}`).sort().join("|");
   return `${quote.symbol}:${labels}`;
 }
 
@@ -122,7 +125,7 @@ function mtfNotificationDetails(quotes) {
   const matches = quotes
     .map((quote) => ({
       symbol: quote.symbol,
-      labels: (quote.mtf_matches || []).map((match) => match.label).filter(Boolean),
+      labels: (quote.mtf_matches || []).map((match) => notificationMatchText(match)).filter(Boolean),
     }))
     .filter((quote) => quote.symbol && quote.labels.length);
   const targetSymbol = matches[0]?.symbol || "";
@@ -175,6 +178,88 @@ function quotesWithMatchStatus(quotes, status) {
     .filter((quote) => quote.mtf_matches.length);
 }
 
+function quotesWithTradeAction(quotes, action) {
+  return quotes
+    .map((quote) => ({
+      ...quote,
+      mtf_matches: (quote.mtf_matches || []).filter((match) => match.trade_action === action),
+    }))
+    .filter((quote) => quote.mtf_matches.length);
+}
+
+function loadRiskSettings() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(RISK_SETTINGS_KEY) || "{}");
+    return normalizeRiskSettings(saved);
+  } catch {
+    return normalizeRiskSettings({});
+  }
+}
+
+function normalizeRiskSettings(settings) {
+  const riskAmount = Number(settings?.riskAmount);
+  const fixedStopBuffer = Number(settings?.fixedStopBuffer);
+  const stopMode = settings?.stopMode === "auto" ? "auto" : "fixed";
+  return {
+    riskAmount: Number.isFinite(riskAmount) ? clamp(riskAmount, 1, 10000) : 100,
+    stopMode,
+    fixedStopBuffer: Number.isFinite(fixedStopBuffer) ? clamp(fixedStopBuffer, 0.05, 25) : 1,
+  };
+}
+
+function saveRiskSettings(settings) {
+  window.localStorage.setItem(RISK_SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  const date = parsed.toLocaleDateString([], { month: "short", day: "numeric" });
+  const time = parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return `${date} ${time}`;
+}
+
+function loadAlertLog() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(ALERT_LOG_KEY) || "[]");
+    return Array.isArray(saved) ? saved.filter((item) => item?.symbol && item?.alertedAt) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveAlertLog(items) {
+  window.localStorage.setItem(ALERT_LOG_KEY, JSON.stringify(items.slice(0, MAX_ALERT_LOG)));
+}
+
+function alertLogEntries(tab, quotes, watchlists) {
+  const alertedAt = new Date().toISOString();
+  const watchlist = watchlists.find((item) => item.id === tab);
+  return quotes.flatMap((quote) => (
+    (quote.mtf_matches || []).map((match) => ({
+      id: `${alertedAt}-${tab}-${quote.symbol}-${match.label}`,
+      alertedAt,
+      candleTime: match.candle_time || "",
+      symbol: quote.symbol,
+      watchlistId: tab,
+      watchlistName: watchlist?.name || tab,
+      action: match.trade_action || "",
+      label: match.label || "",
+      reason: displayMtfLabel(match),
+      entryPrice: matchEntryPrice(match),
+      status: match.status || "confirmed",
+      price: quote.price ?? null,
+      riskPlan: match.risk_plan || null,
+      trend: match.trend || "",
+    }))
+  ));
+}
+
 export default function App() {
   const [watchlists, setWatchlists] = useState(loadWatchlists);
   const [status, setStatus] = useState(null);
@@ -192,7 +277,10 @@ export default function App() {
     appEnabled: true,
   });
   const [notifications, setNotifications] = useState([]);
+  const [alertLog, setAlertLog] = useState(loadAlertLog);
+  const [activePage, setActivePage] = useState(() => window.location.hash === "#alerts" ? "alerts" : "home");
   const [strategyState, setStrategyState] = useState(loadStrategyState);
+  const [riskSettings, setRiskSettings] = useState(loadRiskSettings);
   const [watchlistTab, setWatchlistTab] = useState(OG_WATCHLIST_ID);
   const [symbolInputs, setSymbolInputs] = useState({});
   const [newMtfRows, setNewMtfRows] = useState({});
@@ -210,6 +298,7 @@ export default function App() {
   const lastMtfRows = useRef(initialTabState(loadWatchlists(), {}));
   const lastFocusRefreshAt = useRef(0);
   const strategyStateRef = useRef(strategyState);
+  const riskSettingsRef = useRef(riskSettings);
   const watchlistTabRef = useRef(watchlistTab);
   const watchlistsRef = useRef(watchlists);
   const activeWatchlist = watchlists.find((item) => item.id === watchlistTab) || watchlists[0];
@@ -243,6 +332,8 @@ export default function App() {
     return filterQuotesByStrategy(matches, strategyState);
   }, [newMtfRows, quotesByTab, strategyState, watchlists]);
   const allMtfs = useMemo(() => quotesWithMatchStatus(allMtfQuotes, "confirmed"), [allMtfQuotes]);
+  const longMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Long"), [allMtfs]);
+  const shortMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Short"), [allMtfs]);
   const waitingMtfs = useMemo(() => quotesWithMatchStatus(allMtfQuotes, "waiting"), [allMtfQuotes]);
   const unreadNotificationCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
 
@@ -338,8 +429,14 @@ export default function App() {
       setUpdatedTextForTab(watchlist.id, "Add symbols to this list");
       return;
     }
-    const query = `?symbols=${encodeURIComponent(selectedSymbols.join(","))}`;
-    const payload = await getJson(`/api/webull/live-prices${query}`);
+    const settings = riskSettingsRef.current;
+    const query = new URLSearchParams({
+      symbols: selectedSymbols.join(","),
+      risk_amount: String(settings.riskAmount),
+      stop_mode: settings.stopMode,
+      fixed_stop_buffer: String(settings.fixedStopBuffer),
+    });
+    const payload = await getJson(`/api/webull/live-prices?${query.toString()}`);
     const nextQuotes = payload.quotes || [];
     const updatedAt = new Date().toLocaleTimeString();
     setQuotesForTab(watchlist.id, nextQuotes);
@@ -381,6 +478,7 @@ export default function App() {
       }));
     }
 
+    appendAlertLog(alertLogEntries(tab, nextMtfs, watchlistsRef.current));
     const notification = mtfNotificationDetails(nextMtfs);
     addNotification({
       title: notification.title,
@@ -388,6 +486,28 @@ export default function App() {
       kind: "changed",
     });
     showMtfDeviceNotification(notification);
+  }
+
+  function appendAlertLog(entries) {
+    if (!entries.length) return;
+    setAlertLog((current) => {
+      const seen = new Set(current.map((item) => `${item.symbol}:${item.label || item.reason}:${item.candleTime}:${item.watchlistId}`));
+      const freshEntries = entries.filter((item) => !seen.has(`${item.symbol}:${item.label || item.reason}:${item.candleTime}:${item.watchlistId}`));
+      if (!freshEntries.length) return current;
+      const next = [...freshEntries, ...current].slice(0, MAX_ALERT_LOG);
+      saveAlertLog(next);
+      return next;
+    });
+  }
+
+  function clearAlertLog() {
+    setAlertLog([]);
+    saveAlertLog([]);
+  }
+
+  function navigatePage(page) {
+    setActivePage(page);
+    window.history.replaceState(null, "", page === "alerts" ? "#alerts" : window.location.pathname);
   }
 
   function addNotification({ title, message, kind = "update" }) {
@@ -442,6 +562,10 @@ export default function App() {
       setLiveAlert(`${symbol} is still waiting for the candle close.`);
       return;
     }
+    if (quote.mtf_matches?.some((match) => match.trade_action === "Short")) {
+      setLiveAlert(`${symbol} is a short signal. Short order placement is not wired yet.`);
+      return;
+    }
     const confirmed = window.confirm(`Buy 1 share of ${symbol} with a market order in account ${accountId}?`);
     if (!confirmed) return;
 
@@ -465,6 +589,14 @@ export default function App() {
       saveStrategyState(next);
       return next;
     });
+    lastMtfSignature.current = initialTabState(watchlistsRef.current, null);
+  }
+
+  function updateRiskSettings(nextSettings) {
+    const normalized = normalizeRiskSettings(nextSettings);
+    setRiskSettings(normalized);
+    riskSettingsRef.current = normalized;
+    saveRiskSettings(normalized);
     lastMtfSignature.current = initialTabState(watchlistsRef.current, null);
   }
 
@@ -735,6 +867,10 @@ export default function App() {
   }, [strategyState]);
 
   useEffect(() => {
+    riskSettingsRef.current = riskSettings;
+  }, [riskSettings]);
+
+  useEffect(() => {
     watchlistTabRef.current = watchlistTab;
   }, [watchlistTab]);
 
@@ -762,6 +898,9 @@ export default function App() {
         onDisableNotifications={disableAppNotifications}
         notifications={notifications}
         onMarkNotificationsRead={markNotificationsRead}
+        activePage={activePage}
+        alertLogCount={alertLog.length}
+        onNavigate={navigatePage}
         strategyState={strategyState}
         onToggleStrategy={toggleStrategy}
       />
@@ -776,66 +915,227 @@ export default function App() {
       <main className="shell">
         {alert ? <div className="alert app-alert">{alert}</div> : null}
 
-        <div className="homepage-market-grid">
-          <section className="live-prices-panel">
-            <WatchlistTabs
-              activeTab={watchlistTab}
-              onAddSymbols={addSymbolsToActiveWatchlist}
-              onAddTab={addWatchlist}
-              onDeleteTab={deleteWatchlist}
-              onRefreshAll={refreshAllPrices}
-              loading={loading.watchlists || loading.prices}
-              onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
-              onSwitchTab={switchWatchlistTab}
-              selectedWatchlist={activeWatchlist}
-              symbolInput={symbolInputs[watchlistTab] || ""}
-              watchlists={watchlists}
-            />
-            <div className="section-heading">
-              <div>
-                <h2>{activeWatchlist?.name || "Watchlist"}</h2>
-                <p className="muted">Live Webull prices with clock-aligned EMA levels.</p>
+        {activePage === "alerts" ? (
+          <AlertLogPage
+            alertLog={alertLog}
+            onClear={clearAlertLog}
+            onSelectSymbol={(symbol) => {
+              focusMtfSymbol(symbol);
+              navigatePage("home");
+            }}
+          />
+        ) : (
+          <div className="homepage-market-grid">
+            <section className="live-prices-panel">
+              <WatchlistTabs
+                activeTab={watchlistTab}
+                onAddSymbols={addSymbolsToActiveWatchlist}
+                onAddTab={addWatchlist}
+                onDeleteTab={deleteWatchlist}
+                onRefreshAll={refreshAllPrices}
+                loading={loading.watchlists || loading.prices}
+                onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
+                onSwitchTab={switchWatchlistTab}
+                selectedWatchlist={activeWatchlist}
+                symbolInput={symbolInputs[watchlistTab] || ""}
+                watchlists={watchlists}
+              />
+              <RiskSettingsPanel
+                disabled={loading.prices}
+                onApply={refreshAllPrices}
+                riskSettings={riskSettings}
+                onChange={updateRiskSettings}
+              />
+              <div className="section-heading">
+                <div>
+                  <h2>{activeWatchlist?.name || "Watchlist"}</h2>
+                  <p className="muted">Live Webull prices with clock-aligned EMA levels.</p>
+                </div>
+                <div className="live-price-actions">
+                  <button type="button" onClick={() => loadLivePrices({ manual: true })} disabled={loading.prices}>
+                    Refresh Prices
+                  </button>
+                </div>
               </div>
-              <div className="live-price-actions">
-                <button type="button" onClick={() => loadLivePrices({ manual: true })} disabled={loading.prices}>
-                  Refresh Prices
-                </button>
-              </div>
-            </div>
 
-            {liveAlert ? <div className="alert">{liveAlert}</div> : null}
+              {liveAlert ? <div className="alert">{liveAlert}</div> : null}
 
-            <div className="active-watchlist-tables">
-              <div className="trend-price-grid">
-                <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
-                <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
-                <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
+              <div className="active-watchlist-tables">
+                <div className="trend-price-grid">
+                  <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
+                  <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
+                  <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
+                </div>
+                <p className="muted">{updatedText}</p>
               </div>
-              <p className="muted">{updatedText}</p>
-            </div>
-          </section>
-          <aside className="global-mtf-panel" aria-label="MTFs from all tabs">
-            <MtfTable
-              quotes={allMtfs}
-              title="MTFs"
-              showWatchlist
-              buyState={buyState}
-              focusedSymbol={focusedMtfSymbol}
-              onBuy={buyMtfQuote}
-              onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
-            />
-            <MtfTable
-              quotes={waitingMtfs}
-              title="Wait"
-              showWatchlist
-              emptyText="No waiting MTF cloud setups right now."
-              focusedSymbol={focusedMtfSymbol}
-            />
-          </aside>
-        </div>
+            </section>
+            <aside className="global-mtf-panel" aria-label="MTFs from all tabs">
+              <MtfTable
+                quotes={longMtfs}
+                title="Long"
+                showWatchlist
+                buyState={buyState}
+                emptyText="None"
+                focusedSymbol={focusedMtfSymbol}
+                onBuy={buyMtfQuote}
+                onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
+                showSignalTags={false}
+              />
+              <MtfTable
+                quotes={shortMtfs}
+                title="Short"
+                showWatchlist
+                buyState={buyState}
+                emptyText="None"
+                focusedSymbol={focusedMtfSymbol}
+                onBuy={buyMtfQuote}
+                onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
+                showSignalTags={false}
+              />
+              <MtfTable
+                quotes={waitingMtfs}
+                title="Wait"
+                showWatchlist
+                emptyText="None"
+                focusedSymbol={focusedMtfSymbol}
+              />
+            </aside>
+          </div>
+        )}
         <HiddenLegacyPanels />
       </main>
     </>
+  );
+}
+
+function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const needle = query.trim().toUpperCase();
+    if (!needle) return alertLog;
+    return alertLog.filter((item) => (
+      item.symbol.includes(needle)
+      || item.reason.toUpperCase().includes(needle)
+      || item.action.toUpperCase().includes(needle)
+      || item.watchlistName.toUpperCase().includes(needle)
+    ));
+  }, [alertLog, query]);
+
+  return (
+    <section className="alert-log-page">
+      <div className="alert-log-header">
+        <div>
+          <h2>Alert Log</h2>
+          <p className="muted">Search past MTF alerts by stock, setup, action, or list.</p>
+        </div>
+        <button type="button" className="secondary-button" onClick={onClear} disabled={!alertLog.length}>Clear</button>
+      </div>
+      <div className="alert-log-search">
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search ticker or setup"
+          aria-label="Search alert log"
+        />
+        <strong>{filtered.length}</strong>
+      </div>
+      <div className="alert-log-list">
+        {filtered.length ? filtered.map((item) => (
+          <article key={item.id} className={`alert-log-item ${String(item.action).toLowerCase()}`}>
+            <button type="button" onClick={() => onSelectSymbol(item.symbol)}>{item.symbol}</button>
+            <div>
+              <div className="alert-log-title">
+                <strong>{item.action || "-"}</strong>
+                <span>{item.reason}</span>
+              </div>
+              <div className="alert-log-meta">
+                <time dateTime={item.alertedAt}>Alerted {formatDateTime(item.alertedAt)}</time>
+                {item.candleTime ? <time dateTime={item.candleTime}>Candle {formatDateTime(item.candleTime)}</time> : null}
+                <span>{item.watchlistName}</span>
+                {item.entryPrice != null ? <span>Entry {formatPrice(item.entryPrice)}</span> : null}
+                {item.price != null ? <span>Price {formatPrice(item.price)}</span> : null}
+              </div>
+              {item.riskPlan ? (
+                <div className="alert-log-risk">
+                  <span>Qty {item.riskPlan.shares}</span>
+                  <span>SL {formatPrice(item.riskPlan.stop)}</span>
+                  <span>Risk/sh {formatPrice(item.riskPlan.risk_per_share)}</span>
+                  {item.riskPlan.volatility?.grade ? <span>{item.riskPlan.volatility.grade} {formatPrice(item.riskPlan.volatility.average_range)} avg</span> : null}
+                </div>
+              ) : null}
+            </div>
+          </article>
+        )) : (
+          <article className="alert-log-empty">
+            <strong>No alerts found</strong>
+            <span>New MTF alerts will appear here with the time they were alerted.</span>
+          </article>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function RiskSettingsPanel({ disabled, riskSettings, onApply, onChange }) {
+  function update(key, value) {
+    onChange({ ...riskSettings, [key]: value });
+  }
+
+  return (
+    <section className="risk-settings-panel" aria-label="A++ risk settings">
+      <div className="risk-field">
+        <span>Max risk</span>
+        <label>
+          <b>$</b>
+          <input
+            type="number"
+            min="1"
+            max="10000"
+            step="1"
+            value={riskSettings.riskAmount}
+            disabled={disabled}
+            onChange={(event) => update("riskAmount", event.target.value)}
+          />
+        </label>
+      </div>
+      <div className="risk-field">
+        <span>SL mode</span>
+        <select
+          value={riskSettings.stopMode}
+          disabled={disabled}
+          onChange={(event) => update("stopMode", event.target.value)}
+        >
+          <option value="auto">Auto range</option>
+          <option value="fixed">Fixed $</option>
+        </select>
+      </div>
+      {riskSettings.stopMode === "fixed" ? (
+        <div className="risk-field">
+          <span>Cloud buffer</span>
+          <label>
+            <b>$</b>
+            <input
+              type="number"
+              min="0.05"
+              max="25"
+              step="0.05"
+              value={riskSettings.fixedStopBuffer}
+              disabled={disabled}
+              onChange={(event) => update("fixedStopBuffer", event.target.value)}
+            />
+          </label>
+        </div>
+      ) : (
+        <div className="risk-field auto-risk-note">
+          <span>Range</span>
+          <strong>Last 3D</strong>
+        </div>
+      )}
+      <button type="button" className="risk-apply-button" disabled={disabled} onClick={onApply}>
+        Apply
+      </button>
+    </section>
   );
 }
 

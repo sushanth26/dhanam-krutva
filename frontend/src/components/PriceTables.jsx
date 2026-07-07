@@ -1,9 +1,10 @@
-import { CloudTag, MtfTag } from "./Tags";
+import { CloudTag, MtfTag, TradeTag } from "./Tags";
 import { cloudStatus, formatPrice } from "../lib/market";
 
 export function MtfTable({
   quotes,
   showWatchlist = false,
+  showSignalTags = true,
   title = "MTFs",
   buyState = {},
   emptyText = "No stocks are on hourly or daily EMA clouds right now.",
@@ -35,6 +36,7 @@ export function MtfTable({
                 buyState={buyState[quote.symbol]}
                 focused={quote.symbol === focusedSymbol}
                 quote={quote}
+                showSignalTags={showSignalTags}
                 showWatchlist={showWatchlist}
                 onBuy={onBuy}
                 onDismissNew={onDismissNew}
@@ -79,8 +81,10 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
   );
 }
 
-function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }) {
+function MtfRow({ buyState, focused, quote, showSignalTags, showWatchlist, onBuy, onDismissNew }) {
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
+  const riskPlan = aPlusPlusRiskPlan(quote.mtf_matches);
+  const tradeAction = tradeActionForMatches(quote.mtf_matches);
   const dismissNew = quote.is_new ? () => onDismissNew?.(quote) : undefined;
   const waiting = quote.mtf_matches?.some((match) => match.status === "waiting");
   return (
@@ -96,6 +100,7 @@ function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }
           disabled={!onBuy}
           onBuy={() => onBuy?.(quote)}
           symbol={quote.symbol}
+          tradeAction={tradeAction}
           waiting={waiting}
         />
       )}
@@ -109,19 +114,44 @@ function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }
       <td className="mtf-tags">
         {quote.mtf_matches.map((match) => (
           <span key={match.label} className="mtf-tag-group">
-            <MtfTag label={match.label} />
-            {match.trend ? <CloudTag status={match.trend} /> : null}
+            <MtfTag label={match.label} match={match} />
+            {showSignalTags && match.trade_action ? <TradeTag action={match.trade_action} /> : null}
+            {showSignalTags && !match.trade_action && match.trend ? <CloudTag status={match.trend} /> : null}
           </span>
         ))}
+        {riskPlan ? <RiskPlan plan={riskPlan} /> : null}
       </td>
       <td className="trigger-time">{triggerTime}</td>
     </BaseRow>
   );
 }
 
-function BuyCell({ buyState, disabled, onBuy, symbol, waiting }) {
+function RiskPlan({ plan }) {
+  return (
+    <span className="risk-plan">
+      <span>Entry {formatPrice(plan.entry)}</span>
+      Qty <b>{plan.shares}</b>
+      <span>SL {formatPrice(plan.stop)}</span>
+      <small>Risk {formatPrice(plan.risk_per_share)}/sh</small>
+      {plan.volatility?.grade ? (
+        <small>{volatilityLabel(plan.volatility)}</small>
+      ) : null}
+    </span>
+  );
+}
+
+function BuyCell({ buyState, disabled, onBuy, symbol, tradeAction, waiting }) {
   if (waiting) {
     return <td className="row-action-cell buy-action-cell" aria-label="Waiting for candle close"></td>;
+  }
+  if (tradeAction === "Short") {
+    return (
+      <td className="row-action-cell buy-action-cell">
+        <button type="button" className="buy-one short-signal" disabled title={`Short signal for ${symbol}; short order is not wired yet.`}>
+          Short
+        </button>
+      </td>
+    );
   }
   const loading = buyState?.status === "loading";
   const title = `Buy 1 share of ${symbol}`;
@@ -204,4 +234,21 @@ function mtfTriggerTime(matches) {
   const date = parsed.toLocaleDateString([], { month: "short", day: "numeric" });
   const time = parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return `${date} ${time}`;
+}
+
+function aPlusPlusRiskPlan(matches) {
+  return (matches || []).find((match) => match.label === "10m bounce 34/50" && match.risk_plan)?.risk_plan || null;
+}
+
+function tradeActionForMatches(matches) {
+  const actions = new Set((matches || []).map((match) => match.trade_action).filter(Boolean));
+  if (actions.has("Long") && !actions.has("Short")) return "Long";
+  if (actions.has("Short") && !actions.has("Long")) return "Short";
+  return "";
+}
+
+function volatilityLabel(volatility) {
+  const grade = String(volatility.grade || "unknown");
+  const range = volatility.average_range == null ? "" : ` ${formatPrice(volatility.average_range)} avg`;
+  return `${grade}${range}`;
 }

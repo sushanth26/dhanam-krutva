@@ -179,6 +179,15 @@ def mtf_notification_payload(quotes: list[dict[str, Any]]) -> dict[str, Any]:
             {
                 "symbol": quote.get("symbol"),
                 "labels": [match.get("label") for match in quote.get("mtf_matches", [])],
+                "details": [
+                    {
+                        "label": match.get("label"),
+                        "display_label": display_label(match),
+                        "entry_price": match_entry_price(match),
+                    }
+                    for match in quote.get("mtf_matches", [])
+                    if match.get("label")
+                ],
             }
             for quote in quotes
         ],
@@ -202,7 +211,11 @@ def mtf_notification_details(quotes: list[dict[str, Any]]) -> dict[str, Any]:
     matches = [
         {
             "symbol": quote.get("symbol"),
-            "labels": [match.get("label") for match in quote.get("mtf_matches", []) if match.get("label")],
+            "labels": [
+                notification_match_text(match)
+                for match in quote.get("mtf_matches", [])
+                if match.get("label")
+            ],
         }
         for quote in quotes
     ]
@@ -253,10 +266,37 @@ def mtf_url(symbol: str) -> str:
 def describe_mtf_matches(quotes: list[dict[str, Any]]) -> str:
     parts = []
     for quote in quotes:
-        labels = " + ".join(match.get("label", "") for match in quote.get("mtf_matches", []) if match.get("label"))
+        labels = " + ".join(notification_match_text(match) for match in quote.get("mtf_matches", []) if match.get("label"))
         if labels:
             parts.append(f"{quote.get('symbol')} {labels}")
     return " | ".join(parts)
+
+
+def display_label(match: dict[str, Any]) -> str:
+    label = str(match.get("display_label") or match.get("label") or "")
+    if match.get("trade_action") == "Short" and "bounce" in label:
+        return label.replace("bounce", "rejection")
+    return label
+
+
+def match_entry_price(match: dict[str, Any]) -> Any:
+    risk_plan = match.get("risk_plan") if isinstance(match.get("risk_plan"), dict) else {}
+    return match.get("entry_price") or risk_plan.get("entry")
+
+
+def notification_match_text(match: dict[str, Any]) -> str:
+    label = display_label(match)
+    entry = match_entry_price(match)
+    if entry is None:
+        return label
+    return f"{label} @ {format_price(entry)}"
+
+
+def format_price(value: Any) -> str:
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def mtf_signature(quotes: list[dict[str, Any]]) -> str:
@@ -313,18 +353,34 @@ def filter_payload_by_strategies(payload: dict[str, Any], strategy_state: dict[s
     filtered_matches = []
     for item in payload.get("matches", []):
         labels = []
+        details = []
+        detail_by_label = {
+            str(detail.get("label") or ""): detail
+            for detail in item.get("details", [])
+            if isinstance(detail, dict)
+        }
         for label in item.get("labels", []):
             label_text = str(label or "")
             if label_text and strategies.get(strategy_id_for_label(label_text), True):
                 labels.append(label_text)
+                if label_text in detail_by_label:
+                    details.append(detail_by_label[label_text])
         if labels:
-            filtered_matches.append({"symbol": item.get("symbol"), "labels": labels})
+            filtered_matches.append({"symbol": item.get("symbol"), "labels": labels, "details": details})
 
     if not filtered_matches:
         return None
 
     notification = mtf_notification_details([
-        {"symbol": item.get("symbol"), "mtf_matches": [{"label": label} for label in item.get("labels", [])]}
+        {
+            "symbol": item.get("symbol"),
+            "mtf_matches": [
+                item.get("details", [])[index]
+                if index < len(item.get("details", []))
+                else {"label": label}
+                for index, label in enumerate(item.get("labels", []))
+            ],
+        }
         for item in filtered_matches
     ])
     return {

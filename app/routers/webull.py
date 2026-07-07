@@ -27,9 +27,20 @@ def webull_quote(symbol: str = Query(default="AAPL", min_length=1, max_length=16
 
 
 @router.get("/live-prices")
-def webull_live_prices(symbols: str = Query(default=",".join(LIVE_WATCHLIST))):
+def webull_live_prices(
+    symbols: str = Query(default=",".join(LIVE_WATCHLIST)),
+    risk_amount: float = Query(default=100, ge=1, le=10000),
+    stop_mode: str = Query(default="fixed", pattern="^(fixed|auto)$"),
+    fixed_stop_buffer: float = Query(default=1, ge=0.05, le=25),
+):
     try:
-        return build_live_prices(service(), symbols)
+        return build_live_prices(
+            service(),
+            symbols,
+            risk_amount=risk_amount,
+            stop_mode=stop_mode,
+            fixed_stop_buffer=fixed_stop_buffer,
+        )
     except WebullConfigurationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

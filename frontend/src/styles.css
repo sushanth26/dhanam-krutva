@@ -273,6 +273,11 @@ button:hover {
   padding: 0 6px;
 }
 
+.account-menu-button.active {
+  background: #dff4e9;
+  color: #0d513f;
+}
+
 .account-menu {
   background: #ffffff;
   border: 1px solid #dbe2d8;
@@ -923,6 +928,79 @@ select {
   padding: 0 14px;
 }
 
+.risk-settings-panel {
+  align-items: end;
+  background: #f8faf7;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 10px;
+}
+
+.risk-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.risk-field > span {
+  color: #68766c;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.risk-field label {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 6px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  min-height: 38px;
+  overflow: hidden;
+}
+
+.risk-field label b {
+  color: #68766c;
+  font-size: 13px;
+  padding-left: 10px;
+}
+
+.risk-field input,
+.risk-field select,
+.auto-risk-note strong {
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 6px;
+  color: #19211f;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  min-height: 38px;
+  min-width: 0;
+  padding: 0 9px;
+  width: 100%;
+}
+
+.risk-field label input {
+  border: 0;
+  border-radius: 0;
+  padding-left: 5px;
+}
+
+.auto-risk-note strong {
+  align-items: center;
+  display: inline-flex;
+}
+
+.risk-apply-button {
+  min-height: 38px;
+  padding: 0 12px;
+}
+
 .trend-price-grid {
   display: grid;
   gap: 16px;
@@ -934,6 +1012,153 @@ select {
   display: grid;
   gap: 18px;
   grid-template-columns: 1fr;
+}
+
+.alert-log-page {
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(25, 33, 31, 0.06);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.alert-log-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.alert-log-header h2 {
+  font-size: 22px;
+  margin: 0;
+}
+
+.alert-log-header .muted {
+  margin: 4px 0 0;
+}
+
+.alert-log-search {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.alert-log-search input {
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 6px;
+  color: #19211f;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  min-height: 40px;
+  min-width: 0;
+  padding: 0 12px;
+}
+
+.alert-log-search strong {
+  background: #f8faf7;
+  border: 1px solid #dbe2d8;
+  border-radius: 999px;
+  color: #68766c;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 5px 9px;
+}
+
+.alert-log-list {
+  display: grid;
+}
+
+.alert-log-item {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 64px minmax(0, 1fr);
+  padding: 10px 0;
+}
+
+.alert-log-item + .alert-log-item {
+  border-top: 1px solid #dbe2d8;
+}
+
+.alert-log-item > button {
+  background: #eef2f5;
+  color: #19211f;
+  min-height: 32px;
+  padding: 0 8px;
+  width: 100%;
+}
+
+.alert-log-item.long > button,
+.alert-log-item.long .alert-log-title strong {
+  background: #dff4e9;
+  color: #075747;
+}
+
+.alert-log-item.short > button,
+.alert-log-item.short .alert-log-title strong {
+  background: #ffe1e1;
+  color: #8a2424;
+}
+
+.alert-log-title {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.alert-log-title strong {
+  background: #eef2f5;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 7px;
+}
+
+.alert-log-title span {
+  color: #19211f;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.alert-log-meta,
+.alert-log-risk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  margin-top: 5px;
+}
+
+.alert-log-meta span,
+.alert-log-meta time,
+.alert-log-risk span {
+  color: #68766c;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.alert-log-risk span {
+  background: #f8faf7;
+  border-radius: 999px;
+  padding: 3px 6px;
+}
+
+.alert-log-empty {
+  display: grid;
+  gap: 4px;
+  padding: 18px 0;
+}
+
+.alert-log-empty span {
+  color: #68766c;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .active-watchlist-tables {
@@ -957,6 +1182,10 @@ select {
   margin-bottom: 0;
 }
 
+.global-mtf-panel .mtf-bucket + .mtf-bucket {
+  margin-top: 18px;
+}
+
 .global-mtf-panel .global-mtf-table {
   display: block;
 }
@@ -974,10 +1203,11 @@ select {
   display: grid;
   gap: 3px 10px;
   grid-template-areas:
-    "symbol list buy"
-    "symbol tags buy"
-    "symbol time buy";
-  grid-template-columns: 72px minmax(0, 1fr) 58px;
+    "symbol list"
+    "symbol tags"
+    "symbol time"
+    "symbol buy";
+  grid-template-columns: 72px minmax(0, 1fr);
   padding: 12px 0;
 }
 
@@ -1017,7 +1247,8 @@ select {
 
 .global-mtf-panel .global-mtf-table .buy-action-cell {
   grid-area: buy;
-  justify-self: end;
+  justify-self: start;
+  width: auto;
 }
 
 .price-bucket {
@@ -1218,6 +1449,34 @@ select {
   color: #68766c;
 }
 
+.trade-tag {
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 28px;
+  min-width: 46px;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.trade-tag.long {
+  background: #dff4e9;
+  color: #075747;
+}
+
+.trade-tag.short {
+  background: #ffe1e1;
+  color: #8a2424;
+}
+
+.trade-tag.unknown {
+  background: #eef2f5;
+  color: #68766c;
+}
+
 .mtf-tags {
   display: flex;
   flex-wrap: wrap;
@@ -1244,6 +1503,44 @@ select {
   flex-wrap: nowrap;
   gap: 4px;
   max-width: 100%;
+}
+
+.mtf-tag-group,
+.mtf-tag,
+.cloud-tag,
+.trade-tag {
+  flex: 0 0 auto;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+
+.risk-plan {
+  align-items: center;
+  background: #f8faf7;
+  border: 1px solid #dbe2d8;
+  border-radius: 999px;
+  color: #22302c;
+  display: inline-flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 5px;
+  line-height: 1.15;
+  max-width: 100%;
+  padding: 5px 8px;
+}
+
+.risk-plan b {
+  color: #12664f;
+}
+
+.risk-plan span,
+.risk-plan small {
+  color: #68766c;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: capitalize;
 }
 
 .mtf-tag.hourly {
@@ -1329,6 +1626,12 @@ select {
 }
 
 .buy-one.error {
+  background: #ffe1e1;
+  border-color: #ef9a9a;
+  color: #8a2424;
+}
+
+.buy-one.short-signal {
   background: #ffe1e1;
   border-color: #ef9a9a;
   color: #8a2424;
@@ -1484,6 +1787,10 @@ h1 {
   flex: 1 1 130px;
 }
 
+  .risk-settings-panel {
+    grid-template-columns: 1fr;
+  }
+
 .live-price-table-wrap {
   overflow-x: hidden;
 }
@@ -1513,11 +1820,107 @@ h1 {
   align-items: center;
 }
 
+.global-mtf-panel {
+  box-shadow: none;
+  margin-top: 8px;
+  padding: 8px;
+}
+
+.global-mtf-panel .bucket-heading {
+  margin-bottom: 2px;
+}
+
+.global-mtf-panel .bucket-heading h3 {
+  font-size: 16px;
+}
+
+.global-mtf-panel .bucket-heading span {
+  font-size: 11px;
+  padding: 2px 7px;
+}
+
+.global-mtf-panel .mtf-bucket + .mtf-bucket {
+  margin-top: 8px;
+}
+
+.global-mtf-panel .global-mtf-table .stock-row {
+  gap: 2px 6px;
+  grid-template-areas:
+    "symbol tags";
+  grid-template-columns: 54px minmax(0, 1fr);
+  min-height: 34px;
+  padding: 5px 0;
+}
+
+.global-mtf-panel .global-mtf-table tbody tr:not(.stock-row) td {
+  color: #68766c;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 3px 0 5px;
+}
+
+.global-mtf-panel .global-mtf-table .stock-row > td:first-child strong {
+  font-size: 15px;
+}
+
+.global-mtf-panel .global-mtf-table .watchlist-cell,
+.global-mtf-panel .global-mtf-table .trigger-time,
+.global-mtf-panel .global-mtf-table .buy-action-cell {
+  display: none;
+}
+
+.global-mtf-panel .global-mtf-table .buy-action-cell {
+  margin-top: 2px;
+}
+
+.global-mtf-panel .mtf-tags {
+  gap: 3px;
+}
+
+.global-mtf-panel .mtf-tag-group {
+  gap: 3px;
+}
+
 .mtf-tag,
 .cloud-tag {
-  font-size: 11px;
-  min-height: 28px;
-  padding: 5px 8px;
+  font-size: 10px;
+  min-height: 22px;
+  padding: 3px 6px;
+}
+
+.trade-tag {
+  font-size: 10px;
+  min-height: 22px;
+  min-width: 40px;
+  padding: 3px 6px;
+}
+
+.risk-plan {
+  border-radius: 6px;
+  flex: 0 1 auto;
+  font-size: 10px;
+  gap: 3px;
+  min-height: 22px;
+  padding: 3px 6px;
+}
+
+.risk-plan span,
+.risk-plan small {
+  font-size: 10px;
+}
+
+.risk-plan small:last-child {
+  display: none;
+}
+
+.new-mtf-tag {
+  font-size: 9px;
+  min-height: 18px;
+  padding: 2px 5px;
+}
+
+.buy-one {
+  min-width: 64px;
 }
 
 @media (min-width: 760px) {
@@ -1556,6 +1959,19 @@ h1 {
 
   .live-price-actions button {
     flex: 0 0 auto;
+  }
+
+  .alert-log-page {
+    padding: 18px;
+  }
+
+  .alert-log-item {
+    grid-template-columns: 78px minmax(0, 1fr);
+    padding: 12px 0;
+  }
+
+  .risk-settings-panel {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .top-actions {
@@ -1625,6 +2041,101 @@ h1 {
   .live-price-table th:first-child,
   .live-price-table td:first-child {
     width: 72px;
+  }
+
+  .global-mtf-panel {
+    box-shadow: 0 8px 28px rgba(25, 33, 31, 0.06);
+    margin-top: 16px;
+    padding: 18px;
+  }
+
+  .global-mtf-panel .bucket-heading {
+    margin-bottom: 8px;
+  }
+
+  .global-mtf-panel .bucket-heading h3 {
+    font-size: 15px;
+  }
+
+  .global-mtf-panel .bucket-heading span {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+
+  .global-mtf-panel .mtf-bucket + .mtf-bucket {
+    margin-top: 18px;
+  }
+
+  .global-mtf-panel .global-mtf-table .stock-row {
+    gap: 3px 10px;
+    grid-template-areas:
+      "symbol list buy"
+      "symbol tags buy"
+      "symbol time buy";
+    grid-template-columns: 72px minmax(0, 1fr) 64px;
+    min-height: 0;
+    padding: 12px 0;
+  }
+
+  .global-mtf-panel .global-mtf-table .stock-row > td:first-child strong {
+    font-size: inherit;
+  }
+
+  .global-mtf-panel .global-mtf-table .watchlist-cell,
+  .global-mtf-panel .global-mtf-table .trigger-time,
+  .global-mtf-panel .global-mtf-table .buy-action-cell {
+    display: initial;
+  }
+
+  .global-mtf-panel .global-mtf-table .buy-action-cell {
+    justify-self: end;
+    margin-top: 0;
+  }
+
+  .global-mtf-panel .mtf-tags {
+    gap: 6px;
+  }
+
+  .global-mtf-panel .mtf-tag-group {
+    gap: 4px;
+  }
+
+  .mtf-tag,
+  .cloud-tag {
+    font-size: 11px;
+    min-height: 28px;
+    padding: 5px 8px;
+  }
+
+  .trade-tag {
+    font-size: 11px;
+    min-height: 28px;
+    min-width: 46px;
+    padding: 5px 8px;
+  }
+
+  .risk-plan {
+    border-radius: 999px;
+    flex: 1 1 100%;
+    font-size: 11px;
+    gap: 5px;
+    min-height: 0;
+    padding: 5px 8px;
+  }
+
+  .risk-plan span,
+  .risk-plan small {
+    font-size: 11px;
+  }
+
+  .risk-plan small:last-child {
+    display: inline;
+  }
+
+  .new-mtf-tag {
+    font-size: 10px;
+    min-height: 22px;
+    padding: 3px 7px;
   }
 
 }

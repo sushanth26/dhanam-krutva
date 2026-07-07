@@ -16,6 +16,9 @@ export function Header({
   onDisableNotifications,
   notifications,
   onMarkNotificationsRead,
+  activePage,
+  alertLogCount,
+  onNavigate,
   strategyState,
   onToggleStrategy,
 }) {
@@ -70,6 +73,27 @@ export function Header({
           <h1>Dhanam Krutva</h1>
         </div>
         <div className="top-actions">
+          <button
+            type="button"
+            className={`account-menu-button secondary-button ${activePage === "home" ? "active" : ""}`}
+            disabled={pageLoading}
+            onClick={() => onNavigate("home")}
+            aria-label="Open scanner"
+            title="Scanner"
+          >
+            <span>Scanner</span>
+          </button>
+          <button
+            type="button"
+            className={`account-menu-button secondary-button ${activePage === "alerts" ? "active" : ""}`}
+            disabled={pageLoading}
+            onClick={() => onNavigate("alerts")}
+            aria-label="Open alert log"
+            title="Alert Log"
+          >
+            <span>Alerts</span>
+            <b>{alertLogCount}</b>
+          </button>
           <div className="strategy-menu-anchor" ref={strategiesAnchorRef}>
             <button
               type="button"
