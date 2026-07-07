@@ -5,7 +5,7 @@ import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
 import { getJson, postJson } from "./lib/api";
 import { ALERT_STRATEGIES, filterQuotesByStrategy, loadStrategyState, saveStrategyState, strategyIdForMatch } from "./lib/alertStrategies";
-import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, findAccountId, flattenAccounts, formatPrice, isMarketRefreshWindow, matchEntryPrice, notificationMatchText, mtfSignature } from "./lib/market";
+import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, flattenAccounts, formatPrice, isMarketRefreshWindow, marginTradingAccountId, matchEntryPrice, notificationMatchText, mtfSignature, preferredAccountId } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
 const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
@@ -405,12 +405,14 @@ export default function App() {
   const autoTradeRef = useRef(autoTrade);
   const autoTradeExecutionsRef = useRef(new Set(loadAutoTradeExecutions()));
   const selectedAccountIdRef = useRef(selectedAccountId);
+  const accountsRef = useRef(accounts);
   const watchlistTabRef = useRef(watchlistTab);
   const watchlistsRef = useRef(watchlists);
   const activeWatchlist = watchlists.find((item) => item.id === watchlistTab) || watchlists[0];
   const quotes = quotesByTab[watchlistTab] || [];
   const updatedText = updatedTextByTab[watchlistTab] || "";
   const pageLoading = loading.shell || loading.watchlists || loading.prices || loading.notifications;
+  const tradingAccountId = useMemo(() => marginTradingAccountId(accounts, selectedAccountId), [accounts, selectedAccountId]);
 
   const trendBuckets = useMemo(() => {
     return quotes.reduce(
@@ -460,7 +462,7 @@ export default function App() {
       }
       const nextAccounts = flattenAccounts(accountResponse.data);
       setAccounts(nextAccounts);
-      setSelectedAccountId((current) => current || findAccountId(nextAccounts));
+      setSelectedAccountId((current) => preferredAccountId(nextAccounts, current));
     } catch (error) {
       setAlert(error.message);
     } finally {
@@ -686,9 +688,9 @@ export default function App() {
 
   async function buyMtfQuote(quote) {
     const symbol = quote.symbol;
-    const accountId = selectedAccountId;
+    const accountId = marginTradingAccountId(accounts, selectedAccountId);
     if (!accountId) {
-      setLiveAlert("Select a Webull account before buying.");
+      setLiveAlert("Select a Webull margin account before buying.");
       return;
     }
     if (quote.mtf_matches?.some((match) => match.status === "waiting")) {
@@ -718,11 +720,11 @@ export default function App() {
 
   async function autoBuyLongAlerts(tab, quotes) {
     if (!autoTradeRef.current.enabled) return;
-    const accountId = selectedAccountIdRef.current;
+    const accountId = marginTradingAccountId(accountsRef.current, selectedAccountIdRef.current);
     if (!accountId) {
       addNotification({
         title: "Auto-buy skipped",
-        message: "Select a Webull account before enabling auto-buy.",
+        message: "Select a Webull margin account before enabling auto-buy.",
         kind: "system",
       });
       return;
@@ -1053,6 +1055,10 @@ export default function App() {
   }, [selectedAccountId]);
 
   useEffect(() => {
+    accountsRef.current = accounts;
+  }, [accounts]);
+
+  useEffect(() => {
     watchlistTabRef.current = watchlistTab;
   }, [watchlistTab]);
 
@@ -1074,7 +1080,7 @@ export default function App() {
         loading={loading}
         pageLoading={pageLoading}
         onRefresh={refreshShell}
-        onSelectAccount={setSelectedAccountId}
+        onSelectAccount={(accountId) => setSelectedAccountId(preferredAccountId(accounts, accountId))}
         notificationState={notificationState}
         onEnableNotifications={enableAppNotifications}
         onDisableNotifications={disableAppNotifications}
@@ -1129,7 +1135,7 @@ export default function App() {
                 onChange={updateRiskSettings}
               />
               <AutoTradePanel
-                accountId={selectedAccountId}
+                accountId={tradingAccountId}
                 autoTrade={autoTrade}
                 disabled={loading.prices}
                 onChange={updateAutoTradeSettings}

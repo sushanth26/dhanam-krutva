@@ -26,6 +26,9 @@ def test_auto_long_uses_saved_watchlist_and_places_bracket_payload(tmp_path, mon
     monkeypatch.setattr(trade, "get_settings", lambda: SimpleNamespace(watchlist_file=watchlist_file))
 
     class FakeService:
+        def account_list(self):
+            return {"data": [{"accountId": "acct-1", "accountType": "MARGIN"}]}
+
         def buy_one_with_take_profit(self, **kwargs):
             return {"ok": True, **kwargs}
 
@@ -49,6 +52,37 @@ def test_auto_long_uses_saved_watchlist_and_places_bracket_payload(tmp_path, mon
     assert response["entry_price"] == 100
     assert response["stop_price"] == 95
     assert response["target_price"] == 105
+
+
+def test_auto_long_rejects_cash_account(tmp_path, monkeypatch):
+    watchlist_file = tmp_path / "watchlists.json"
+    WatchlistStore(watchlist_file).replace([{"id": "og", "symbols": ["AAOI"]}])
+    monkeypatch.setattr(trade, "get_settings", lambda: SimpleNamespace(watchlist_file=watchlist_file))
+
+    class FakeService:
+        def account_list(self):
+            return {"data": [{"accountId": "cash-1", "accountType": "CASH"}]}
+
+        def buy_one_with_take_profit(self, **kwargs):
+            raise AssertionError("cash accounts must not place orders")
+
+    monkeypatch.setattr(trade, "service", lambda: FakeService())
+
+    try:
+        trade.auto_buy_one_share_with_take_profit(
+            trade.AutoLongRequest(
+                account_id="cash-1",
+                symbol="AAOI",
+                entry_price=100,
+                stop_price=95,
+                target_price=105,
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert exc.detail == "Trading requires a margin account."
+    else:
+        raise AssertionError("auto long should reject cash accounts")
 
 
 def test_auto_long_rejects_symbols_outside_saved_watchlists(tmp_path, monkeypatch):

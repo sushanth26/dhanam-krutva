@@ -659,6 +659,18 @@ h3 {
   color: #19211f;
 }
 
+.account-chip.view-only {
+  background: #f3f5f2;
+  border-color: #dbe2d8;
+  color: #68766c;
+}
+
+.account-chip.view-only:hover {
+  background: #f3f5f2;
+  border-color: #dbe2d8;
+  color: #68766c;
+}
+
 .account-chip b,
 .account-chip small {
   display: block;

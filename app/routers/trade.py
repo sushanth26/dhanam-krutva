@@ -40,7 +40,9 @@ def buy_one_share(request: BuyRequest):
     if symbol not in approved_trade_symbols():
         raise HTTPException(status_code=400, detail="Symbol is not in the approved strategy watchlist.")
     try:
-        return service().buy_one_market_order(account_id=request.account_id, symbol=symbol)
+        webull = service()
+        require_margin_account(webull, request.account_id)
+        return webull.buy_one_market_order(account_id=request.account_id, symbol=symbol)
     except WebullConfigurationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -51,7 +53,9 @@ def auto_buy_one_share_with_take_profit(request: AutoLongRequest):
     if symbol not in approved_trade_symbols():
         raise HTTPException(status_code=400, detail="Symbol is not in the approved strategy watchlist.")
     try:
-        return service().buy_one_with_take_profit(
+        webull = service()
+        require_margin_account(webull, request.account_id)
+        return webull.buy_one_with_take_profit(
             account_id=request.account_id,
             symbol=symbol,
             entry_price=round(request.entry_price, 4),
@@ -67,3 +71,50 @@ def approved_trade_symbols() -> set[str]:
     for watchlist in WatchlistStore(get_settings().watchlist_file).all():
         symbols.update(str(symbol or "").strip().upper() for symbol in watchlist.get("symbols", []))
     return {symbol for symbol in symbols if symbol}
+
+
+def require_margin_account(webull, account_id: str) -> None:
+    accounts_payload = webull.account_list()
+    account = find_account_record(accounts_payload.get("data", accounts_payload), account_id)
+    if not account or "MARGIN" not in account_type_text(account):
+        raise HTTPException(status_code=400, detail="Trading requires a margin account.")
+
+
+def find_account_record(value, account_id: str):
+    if isinstance(value, list):
+        for item in value:
+            found = find_account_record(item, account_id)
+            if found:
+                return found
+    if isinstance(value, dict):
+        if account_record_id(value) == account_id:
+            return value
+        for item in value.values():
+            found = find_account_record(item, account_id)
+            if found:
+                return found
+    return None
+
+
+def account_record_id(value: dict) -> str | None:
+    for key in ("account_id", "accountId", "id"):
+        if value.get(key):
+            return str(value[key])
+    return None
+
+
+def account_type_text(value) -> str:
+    if isinstance(value, list):
+        for item in value:
+            found = account_type_text(item)
+            if found:
+                return found
+    if isinstance(value, dict):
+        for key in ("account_type", "accountType", "accountTypeName", "type", "broker"):
+            if value.get(key):
+                return str(value[key]).upper()
+        for item in value.values():
+            found = account_type_text(item)
+            if found:
+                return found
+    return ""
