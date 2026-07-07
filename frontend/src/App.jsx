@@ -890,7 +890,7 @@ export default function App() {
               title="Long"
               showWatchlist
               buyState={buyState}
-              emptyText="No long MTF setups right now."
+              emptyText="None"
               focusedSymbol={focusedMtfSymbol}
               onBuy={buyMtfQuote}
               onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
@@ -901,7 +901,7 @@ export default function App() {
               title="Short"
               showWatchlist
               buyState={buyState}
-              emptyText="No short MTF setups right now."
+              emptyText="None"
               focusedSymbol={focusedMtfSymbol}
               onBuy={buyMtfQuote}
               onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
@@ -911,7 +911,7 @@ export default function App() {
               quotes={waitingMtfs}
               title="Wait"
               showWatchlist
-              emptyText="No waiting MTF cloud setups right now."
+              emptyText="None"
               focusedSymbol={focusedMtfSymbol}
             />
           </aside>

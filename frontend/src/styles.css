@@ -1669,23 +1669,102 @@ h1 {
 }
 
 .global-mtf-panel {
-  padding: 14px;
+  box-shadow: none;
+  margin-top: 8px;
+  padding: 8px;
+}
+
+.global-mtf-panel .bucket-heading {
+  margin-bottom: 2px;
+}
+
+.global-mtf-panel .bucket-heading h3 {
+  font-size: 16px;
+}
+
+.global-mtf-panel .bucket-heading span {
+  font-size: 11px;
+  padding: 2px 7px;
+}
+
+.global-mtf-panel .mtf-bucket + .mtf-bucket {
+  margin-top: 8px;
 }
 
 .global-mtf-panel .global-mtf-table .stock-row {
-  gap: 6px 8px;
-  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 2px 6px;
+  grid-template-areas:
+    "symbol tags";
+  grid-template-columns: 54px minmax(0, 1fr);
+  min-height: 34px;
+  padding: 5px 0;
+}
+
+.global-mtf-panel .global-mtf-table tbody tr:not(.stock-row) td {
+  color: #68766c;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 3px 0 5px;
+}
+
+.global-mtf-panel .global-mtf-table .stock-row > td:first-child strong {
+  font-size: 15px;
+}
+
+.global-mtf-panel .global-mtf-table .watchlist-cell,
+.global-mtf-panel .global-mtf-table .trigger-time,
+.global-mtf-panel .global-mtf-table .buy-action-cell {
+  display: none;
 }
 
 .global-mtf-panel .global-mtf-table .buy-action-cell {
   margin-top: 2px;
 }
 
+.global-mtf-panel .mtf-tags {
+  gap: 3px;
+}
+
+.global-mtf-panel .mtf-tag-group {
+  gap: 3px;
+}
+
 .mtf-tag,
 .cloud-tag {
-  font-size: 11px;
-  min-height: 28px;
-  padding: 5px 8px;
+  font-size: 10px;
+  min-height: 22px;
+  padding: 3px 6px;
+}
+
+.trade-tag {
+  font-size: 10px;
+  min-height: 22px;
+  min-width: 40px;
+  padding: 3px 6px;
+}
+
+.risk-plan {
+  border-radius: 6px;
+  flex: 0 1 auto;
+  font-size: 10px;
+  gap: 3px;
+  min-height: 22px;
+  padding: 3px 6px;
+}
+
+.risk-plan span,
+.risk-plan small {
+  font-size: 10px;
+}
+
+.risk-plan small:last-child {
+  display: none;
+}
+
+.new-mtf-tag {
+  font-size: 9px;
+  min-height: 18px;
+  padding: 2px 5px;
 }
 
 .buy-one {
@@ -1804,7 +1883,26 @@ h1 {
   }
 
   .global-mtf-panel {
+    box-shadow: 0 8px 28px rgba(25, 33, 31, 0.06);
+    margin-top: 16px;
     padding: 18px;
+  }
+
+  .global-mtf-panel .bucket-heading {
+    margin-bottom: 8px;
+  }
+
+  .global-mtf-panel .bucket-heading h3 {
+    font-size: 15px;
+  }
+
+  .global-mtf-panel .bucket-heading span {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+
+  .global-mtf-panel .mtf-bucket + .mtf-bucket {
+    margin-top: 18px;
   }
 
   .global-mtf-panel .global-mtf-table .stock-row {
@@ -1814,11 +1912,69 @@ h1 {
       "symbol tags buy"
       "symbol time buy";
     grid-template-columns: 72px minmax(0, 1fr) 64px;
+    min-height: 0;
+    padding: 12px 0;
+  }
+
+  .global-mtf-panel .global-mtf-table .stock-row > td:first-child strong {
+    font-size: inherit;
+  }
+
+  .global-mtf-panel .global-mtf-table .watchlist-cell,
+  .global-mtf-panel .global-mtf-table .trigger-time,
+  .global-mtf-panel .global-mtf-table .buy-action-cell {
+    display: initial;
   }
 
   .global-mtf-panel .global-mtf-table .buy-action-cell {
     justify-self: end;
     margin-top: 0;
+  }
+
+  .global-mtf-panel .mtf-tags {
+    gap: 6px;
+  }
+
+  .global-mtf-panel .mtf-tag-group {
+    gap: 4px;
+  }
+
+  .mtf-tag,
+  .cloud-tag {
+    font-size: 11px;
+    min-height: 28px;
+    padding: 5px 8px;
+  }
+
+  .trade-tag {
+    font-size: 11px;
+    min-height: 28px;
+    min-width: 46px;
+    padding: 5px 8px;
+  }
+
+  .risk-plan {
+    border-radius: 999px;
+    flex: 1 1 100%;
+    font-size: 11px;
+    gap: 5px;
+    min-height: 0;
+    padding: 5px 8px;
+  }
+
+  .risk-plan span,
+  .risk-plan small {
+    font-size: 11px;
+  }
+
+  .risk-plan small:last-child {
+    display: inline;
+  }
+
+  .new-mtf-tag {
+    font-size: 10px;
+    min-height: 22px;
+    padding: 3px 7px;
   }
 
 }
