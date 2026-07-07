@@ -319,7 +319,8 @@ function alertLogEntries(tab, quotes, watchlists, riskSettings) {
 }
 
 function autoTradeKey(tab, symbol, match) {
-  return `${tab}:${symbol}:${match.label || displayMtfLabel(match)}:${match.candle_time || ""}`;
+  const tradeDate = String(match.candle_time || new Date().toISOString()).slice(0, 10);
+  return `${tab}:${symbol}:${strategyIdForMatch(match)}:${tradeDate}`;
 }
 
 function autoLongTradePlan(tab, quote, riskSettings, autoTradeSettings) {

@@ -248,7 +248,7 @@ def test_mtf_signal_matches_waits_for_incomplete_breakouts_until_candle_close():
 
     statuses = {match["label"]: match["status"] for match in matches}
     assert statuses["Hourly 34/50"] == "waiting"
-    assert "10m bounce 34/50" not in statuses
+    assert statuses["10m bounce 34/50"] == "confirmed"
     assert "Daily 20/21" not in statuses
     assert "Daily 50/55" not in statuses
 
@@ -384,17 +384,19 @@ def test_ema_cloud_bounce_matches_uses_latest_10m_candle_not_previous_complete()
     assert matches == []
 
 
-def test_mtf_signal_matches_waits_to_confirm_a_plus_plus_bounce_until_candle_close():
+def test_mtf_signal_matches_confirms_a_plus_plus_bullish_breakout_before_candle_close():
     matches = mtf_signal_matches(
         113,
         "Bullish",
-        [{"open": 111, "low": 99, "close": 113, "source_count": 1, "time": "2026-07-02T09:50:00"}],
+        [{"open": 111, "low": 99, "high": 113, "close": 113, "source_count": 1, "time": "2026-07-02T09:50:00"}],
         {"5": 116, "12": 114, "34": 100, "50": 110},
         {"34": 120, "50": 121},
         {"20": 122, "21": 123, "50": 124, "55": 125},
     )
 
-    assert matches == []
+    assert [match["label"] for match in matches] == ["10m bounce 34/50"]
+    assert matches[0]["status"] == "confirmed"
+    assert matches[0]["trade_action"] == "Long"
 
 
 def test_mtf_signal_matches_confirms_a_plus_plus_bounce_after_candle_close():
@@ -411,7 +413,7 @@ def test_mtf_signal_matches_confirms_a_plus_plus_bounce_after_candle_close():
     assert all(match["status"] == "confirmed" for match in matches)
 
 
-def test_ema_cloud_bounce_ignores_10m_touch_without_close_above():
+def test_ema_cloud_bounce_ignores_10m_bullish_price_below_cloud():
     matches = ema_cloud_bounce_matches(
         [{"low": 99, "high": 106, "close": 105}],
         {"5": 116, "12": 114, "34": 100, "50": 110},
@@ -422,9 +424,20 @@ def test_ema_cloud_bounce_ignores_10m_touch_without_close_above():
     assert matches == []
 
 
-def test_ema_cloud_bounce_sizes_a_plus_plus_bullish_after_close_above_cloud():
+def test_ema_cloud_bounce_ignores_10m_bullish_breakout_without_cloud_touch():
     matches = ema_cloud_bounce_matches(
-        [{"low": 99, "high": 112, "close": 112}],
+        [{"low": 111, "high": 113, "close": 112, "source_count": 1}],
+        {"5": 116, "12": 114, "34": 100, "50": 110},
+        {"34": 111, "50": 112},
+        {"20": 113, "21": 114, "50": 115, "55": 116},
+    )
+
+    assert matches == []
+
+
+def test_ema_cloud_bounce_sizes_a_plus_plus_bullish_after_touch_and_move_above_cloud():
+    matches = ema_cloud_bounce_matches(
+        [{"low": 99, "high": 112, "close": 112, "source_count": 1}],
         {"5": 116, "12": 114, "34": 100, "50": 110},
         {"34": 111, "50": 112},
         {"20": 113, "21": 114, "50": 115, "55": 116},
