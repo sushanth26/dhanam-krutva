@@ -348,7 +348,35 @@ def mtf_signal_matches(
         if candle_time is not None:
             match.setdefault("candle_time", candle_time)
         visible_matches.append(match)
-    return visible_matches
+    return dedupe_mtf_signal_matches(visible_matches)
+
+
+def mtf_signal_cloud_family(match: dict[str, Any]) -> str:
+    label = str(match.get("label") or "")
+    family_labels = {
+        "Hourly 34/50": "hourly-34-50",
+        "10m bounce Hourly 34/50": "hourly-34-50",
+        "Daily 20/21": "daily-20-21",
+        "10m bounce Daily 20/21": "daily-20-21",
+        "Daily 50/55": "daily-50-55",
+        "10m bounce Daily 50/55": "daily-50-55",
+    }
+    return family_labels.get(label, label)
+
+
+def dedupe_mtf_signal_matches(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selected: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for match in matches:
+        family = mtf_signal_cloud_family(match)
+        current = selected.get(family)
+        if current is None:
+            selected[family] = match
+            order.append(family)
+            continue
+        if match.get("type") == "10m_cloud_bounce" and current.get("type") != "10m_cloud_bounce":
+            selected[family] = match
+    return [selected[family] for family in order]
 
 
 def candle_touches_cloud(
