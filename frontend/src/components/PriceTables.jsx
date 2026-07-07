@@ -114,7 +114,7 @@ function MtfRow({ buyState, focused, quote, showSignalTags, showWatchlist, onBuy
       <td className="mtf-tags">
         {quote.mtf_matches.map((match) => (
           <span key={match.label} className="mtf-tag-group">
-            <MtfTag label={match.label} />
+            <MtfTag label={match.label} match={match} />
             {showSignalTags && match.trade_action ? <TradeTag action={match.trade_action} /> : null}
             {showSignalTags && !match.trade_action && match.trend ? <CloudTag status={match.trend} /> : null}
           </span>
@@ -129,6 +129,7 @@ function MtfRow({ buyState, focused, quote, showSignalTags, showWatchlist, onBuy
 function RiskPlan({ plan }) {
   return (
     <span className="risk-plan">
+      <span>Entry {formatPrice(plan.entry)}</span>
       Qty <b>{plan.shares}</b>
       <span>SL {formatPrice(plan.stop)}</span>
       <small>Risk {formatPrice(plan.risk_per_share)}/sh</small>

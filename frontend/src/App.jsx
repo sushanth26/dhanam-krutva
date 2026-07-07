@@ -5,7 +5,7 @@ import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PriceBucket } from "./components/PriceTables";
 import { getJson, postJson } from "./lib/api";
 import { filterQuotesByStrategy, loadStrategyState, saveStrategyState } from "./lib/alertStrategies";
-import { cloudStatus, confirmedMtfQuotes, findAccountId, flattenAccounts, formatPrice, isMarketRefreshWindow, mtfSignature } from "./lib/market";
+import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, findAccountId, flattenAccounts, formatPrice, isMarketRefreshWindow, matchEntryPrice, notificationMatchText, mtfSignature } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
 const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -117,7 +117,7 @@ function mtfRowId(tab, symbol) {
 }
 
 function mtfRowSignature(quote) {
-  const labels = (quote.mtf_matches || []).map((match) => match.label).sort().join("|");
+  const labels = (quote.mtf_matches || []).map((match) => `${match.label}:${matchEntryPrice(match) ?? ""}`).sort().join("|");
   return `${quote.symbol}:${labels}`;
 }
 
@@ -125,7 +125,7 @@ function mtfNotificationDetails(quotes) {
   const matches = quotes
     .map((quote) => ({
       symbol: quote.symbol,
-      labels: (quote.mtf_matches || []).map((match) => match.label).filter(Boolean),
+      labels: (quote.mtf_matches || []).map((match) => notificationMatchText(match)).filter(Boolean),
     }))
     .filter((quote) => quote.symbol && quote.labels.length);
   const targetSymbol = matches[0]?.symbol || "";
@@ -249,7 +249,9 @@ function alertLogEntries(tab, quotes, watchlists) {
       watchlistId: tab,
       watchlistName: watchlist?.name || tab,
       action: match.trade_action || "",
-      reason: match.label || "",
+      label: match.label || "",
+      reason: displayMtfLabel(match),
+      entryPrice: matchEntryPrice(match),
       status: match.status || "confirmed",
       price: quote.price ?? null,
       riskPlan: match.risk_plan || null,
@@ -489,8 +491,8 @@ export default function App() {
   function appendAlertLog(entries) {
     if (!entries.length) return;
     setAlertLog((current) => {
-      const seen = new Set(current.map((item) => `${item.symbol}:${item.reason}:${item.candleTime}:${item.watchlistId}`));
-      const freshEntries = entries.filter((item) => !seen.has(`${item.symbol}:${item.reason}:${item.candleTime}:${item.watchlistId}`));
+      const seen = new Set(current.map((item) => `${item.symbol}:${item.label || item.reason}:${item.candleTime}:${item.watchlistId}`));
+      const freshEntries = entries.filter((item) => !seen.has(`${item.symbol}:${item.label || item.reason}:${item.candleTime}:${item.watchlistId}`));
       if (!freshEntries.length) return current;
       const next = [...freshEntries, ...current].slice(0, MAX_ALERT_LOG);
       saveAlertLog(next);
@@ -1051,6 +1053,7 @@ function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
                 <time dateTime={item.alertedAt}>Alerted {formatDateTime(item.alertedAt)}</time>
                 {item.candleTime ? <time dateTime={item.candleTime}>Candle {formatDateTime(item.candleTime)}</time> : null}
                 <span>{item.watchlistName}</span>
+                {item.entryPrice != null ? <span>Entry {formatPrice(item.entryPrice)}</span> : null}
                 {item.price != null ? <span>Price {formatPrice(item.price)}</span> : null}
               </div>
               {item.riskPlan ? (

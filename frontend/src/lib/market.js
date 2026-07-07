@@ -51,11 +51,29 @@ export function cloudStatus(emaSet, fastKeys, slowKeys) {
 
 export function mtfTagClass(label) {
   const normalized = String(label || "").toLowerCase();
-  if (normalized.includes("10m bounce")) return "touch";
+  if (normalized.includes("10m bounce") || normalized.includes("10m rejection")) return "touch";
   if (normalized.includes("hourly")) return "hourly";
   if (normalized.includes("daily 20/21")) return "daily-fast";
   if (normalized.includes("daily 50/55")) return "daily-slow";
   return "default";
+}
+
+export function displayMtfLabel(match) {
+  const label = String(match?.display_label || match?.label || "");
+  if (match?.trade_action === "Short" && label.includes("bounce")) {
+    return label.replace("bounce", "rejection");
+  }
+  return label;
+}
+
+export function matchEntryPrice(match) {
+  return match?.entry_price ?? match?.risk_plan?.entry ?? null;
+}
+
+export function notificationMatchText(match) {
+  const label = displayMtfLabel(match);
+  const entry = matchEntryPrice(match);
+  return entry == null ? label : `${label} @ ${formatPrice(entry)}`;
 }
 
 export function confirmedMtfQuotes(quotes) {
@@ -70,7 +88,7 @@ export function confirmedMtfQuotes(quotes) {
 export function describeMtfMatches(quotes) {
   return quotes
     .map((quote) => {
-      const labels = (quote.mtf_matches || []).map((match) => match.label).join(" + ");
+      const labels = (quote.mtf_matches || []).map((match) => notificationMatchText(match)).join(" + ");
       return labels ? `${quote.symbol} ${labels}` : quote.symbol;
     })
     .join(" • ");

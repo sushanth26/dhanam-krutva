@@ -391,6 +391,8 @@ def test_ema_cloud_bounce_sizes_a_plus_plus_bearish_stop_above_cloud():
 
     assert [match["label"] for match in matches] == ["10m bounce 34/50"]
     assert matches[0]["trend"] == "Bearish"
+    assert matches[0]["display_label"] == "10m rejection 34/50"
+    assert matches[0]["entry_price"] == 104
     assert matches[0]["risk_plan"]["entry"] == 104
     assert matches[0]["risk_plan"]["stop"] == 111
     assert matches[0]["risk_plan"]["stop_buffer"] == 1

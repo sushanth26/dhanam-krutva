@@ -270,8 +270,10 @@ def mtf_matches(
         high = max(first, second)
         match = {
             "label": label,
+            "display_label": label,
             "low": round(low, 4),
             "high": round(high, 4),
+            "entry_price": round(price, 4),
             "trend": trend,
             "trade_action": trade_action_for_trend(trend),
             "type": "mtf_cloud_breakout",
@@ -365,6 +367,12 @@ def is_immediate_alert_match(match: dict[str, Any]) -> bool:
     return match.get("label") == "10m bounce 34/50" and match.get("type") == "10m_cloud_bounce"
 
 
+def display_label_for_setup(label: str, trade_action: str | None) -> str:
+    if trade_action == "Short" and "bounce" in label:
+        return label.replace("bounce", "rejection")
+    return label
+
+
 def latest_complete_candle_time(candles: list[dict[str, Any]]) -> Any:
     candle = latest_confirmed_ten_minute_candle(candles)
     if not candle:
@@ -415,6 +423,7 @@ def ema_cloud_bounce_matches(
         cloud_high = max(first, second)
         trend_value = trend[0] if trend else ten_minute_trend
         trade_action = trade_action_for_trend(trend_value)
+        display_label = display_label_for_setup(label, trade_action)
         touched_cloud = low <= cloud_high and high >= cloud_low
         if timeframe == "10m":
             if trend_value not in {"Bullish", "Bearish"} or not touched_cloud:
@@ -432,12 +441,14 @@ def ema_cloud_bounce_matches(
             matches.append(
                 {
                     "label": label,
+                    "display_label": display_label,
                     "timeframe": timeframe,
                     "cloud_low": round(cloud_low, 4),
                     "cloud_high": round(cloud_high, 4),
                     "candle_low": round(low, 4),
                     "candle_high": round(high, 4),
                     "candle_close": round(close, 4),
+                    "entry_price": round(close, 4),
                     "candle_time": candle_time,
                     "type": "10m_cloud_bounce",
                     "trend": trend_value,
@@ -456,12 +467,14 @@ def ema_cloud_bounce_matches(
             matches.append(
                 {
                     "label": label,
+                    "display_label": display_label,
                     "timeframe": timeframe,
                     "cloud_low": round(cloud_low, 4),
                     "cloud_high": round(cloud_high, 4),
                     "candle_low": round(low, 4),
                     "candle_high": round(high, 4),
                     "candle_close": round(close, 4),
+                    "entry_price": round(close, 4),
                     "candle_time": candle_time,
                     "type": "10m_cloud_bounce",
                     "trend": trend_value,

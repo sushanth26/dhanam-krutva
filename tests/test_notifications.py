@@ -45,6 +45,36 @@ def test_mtf_notification_payload_lists_symbols_and_clouds():
     assert mtf_signature(list(reversed(quotes))) == mtf_signature(quotes)
 
 
+def test_mtf_notification_payload_uses_rejection_wording_and_entry_price():
+    quotes = [
+        {
+            "symbol": "AAOI",
+            "mtf_matches": [
+                {
+                    "label": "10m bounce 34/50",
+                    "display_label": "10m rejection 34/50",
+                    "trade_action": "Short",
+                    "entry_price": 104,
+                }
+            ],
+        },
+    ]
+
+    payload = mtf_notification_payload(quotes)
+
+    assert payload["title"] == "AAOI: 10m rejection 34/50 @ 104.00"
+    assert payload["body"] == "Tap to open this MTF row."
+    assert payload["matches"][0]["labels"] == ["10m bounce 34/50"]
+    assert payload["matches"][0]["details"] == [
+        {
+            "label": "10m bounce 34/50",
+            "display_label": "10m rejection 34/50",
+            "entry_price": 104,
+        }
+    ]
+    assert describe_mtf_matches(quotes) == "AAOI 10m rejection 34/50 @ 104.00"
+
+
 def test_confirmed_mtf_quotes_removes_waiting_matches():
     quotes = [
         {
