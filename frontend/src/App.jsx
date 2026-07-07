@@ -479,6 +479,10 @@ export default function App() {
       setLiveAlert(`${symbol} is still waiting for the candle close.`);
       return;
     }
+    if (quote.mtf_matches?.some((match) => match.trade_action === "Short")) {
+      setLiveAlert(`${symbol} is a short signal. Short order placement is not wired yet.`);
+      return;
+    }
     const confirmed = window.confirm(`Buy 1 share of ${symbol} with a market order in account ${accountId}?`);
     if (!confirmed) return;
 

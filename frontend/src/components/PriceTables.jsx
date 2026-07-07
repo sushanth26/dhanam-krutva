@@ -1,4 +1,4 @@
-import { CloudTag, MtfTag } from "./Tags";
+import { CloudTag, MtfTag, TradeTag } from "./Tags";
 import { cloudStatus, formatPrice } from "../lib/market";
 
 export function MtfTable({
@@ -82,6 +82,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
 function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }) {
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
   const riskPlan = aPlusPlusRiskPlan(quote.mtf_matches);
+  const tradeAction = tradeActionForMatches(quote.mtf_matches);
   const dismissNew = quote.is_new ? () => onDismissNew?.(quote) : undefined;
   const waiting = quote.mtf_matches?.some((match) => match.status === "waiting");
   return (
@@ -97,6 +98,7 @@ function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }
           disabled={!onBuy}
           onBuy={() => onBuy?.(quote)}
           symbol={quote.symbol}
+          tradeAction={tradeAction}
           waiting={waiting}
         />
       )}
@@ -112,6 +114,7 @@ function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }
           <span key={match.label} className="mtf-tag-group">
             <MtfTag label={match.label} />
             {match.trend ? <CloudTag status={match.trend} /> : null}
+            {match.trade_action ? <TradeTag action={match.trade_action} /> : null}
           </span>
         ))}
         {riskPlan ? <RiskPlan plan={riskPlan} /> : null}
@@ -134,9 +137,18 @@ function RiskPlan({ plan }) {
   );
 }
 
-function BuyCell({ buyState, disabled, onBuy, symbol, waiting }) {
+function BuyCell({ buyState, disabled, onBuy, symbol, tradeAction, waiting }) {
   if (waiting) {
     return <td className="row-action-cell buy-action-cell" aria-label="Waiting for candle close"></td>;
+  }
+  if (tradeAction === "Short") {
+    return (
+      <td className="row-action-cell buy-action-cell">
+        <button type="button" className="buy-one short-signal" disabled title={`Short signal for ${symbol}; short order is not wired yet.`}>
+          Short
+        </button>
+      </td>
+    );
   }
   const loading = buyState?.status === "loading";
   const title = `Buy 1 share of ${symbol}`;
@@ -223,6 +235,13 @@ function mtfTriggerTime(matches) {
 
 function aPlusPlusRiskPlan(matches) {
   return (matches || []).find((match) => match.label === "10m bounce 34/50" && match.risk_plan)?.risk_plan || null;
+}
+
+function tradeActionForMatches(matches) {
+  const actions = new Set((matches || []).map((match) => match.trade_action).filter(Boolean));
+  if (actions.has("Long") && !actions.has("Short")) return "Long";
+  if (actions.has("Short") && !actions.has("Long")) return "Short";
+  return "";
 }
 
 function volatilityLabel(volatility) {

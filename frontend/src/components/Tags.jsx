@@ -8,3 +8,8 @@ export function CloudTag({ status }) {
 export function MtfTag({ label }) {
   return <span className={`mtf-tag ${mtfTagClass(label)}`}>{label}</span>;
 }
+
+export function TradeTag({ action }) {
+  const normalized = action === "Short" ? "short" : action === "Long" ? "long" : "unknown";
+  return <span className={`trade-tag ${normalized}`}>{action || "-"}</span>;
+}

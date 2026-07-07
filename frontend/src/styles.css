@@ -1293,6 +1293,34 @@ select {
   color: #68766c;
 }
 
+.trade-tag {
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 28px;
+  min-width: 46px;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.trade-tag.long {
+  background: #dff4e9;
+  color: #075747;
+}
+
+.trade-tag.short {
+  background: #ffe1e1;
+  color: #8a2424;
+}
+
+.trade-tag.unknown {
+  background: #eef2f5;
+  color: #68766c;
+}
+
 .mtf-tags {
   display: flex;
   flex-wrap: wrap;
@@ -1323,7 +1351,8 @@ select {
 
 .mtf-tag-group,
 .mtf-tag,
-.cloud-tag {
+.cloud-tag,
+.trade-tag {
   flex: 0 0 auto;
   overflow-wrap: normal;
   word-break: keep-all;
@@ -1441,6 +1470,12 @@ select {
 }
 
 .buy-one.error {
+  background: #ffe1e1;
+  border-color: #ef9a9a;
+  color: #8a2424;
+}
+
+.buy-one.short-signal {
   background: #ffe1e1;
   border-color: #ef9a9a;
   color: #8a2424;

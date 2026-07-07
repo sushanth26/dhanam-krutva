@@ -273,6 +273,7 @@ def mtf_matches(
             "low": round(low, 4),
             "high": round(high, 4),
             "trend": trend,
+            "trade_action": trade_action_for_trend(trend),
             "type": "mtf_cloud_breakout",
         }
         if trend == "Bullish":
@@ -397,9 +398,10 @@ def ema_cloud_bounce_matches(
         return []
     high = high if high is not None else max(value for value in (candle.get("open"), close, low) if value is not None)
     candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
+    ten_minute_trend = cloud_status(ema_10m, ["5", "12"], ["34", "50"])
 
     checks = [
-        ("10m bounce 34/50", ema_10m.get("34"), ema_10m.get("50"), "10m", cloud_status(ema_10m, ["5", "12"], ["34", "50"])),
+        ("10m bounce 34/50", ema_10m.get("34"), ema_10m.get("50"), "10m", ten_minute_trend),
         ("10m bounce Hourly 34/50", ema_1h.get("34"), ema_1h.get("50"), "hourly"),
         ("10m bounce Daily 20/21", ema_daily.get("20"), ema_daily.get("21"), "daily"),
         ("10m bounce Daily 50/55", ema_daily.get("50"), ema_daily.get("55"), "daily"),
@@ -411,7 +413,8 @@ def ema_cloud_bounce_matches(
             continue
         cloud_low = min(first, second)
         cloud_high = max(first, second)
-        trend_value = trend[0] if trend else None
+        trend_value = trend[0] if trend else ten_minute_trend
+        trade_action = trade_action_for_trend(trend_value)
         touched_cloud = low <= cloud_high and high >= cloud_low
         if timeframe == "10m":
             if trend_value not in {"Bullish", "Bearish"} or not touched_cloud:
@@ -438,12 +441,18 @@ def ema_cloud_bounce_matches(
                     "candle_time": candle_time,
                     "type": "10m_cloud_bounce",
                     "trend": trend_value,
+                    "trade_action": trade_action,
                     **({"risk_plan": risk_plan} if risk_plan else {}),
                 }
             )
             continue
-        closed_above_cloud = close > cloud_high
-        if touched_cloud and closed_above_cloud:
+        if trend_value == "Bullish":
+            confirmed_bounce = close > cloud_high
+        elif trend_value == "Bearish":
+            confirmed_bounce = close < cloud_low
+        else:
+            confirmed_bounce = False
+        if touched_cloud and confirmed_bounce:
             matches.append(
                 {
                     "label": label,
@@ -455,10 +464,19 @@ def ema_cloud_bounce_matches(
                     "candle_close": round(close, 4),
                     "candle_time": candle_time,
                     "type": "10m_cloud_bounce",
-                    **({"trend": trend_value} if trend_value and trend_value != "-" else {}),
+                    "trend": trend_value,
+                    "trade_action": trade_action,
                 }
             )
     return matches
+
+
+def trade_action_for_trend(trend: str | None) -> str | None:
+    if trend == "Bullish":
+        return "Long"
+    if trend == "Bearish":
+        return "Short"
+    return None
 
 
 def a_plus_plus_risk_plan(
