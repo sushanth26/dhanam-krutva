@@ -104,6 +104,70 @@ def test_auto_long_rejects_symbols_outside_saved_watchlists(tmp_path, monkeypatc
         raise AssertionError("auto long should reject symbols outside saved watchlists")
 
 
+def test_auto_long_places_linked_target_and_stop_for_full_size(monkeypatch):
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            return {"ok": True}
+
+    class FakeOrderV3:
+        def preview_order(self, account_id, new_orders, client_combo_order_id=None):
+            captured["preview"] = {
+                "account_id": account_id,
+                "new_orders": new_orders,
+                "client_combo_order_id": client_combo_order_id,
+            }
+            return FakeResponse()
+
+        def place_order(self, account_id, new_orders, client_combo_order_id=None):
+            captured["place"] = {
+                "account_id": account_id,
+                "new_orders": new_orders,
+                "client_combo_order_id": client_combo_order_id,
+            }
+            return FakeResponse()
+
+    service = WebullService.__new__(WebullService)
+    service._trade_client = lambda: SimpleNamespace(order_v3=FakeOrderV3())
+    monkeypatch.setattr("app.webull_service.time.sleep", lambda _seconds: None)
+
+    response = service.buy_with_bracket(
+        account_id="acct-1",
+        symbol="AAOI",
+        quantity=7,
+        entry_price=100,
+        stop_price=95,
+        target_price=105,
+    )
+
+    preview = captured["preview"]
+    place = captured["place"]
+    assert response["ok"] is True
+    assert response["quantity"] == 7
+    assert preview["client_combo_order_id"] == place["client_combo_order_id"]
+    assert len(place["new_orders"]) == 3
+
+    master, target, stop = place["new_orders"]
+    assert master["combo_type"] == "MASTER"
+    assert master["side"] == "BUY"
+    assert master["order_type"] == "MARKET"
+    assert master["quantity"] == "7"
+    assert target["combo_type"] == "STOP_PROFIT"
+    assert target["side"] == "SELL"
+    assert target["order_type"] == "LIMIT"
+    assert target["quantity"] == "7"
+    assert target["limit_price"] == "105.00"
+    assert stop["combo_type"] == "STOP_LOSS"
+    assert stop["side"] == "SELL"
+    assert stop["order_type"] == "STOP_LOSS"
+    assert stop["quantity"] == "7"
+    assert stop["stop_price"] == "95.00"
+
+
 def test_sell_limit_payload_uses_target_price():
     payload = WebullService._stock_order_payload(
         symbol="AAOI",
