@@ -5,7 +5,7 @@ import io
 import logging
 import time
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Callable
 
 from webull.core.client import ApiClient
@@ -47,7 +47,7 @@ class WebullService:
 
     def order_history(self, account_id: str, page_size: int = 10, days: int = 30) -> dict[str, Any]:
         end_date = date.today()
-        start_date = end_date - timedelta(days=days)
+        start_date = end_date - timedelta(days=max(0, days - 1))
         return self._call(
             lambda: self._trade_client().order_v2.get_order_history(
                 account_id=account_id,
@@ -56,6 +56,40 @@ class WebullService:
                 end_date=end_date.isoformat(),
             )
         )
+
+    def open_orders(self, account_id: str, page_size: int = 50) -> dict[str, Any]:
+        return self._call(lambda: self._trade_client().order_v3.get_order_open(account_id, page_size=page_size))
+
+    def order_detail(self, account_id: str, client_order_id: str) -> dict[str, Any]:
+        return self._call(lambda: self._trade_client().order_v3.get_order_detail(account_id, client_order_id))
+
+    def auto_trade_orders(self, account_id: str, page_size: int = 50, days: int = 1) -> dict[str, Any]:
+        trade_date = date.today()
+        history = self.order_history(account_id, page_size=page_size, days=days)
+        time.sleep(1.1)
+        open_orders = self.open_orders(account_id, page_size=page_size)
+        history_orders = self._normalized_order_records(history.get("data"), source="history")
+        open_order_records = self._normalized_order_records(open_orders.get("data"), source="open")
+        orders = [
+            order for order in self._dedupe_orders([*open_order_records, *history_orders])
+            if self._is_order_on_date(order, trade_date)
+        ]
+        buckets = {
+            "buy": [order for order in orders if order.get("side") == "BUY"],
+            "sell": [order for order in orders if order.get("side") == "SELL"],
+            "open": [order for order in orders if self._is_open_order_status(order.get("status"))],
+            "filled": [order for order in orders if self._is_filled_order_status(order.get("status"))],
+        }
+        return {
+            "ok": bool(history.get("ok") or open_orders.get("ok")),
+            "account_id": account_id,
+            "trade_date": trade_date.isoformat(),
+            "orders": orders,
+            "buckets": buckets,
+            "counts": {key: len(value) for key, value in buckets.items()},
+            "history": history,
+            "open_orders": open_orders,
+        }
 
     def history_bars(
         self,
@@ -186,20 +220,122 @@ class WebullService:
     ) -> dict[str, Any]:
         symbol = symbol.strip().upper()
         quantity = max(1, int(quantity))
-        client_combo_order_id = uuid.uuid4().hex
+        exit_combo_order_id = uuid.uuid4().hex
         buy_client_order_id = uuid.uuid4().hex
         target_client_order_id = uuid.uuid4().hex
         stop_client_order_id = uuid.uuid4().hex
-        bracket_orders = [
+        buy_orders = [
+            self._stock_order_payload(symbol=symbol, quantity=str(quantity), client_order_id=buy_client_order_id)
+        ]
+
+        buy_preview = self._call(lambda: self._trade_client().order_v3.preview_order(account_id, buy_orders))
+        if not buy_preview.get("ok"):
+            return {
+                "ok": False,
+                "stage": "buy_preview",
+                "symbol": symbol,
+                "quantity": quantity,
+                "entry_price": entry_price,
+                "stop_price": stop_price,
+                "target_price": target_price,
+                "risk_per_share": round(abs(entry_price - stop_price), 4),
+                "exit_combo_order_id": exit_combo_order_id,
+                "orders": {
+                    "buy": {"client_order_id": buy_client_order_id},
+                    "target": {"client_order_id": target_client_order_id},
+                    "stop": {"client_order_id": stop_client_order_id},
+                },
+                "preview": buy_preview,
+                "buy_preview": buy_preview,
+                "buy_place": None,
+                "exit_preview": None,
+                "exit_place": None,
+                "place": None,
+            }
+
+        time.sleep(1.1)
+        buy_place = self._call(lambda: self._trade_client().order_v3.place_order(account_id, buy_orders))
+        if not buy_place.get("ok"):
+            return {
+                "ok": False,
+                "stage": "buy_place",
+                "symbol": symbol,
+                "quantity": quantity,
+                "entry_price": entry_price,
+                "stop_price": stop_price,
+                "target_price": target_price,
+                "risk_per_share": round(abs(entry_price - stop_price), 4),
+                "exit_combo_order_id": exit_combo_order_id,
+                "orders": {
+                    "buy": {"client_order_id": buy_client_order_id},
+                    "target": {"client_order_id": target_client_order_id},
+                    "stop": {"client_order_id": stop_client_order_id},
+                },
+                "preview": buy_preview,
+                "buy_preview": buy_preview,
+                "buy_place": buy_place,
+                "exit_preview": None,
+                "exit_place": None,
+                "place": buy_place,
+            }
+
+        buy_fill = self._wait_for_order_fill(account_id, buy_client_order_id)
+        if not buy_fill.get("filled"):
+            return {
+                "ok": False,
+                "stage": buy_fill.get("stage", "buy_not_filled"),
+                "symbol": symbol,
+                "quantity": quantity,
+                "entry_price": entry_price,
+                "stop_price": stop_price,
+                "target_price": target_price,
+                "risk_per_share": round(abs(entry_price - stop_price), 4),
+                "exit_combo_order_id": exit_combo_order_id,
+                "orders": {
+                    "buy": {"client_order_id": buy_client_order_id},
+                    "target": {"client_order_id": target_client_order_id},
+                    "stop": {"client_order_id": stop_client_order_id},
+                },
+                "preview": buy_preview,
+                "buy_preview": buy_preview,
+                "buy_place": buy_place,
+                "buy_fill": buy_fill,
+                "exit_preview": None,
+                "exit_place": None,
+                "place": buy_place,
+            }
+
+        filled_symbol = buy_fill.get("symbol")
+        if filled_symbol and filled_symbol != symbol:
+            return {
+                "ok": False,
+                "stage": "buy_fill_symbol_mismatch",
+                "symbol": symbol,
+                "quantity": quantity,
+                "entry_price": entry_price,
+                "stop_price": stop_price,
+                "target_price": target_price,
+                "risk_per_share": round(abs(entry_price - stop_price), 4),
+                "exit_combo_order_id": exit_combo_order_id,
+                "orders": {
+                    "buy": {"client_order_id": buy_client_order_id},
+                    "target": {"client_order_id": target_client_order_id},
+                    "stop": {"client_order_id": stop_client_order_id},
+                },
+                "preview": buy_preview,
+                "buy_preview": buy_preview,
+                "buy_place": buy_place,
+                "buy_fill": buy_fill,
+                "exit_preview": None,
+                "exit_place": None,
+                "place": buy_place,
+            }
+
+        exit_quantity = max(1, int(buy_fill.get("filled_quantity") or quantity))
+        exit_orders = [
             self._stock_order_payload(
                 symbol=symbol,
-                quantity=str(quantity),
-                client_order_id=buy_client_order_id,
-                combo_type="MASTER",
-            ),
-            self._stock_order_payload(
-                symbol=symbol,
-                quantity=str(quantity),
+                quantity=str(exit_quantity),
                 client_order_id=target_client_order_id,
                 side="SELL",
                 order_type="LIMIT",
@@ -208,7 +344,7 @@ class WebullService:
             ),
             self._stock_order_payload(
                 symbol=symbol,
-                quantity=str(quantity),
+                quantity=str(exit_quantity),
                 client_order_id=stop_client_order_id,
                 side="SELL",
                 order_type="STOP_LOSS",
@@ -216,58 +352,69 @@ class WebullService:
                 stop_price=stop_price,
             ),
         ]
-        preview = self._call(
+
+        exit_preview = self._call(
             lambda: self._trade_client().order_v3.preview_order(
                 account_id,
-                bracket_orders,
-                client_combo_order_id=client_combo_order_id,
+                exit_orders,
+                client_combo_order_id=exit_combo_order_id,
             )
         )
-        if not preview.get("ok"):
+        if not exit_preview.get("ok"):
             return {
                 "ok": False,
-                "stage": "preview",
+                "stage": "exit_preview",
                 "symbol": symbol,
                 "quantity": quantity,
                 "entry_price": entry_price,
                 "stop_price": stop_price,
                 "target_price": target_price,
                 "risk_per_share": round(abs(entry_price - stop_price), 4),
-                "client_combo_order_id": client_combo_order_id,
+                "exit_combo_order_id": exit_combo_order_id,
                 "orders": {
                     "buy": {"client_order_id": buy_client_order_id},
                     "target": {"client_order_id": target_client_order_id},
                     "stop": {"client_order_id": stop_client_order_id},
                 },
-                "preview": preview,
-                "place": None,
+                "preview": exit_preview,
+                "buy_preview": buy_preview,
+                "buy_place": buy_place,
+                "buy_fill": buy_fill,
+                "exit_preview": exit_preview,
+                "exit_place": None,
+                "place": buy_place,
             }
 
         time.sleep(1.1)
-        place = self._call(
+        exit_place = self._call(
             lambda: self._trade_client().order_v3.place_order(
                 account_id,
-                bracket_orders,
-                client_combo_order_id=client_combo_order_id,
+                exit_orders,
+                client_combo_order_id=exit_combo_order_id,
             )
         )
         return {
-            "ok": bool(place.get("ok")),
-            "stage": "complete" if place.get("ok") else "place",
+            "ok": bool(exit_place.get("ok")),
+            "stage": "complete" if exit_place.get("ok") else "exit_place",
             "symbol": symbol,
             "quantity": quantity,
             "entry_price": entry_price,
             "stop_price": stop_price,
             "target_price": target_price,
             "risk_per_share": round(abs(entry_price - stop_price), 4),
-            "client_combo_order_id": client_combo_order_id,
+            "exit_combo_order_id": exit_combo_order_id,
             "orders": {
                 "buy": {"client_order_id": buy_client_order_id},
                 "target": {"client_order_id": target_client_order_id},
                 "stop": {"client_order_id": stop_client_order_id},
             },
-            "preview": preview,
-            "place": place,
+            "preview": exit_preview,
+            "buy_preview": buy_preview,
+            "buy_place": buy_place,
+            "buy_fill": buy_fill,
+            "exit_preview": exit_preview,
+            "exit_place": exit_place,
+            "place": exit_place,
         }
 
     def snapshot(self, account_id: str | None = None) -> dict[str, Any]:
@@ -409,6 +556,306 @@ class WebullService:
             return response.json()
         except ValueError:
             return response.text
+
+    def _wait_for_order_fill(
+        self,
+        account_id: str,
+        client_order_id: str,
+        max_attempts: int = 20,
+        sleep_seconds: float = 1.1,
+    ) -> dict[str, Any]:
+        last_detail: dict[str, Any] | None = None
+        for attempt in range(1, max_attempts + 1):
+            detail = self.order_detail(account_id, client_order_id)
+            status = self._order_status(detail.get("data"))
+            filled_quantity = self._order_filled_quantity(detail.get("data"))
+            symbol = self._order_symbol(detail.get("data"))
+            last_detail = {
+                **detail,
+                "attempt": attempt,
+                "order_status": status,
+                "filled_quantity": filled_quantity,
+                "symbol": symbol,
+            }
+
+            if not detail.get("ok"):
+                return {
+                    "filled": False,
+                    "stage": "buy_fill_check",
+                    "status": status,
+                    "filled_quantity": filled_quantity,
+                    "symbol": symbol,
+                    "attempts": attempt,
+                    "detail": last_detail,
+                }
+            if self._is_filled_order_status(status):
+                return {
+                    "filled": True,
+                    "stage": "buy_filled",
+                    "status": status,
+                    "filled_quantity": filled_quantity,
+                    "symbol": symbol,
+                    "attempts": attempt,
+                    "detail": last_detail,
+                }
+            if self._is_terminal_unfilled_order_status(status):
+                return {
+                    "filled": False,
+                    "stage": "buy_not_filled",
+                    "status": status,
+                    "filled_quantity": filled_quantity,
+                    "symbol": symbol,
+                    "attempts": attempt,
+                    "detail": last_detail,
+                }
+            if attempt < max_attempts:
+                time.sleep(sleep_seconds)
+
+        return {
+            "filled": False,
+            "stage": "buy_fill_timeout",
+            "status": (last_detail or {}).get("order_status"),
+            "filled_quantity": (last_detail or {}).get("filled_quantity"),
+            "symbol": (last_detail or {}).get("symbol"),
+            "attempts": max_attempts,
+            "detail": last_detail,
+        }
+
+    @classmethod
+    def _order_status(cls, data: Any) -> str | None:
+        status = cls._find_first_value(data, ("order_status", "orderStatus", "status"))
+        if status is None:
+            return None
+        return str(status).strip().upper().replace("_", " ")
+
+    @classmethod
+    def _order_symbol(cls, data: Any) -> str | None:
+        symbol = cls._find_first_value(data, ("symbol", "ticker", "tickerSymbol"))
+        if symbol is None:
+            return None
+        return str(symbol).strip().upper()
+
+    @classmethod
+    def _order_filled_quantity(cls, data: Any) -> int | None:
+        value = cls._find_first_value(
+            data,
+            (
+                "filled_quantity",
+                "filledQuantity",
+                "filled_qty",
+                "filledQty",
+                "cum_quantity",
+                "cumQuantity",
+                "executed_quantity",
+                "executedQuantity",
+            ),
+        )
+        parsed = cls._to_float(value)
+        if parsed is None or parsed <= 0:
+            return None
+        return int(parsed)
+
+    @classmethod
+    def _normalized_order_records(cls, data: Any, source: str) -> list[dict[str, Any]]:
+        output: list[dict[str, Any]] = []
+        for item in cls._order_record_dicts(data):
+            normalized = cls._normalized_order_record(item, source)
+            if normalized:
+                output.append(normalized)
+        return output
+
+    @classmethod
+    def _order_record_dicts(cls, data: Any) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        if isinstance(data, list):
+            for item in data:
+                records.extend(cls._order_record_dicts(item))
+            return records
+        if not isinstance(data, dict):
+            return records
+
+        if cls._looks_like_order_record(data):
+            return [data]
+        for value in data.values():
+            records.extend(cls._order_record_dicts(value))
+        return records
+
+    @classmethod
+    def _looks_like_order_record(cls, data: dict[str, Any]) -> bool:
+        fields = (
+            cls._find_direct_value(data, ("symbol", "ticker", "tickerSymbol")),
+            cls._find_direct_value(data, ("side", "action", "orderSide")),
+            cls._find_direct_value(data, ("order_status", "orderStatus", "status")),
+            cls._find_direct_value(data, ("order_type", "orderType", "type")),
+            cls._find_direct_value(data, ("client_order_id", "clientOrderId", "order_id", "orderId", "id")),
+        )
+        return sum(value not in (None, "") for value in fields) >= 2
+
+    @classmethod
+    def _normalized_order_record(cls, data: dict[str, Any], source: str) -> dict[str, Any] | None:
+        side = cls._order_side(data)
+        status = cls._order_status(data)
+        symbol = cls._order_symbol(data)
+        order_type = cls._order_type(data)
+        client_order_id = cls._find_first_value(data, ("client_order_id", "clientOrderId", "clientOrderID"))
+        order_id = cls._find_first_value(data, ("order_id", "orderId", "id"))
+        if not any((side, status, symbol, order_type, client_order_id, order_id)):
+            return None
+        return {
+            "symbol": symbol,
+            "side": side,
+            "status": status,
+            "order_type": order_type,
+            "quantity": cls._order_quantity(data),
+            "filled_quantity": cls._order_filled_quantity(data),
+            "limit_price": cls._order_price(data, ("limit_price", "limitPrice", "lmtPrice")),
+            "stop_price": cls._order_price(data, ("stop_price", "stopPrice", "auxPrice")),
+            "avg_price": cls._order_price(data, ("avg_price", "avgPrice", "filledAvgPrice", "averageFilledPrice")),
+            "client_order_id": str(client_order_id) if client_order_id not in (None, "") else None,
+            "order_id": str(order_id) if order_id not in (None, "") else None,
+            "created_at": cls._find_first_value(
+                data,
+                ("created_at", "createdAt", "createTime", "placedTime", "placed_at", "submittedTime", "orderTime", "time", "timestamp"),
+            ),
+            "updated_at": cls._find_first_value(
+                data,
+                ("updated_at", "updatedAt", "updateTime", "filledTime", "filled_at", "transactionTime", "lastUpdateTime"),
+            ),
+            "source": source,
+            "raw": data,
+        }
+
+    @classmethod
+    def _order_side(cls, data: Any) -> str | None:
+        side = cls._find_first_value(data, ("side", "action", "orderSide"))
+        if side is None:
+            return None
+        normalized = str(side).strip().upper().replace("_", " ")
+        if normalized in {"BUY", "SELL", "SHORT"}:
+            return normalized
+        return normalized or None
+
+    @classmethod
+    def _order_type(cls, data: Any) -> str | None:
+        order_type = cls._find_first_value(data, ("order_type", "orderType", "type"))
+        if order_type is None:
+            return None
+        return str(order_type).strip().upper().replace("_", " ")
+
+    @classmethod
+    def _order_quantity(cls, data: Any) -> int | None:
+        value = cls._find_first_value(data, ("quantity", "qty", "totalQuantity", "orderQuantity"))
+        parsed = cls._to_float(value)
+        if parsed is None or parsed <= 0:
+            return None
+        return int(parsed)
+
+    @classmethod
+    def _order_price(cls, data: Any, keys: tuple[str, ...]) -> float | None:
+        value = cls._find_first_value(data, keys)
+        parsed = cls._to_float(value)
+        if parsed is None:
+            return None
+        return round(parsed, 4)
+
+    @classmethod
+    def _dedupe_orders(cls, orders: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        output: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for order in orders:
+            key = "|".join(
+                str(order.get(item) or "")
+                for item in ("client_order_id", "order_id", "symbol", "side", "status", "order_type")
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            output.append(order)
+        return output
+
+    @classmethod
+    def _is_order_on_date(cls, order: dict[str, Any], target_date: date) -> bool:
+        dates = [
+            cls._parse_order_date(order.get("created_at")),
+            cls._parse_order_date(order.get("updated_at")),
+        ]
+        return any(parsed == target_date for parsed in dates if parsed is not None)
+
+    @staticmethod
+    def _parse_order_date(value: Any) -> date | None:
+        if value in (None, ""):
+            return None
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, (int, float)):
+            timestamp = float(value)
+            if timestamp > 10_000_000_000:
+                timestamp /= 1000
+            try:
+                return datetime.fromtimestamp(timestamp).date()
+            except (OSError, OverflowError, ValueError):
+                return None
+
+        text = str(value).strip()
+        if not text:
+            return None
+        if text.replace(".", "", 1).isdigit():
+            try:
+                timestamp = float(text)
+                if timestamp > 10_000_000_000:
+                    timestamp /= 1000
+                return datetime.fromtimestamp(timestamp).date()
+            except (OSError, OverflowError, ValueError):
+                return None
+        normalized = text.replace("Z", "+00:00")
+        try:
+            return datetime.fromisoformat(normalized).date()
+        except ValueError:
+            pass
+        for pattern in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y"):
+            try:
+                return datetime.strptime(text, pattern).date()
+            except ValueError:
+                continue
+        return None
+
+    @staticmethod
+    def _is_filled_order_status(status: str | None) -> bool:
+        return status == "FILLED"
+
+    @staticmethod
+    def _is_open_order_status(status: str | None) -> bool:
+        return status in {"SUBMITTED", "PENDING", "WORKING", "PARTIAL FILLED", "PARTIALLY FILLED", "NEW", "OPEN"}
+
+    @staticmethod
+    def _is_terminal_unfilled_order_status(status: str | None) -> bool:
+        return status in {"CANCELLED", "CANCELED", "FAILED", "REJECTED", "EXPIRED"}
+
+    @classmethod
+    def _find_first_value(cls, data: Any, keys: tuple[str, ...]) -> Any:
+        if isinstance(data, dict):
+            for key in keys:
+                if data.get(key) not in (None, ""):
+                    return data[key]
+            for value in data.values():
+                found = cls._find_first_value(value, keys)
+                if found not in (None, ""):
+                    return found
+        if isinstance(data, list):
+            for item in data:
+                found = cls._find_first_value(item, keys)
+                if found not in (None, ""):
+                    return found
+        return None
+
+    @staticmethod
+    def _find_direct_value(data: dict[str, Any], keys: tuple[str, ...]) -> Any:
+        for key in keys:
+            if data.get(key) not in (None, ""):
+                return data[key]
+        return None
 
     @classmethod
     def _snapshot_price(cls, data: Any) -> float | None:
