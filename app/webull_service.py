@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import logging
 import time
 import uuid
@@ -23,6 +24,8 @@ class WebullConfigurationError(RuntimeError):
 
 AUTO_TRADE_CLIENT_ORDER_PREFIX = "DKAT"
 MARKET_TIMEZONE = ZoneInfo("America/New_York")
+VERIFY_FAILURE_ERROR_CODES = {"VERIFY_FAILURE_EXCEED_LIMIT"}
+RATE_LIMIT_ERROR_CODES = {"TOO_MANY_REQUESTS"}
 
 
 class WebullService:
@@ -39,6 +42,7 @@ class WebullService:
             "endpoint": self.settings.endpoint,
             "data_mode": "live" if self.settings.environment == "prod" else "test",
             "auth_enabled": self.settings.auth_enabled,
+            "webull_guard": self._guard_status(),
         }
 
     def account_list(self) -> dict[str, Any]:
@@ -71,8 +75,12 @@ class WebullService:
     def auto_trade_orders(self, account_id: str, page_size: int = 50, days: int = 1) -> dict[str, Any]:
         trade_date = date.today()
         history = self.order_history(account_id, page_size=page_size, days=days)
+        if not history.get("ok"):
+            return {**history, "orders": [], "buckets": self._empty_order_buckets(), "counts": self._empty_order_counts()}
         time.sleep(1.1)
         open_orders = self.open_orders(account_id, page_size=page_size)
+        if not open_orders.get("ok"):
+            return {**open_orders, "orders": [], "buckets": self._empty_order_buckets(), "counts": self._empty_order_counts()}
         history_orders = self._normalized_order_records(history.get("data"), source="history")
         open_order_records = self._normalized_order_records(open_orders.get("data"), source="open")
         history_trade_date = self._history_trade_date(history_orders, trade_date)
@@ -506,32 +514,136 @@ class WebullService:
         return api_client
 
     def _call(self, fn: Callable[[], Any]) -> dict[str, Any]:
+        guard_response = self._guard_response()
+        if guard_response:
+            return guard_response
+
         try:
             with self._suppress_sdk_output():
                 response = fn()
             body = self._response_body(response)
-            return {
+            return self._guarded_result({
                 "ok": 200 <= response.status_code < 300,
                 "status_code": response.status_code,
                 "request_id": response.headers.get("x-request-id"),
                 "data": body,
-            }
+            })
         except ServerException as exc:
-            return {
+            return self._guarded_result({
                 "ok": False,
                 "status_code": exc.get_http_status(),
                 "request_id": exc.get_request_id(),
                 "error_code": exc.get_error_code(),
                 "error": exc.get_error_msg() or str(exc),
-            }
+            })
         except ClientException as exc:
-            return {
+            return self._guarded_result({
                 "ok": False,
                 "status_code": None,
                 "request_id": None,
                 "error_code": exc.get_error_code(),
                 "error": exc.get_error_msg() or str(exc),
-            }
+            })
+
+    def _guarded_result(self, result: dict[str, Any]) -> dict[str, Any]:
+        if result.get("ok"):
+            return result
+        settings = self._guard_settings()
+        if not settings:
+            return result
+
+        error_code = str(result.get("error_code") or "")
+        status_code = result.get("status_code")
+        if error_code in VERIFY_FAILURE_ERROR_CODES:
+            return self._activate_guard(result, settings.webull_verify_cooldown_seconds, "verification")
+        if error_code in RATE_LIMIT_ERROR_CODES or status_code == 429:
+            return self._activate_guard(result, settings.webull_rate_limit_cooldown_seconds, "rate_limit")
+        return result
+
+    def _activate_guard(self, result: dict[str, Any], cooldown_seconds: int, reason: str) -> dict[str, Any]:
+        now = time.time()
+        blocked_until = now + cooldown_seconds
+        payload = {
+            "active": True,
+            "reason": reason,
+            "error_code": result.get("error_code"),
+            "status_code": result.get("status_code"),
+            "request_id": result.get("request_id"),
+            "error": result.get("error"),
+            "blocked_at": datetime.fromtimestamp(now).isoformat(),
+            "blocked_until": datetime.fromtimestamp(blocked_until).isoformat(),
+            "blocked_until_epoch": blocked_until,
+        }
+        self._write_guard(payload)
+        return {
+            **result,
+            "webull_guard_active": True,
+            "webull_guard_reason": reason,
+            "webull_guard_blocked_until": payload["blocked_until"],
+            "message": "Webull calls have been paused to avoid extending a verification or rate-limit lockout.",
+        }
+
+    def _guard_response(self) -> dict[str, Any] | None:
+        guard = self._guard_status()
+        if not guard.get("active"):
+            return None
+        return {
+            "ok": False,
+            "status_code": 423,
+            "request_id": None,
+            "error_code": "WEBULL_GUARD_ACTIVE",
+            "error": "Webull calls are paused to avoid extending a verification or rate-limit lockout.",
+            "webull_guard_active": True,
+            "webull_guard_reason": guard.get("reason"),
+            "webull_guard_blocked_until": guard.get("blocked_until"),
+        }
+
+    def _guard_status(self) -> dict[str, Any]:
+        settings = self._guard_settings()
+        if not settings:
+            return {"active": False}
+        path = settings.webull_guard_file
+        try:
+            guard = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {"active": False}
+
+        blocked_until = float(guard.get("blocked_until_epoch") or 0)
+        if blocked_until <= time.time():
+            return {"active": False}
+        return {
+            "active": True,
+            "reason": guard.get("reason"),
+            "blocked_until": guard.get("blocked_until"),
+            "error_code": guard.get("error_code"),
+            "status_code": guard.get("status_code"),
+            "request_id": guard.get("request_id"),
+        }
+
+    def _write_guard(self, payload: dict[str, Any]) -> None:
+        settings = self._guard_settings()
+        if not settings:
+            return
+        path = settings.webull_guard_file
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        except OSError:
+            logging.getLogger(__name__).exception("Failed to write Webull guard file")
+
+    def _guard_settings(self) -> Settings | None:
+        settings = getattr(self, "settings", None)
+        if not settings or not hasattr(settings, "webull_guard_file"):
+            return None
+        return settings
+
+    @staticmethod
+    def _empty_order_buckets() -> dict[str, list[Any]]:
+        return {"buy": [], "sell": [], "open": [], "filled": []}
+
+    @staticmethod
+    def _empty_order_counts() -> dict[str, int]:
+        return {"buy": 0, "sell": 0, "open": 0, "filled": 0}
 
     @staticmethod
     @contextlib.contextmanager
