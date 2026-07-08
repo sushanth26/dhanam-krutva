@@ -407,6 +407,57 @@ def test_auto_long_uses_filled_quantity_for_exits(monkeypatch):
     assert stop["quantity"] == "5"
 
 
+def test_auto_long_places_exits_when_detail_reports_full_quantity_without_filled_status(monkeypatch):
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+        headers = {}
+
+        def __init__(self, body=None):
+            self.body = body or {"ok": True}
+
+        def json(self):
+            return self.body
+
+    class FakeOrderV3:
+        def preview_order(self, account_id, new_orders, client_combo_order_id=None):
+            return FakeResponse()
+
+        def place_order(self, account_id, new_orders, client_combo_order_id=None):
+            if client_combo_order_id:
+                captured["exit_place_orders"] = new_orders
+            return FakeResponse()
+
+        def get_order_detail(self, account_id, client_order_id):
+            return FakeResponse({"orderStatus": "PARTIAL_FILLED", "symbol": "AAOI", "filled": "7"})
+
+    service = WebullService.__new__(WebullService)
+    service._trade_client = lambda: SimpleNamespace(order_v3=FakeOrderV3())
+    monkeypatch.setattr("app.webull_service.time.sleep", lambda _seconds: None)
+
+    response = service.buy_with_bracket(
+        account_id="acct-1",
+        symbol="AAOI",
+        quantity=7,
+        entry_price=100,
+        stop_price=95,
+        target_price=105,
+    )
+
+    assert response["ok"] is True
+    assert response["stage"] == "complete"
+    assert response["buy_fill"]["filled_quantity"] == 7
+    assert captured["exit_place_orders"][0]["side"] == "SELL"
+    assert captured["exit_place_orders"][1]["side"] == "SELL"
+
+
+def test_filled_status_accepts_common_broker_variants():
+    assert WebullService._is_filled_order_status("FULLY FILLED") is True
+    assert WebullService._is_filled_order_status("EXECUTED") is True
+    assert WebullService._is_filled_order_status("COMPLETED") is True
+
+
 def test_auto_long_rejects_exit_when_filled_symbol_does_not_match(monkeypatch):
     calls = []
 
@@ -551,7 +602,6 @@ def test_auto_trade_orders_buckets_buy_sell_open_and_filled(monkeypatch):
             "ok": True,
             "data": [
                 {
-                    "clientOrderId": "DKAT-stop-1",
                     "symbol": "AAOI",
                     "side": "SELL",
                     "orderStatus": "SUBMITTED",
@@ -582,9 +632,118 @@ def test_auto_trade_orders_buckets_buy_sell_open_and_filled(monkeypatch):
     assert response["ok"] is True
     assert captured["history_days"] == 1
     assert response["trade_date"] == today
-    assert response["counts"] == {"buy": 1, "sell": 2, "open": 1, "filled": 2}
-    assert [order["client_order_id"] for order in response["buckets"]["buy"]] == ["DKAT-buy-1"]
-    assert {order["client_order_id"] for order in response["buckets"]["sell"]} == {"DKAT-sell-1", "DKAT-stop-1"}
-    assert [order["client_order_id"] for order in response["buckets"]["open"]] == ["DKAT-stop-1"]
-    assert {order["client_order_id"] for order in response["buckets"]["filled"]} == {"DKAT-buy-1", "DKAT-sell-1"}
-    assert all(order["client_order_id"].startswith("DKAT") for order in response["orders"])
+    assert response["counts"] == {"buy": 2, "sell": 2, "open": 1, "filled": 3}
+    assert {order["client_order_id"] for order in response["buckets"]["buy"]} == {"DKAT-buy-1", "manual-buy-1"}
+    assert {order["client_order_id"] for order in response["buckets"]["sell"]} == {"DKAT-sell-1", None}
+    assert [order["stop_price"] for order in response["buckets"]["open"]] == [95]
+    assert {order["client_order_id"] for order in response["buckets"]["filled"]} == {"DKAT-buy-1", "DKAT-sell-1", "manual-buy-1"}
+
+
+def test_auto_trade_orders_falls_back_to_todays_webull_history_shape(monkeypatch):
+    service = WebullService.__new__(WebullService)
+    today = date.today().isoformat()
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+
+    def fake_order_history(account_id, page_size=50, days=30):
+        return {
+            "ok": True,
+            "data": {
+                "orders": [
+                    {
+                        "client_order_id": "webull-random-buy",
+                        "order_id": "order-1",
+                        "symbol": "AVGO",
+                        "side": "BUY",
+                        "status": "FILLED",
+                        "order_type": "MARKET",
+                        "total_quantity": "1",
+                        "filled_quantity": "1",
+                        "place_time": f"{today}T10:00:00",
+                        "filled_time": f"{today}T10:00:01",
+                    },
+                    {
+                        "client_order_id": "DKAT-random-sell",
+                        "order_id": "order-3",
+                        "symbol": "AVGO",
+                        "side": "SELL",
+                        "status": "FILLED",
+                        "order_type": "LIMIT",
+                        "total_quantity": "1",
+                        "filled_quantity": "1",
+                        "place_time": f"{today}T10:05:00",
+                        "filled_time": f"{today}T10:05:01",
+                    },
+                    {
+                        "client_order_id": "webull-random-old",
+                        "order_id": "order-2",
+                        "symbol": "MSFT",
+                        "side": "BUY",
+                        "status": "FILLED",
+                        "order_type": "MARKET",
+                        "total_quantity": "1",
+                        "filled_quantity": "1",
+                        "place_time": f"{yesterday}T10:00:00",
+                        "filled_time": f"{yesterday}T10:00:01",
+                    },
+                ]
+            },
+        }
+
+    service.order_history = fake_order_history
+    service.open_orders = lambda account_id, page_size=50: {"ok": True, "data": []}
+    monkeypatch.setattr("app.webull_service.time.sleep", lambda _seconds: None)
+
+    response = service.auto_trade_orders("acct-1")
+
+    assert response["counts"] == {"buy": 1, "sell": 1, "open": 0, "filled": 2}
+    assert {order["client_order_id"] for order in response["orders"]} == {"webull-random-buy", "DKAT-random-sell"}
+    assert response["orders"][0]["quantity"] == 1
+    assert response["orders"][0]["created_at"] == f"{today}T10:00:00"
+
+
+def test_auto_trade_orders_uses_latest_history_date_when_today_has_only_open_orders(monkeypatch):
+    service = WebullService.__new__(WebullService)
+    today = date.today().isoformat()
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+
+    service.order_history = lambda account_id, page_size=50, days=30: {
+        "ok": True,
+        "data": {
+            "orders": [
+                {
+                    "client_order_id": "history-buy",
+                    "symbol": "BE",
+                    "side": "BUY",
+                    "status": "FILLED",
+                    "order_type": "LIMIT",
+                    "total_quantity": "20",
+                    "filled_quantity": "20",
+                    "place_time_at": f"{yesterday}T13:46:40.567Z",
+                    "filled_time_at": f"{yesterday}T13:46:50.173Z",
+                }
+            ]
+        },
+    }
+    service.open_orders = lambda account_id, page_size=50: {
+        "ok": True,
+        "data": [
+            {
+                "client_order_id": "open-stop",
+                "symbol": "BE",
+                "side": "SELL",
+                "status": "SUBMITTED",
+                "order_type": "STOP_LOSS",
+                "total_quantity": "5",
+                "place_time_at": f"{today}T13:48:44.375Z",
+                "stop_price": "255.37",
+            }
+        ],
+    }
+    monkeypatch.setattr("app.webull_service.time.sleep", lambda _seconds: None)
+
+    response = service.auto_trade_orders("acct-1")
+
+    assert response["trade_date"] == today
+    assert response["history_trade_date"] == yesterday
+    assert response["counts"] == {"buy": 1, "sell": 1, "open": 1, "filled": 1}
+    assert {order["client_order_id"] for order in response["orders"]} == {"history-buy", "open-stop"}

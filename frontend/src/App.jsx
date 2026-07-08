@@ -1301,16 +1301,32 @@ export default function App() {
 }
 
 function AutoTradesPage({ accountId, alert, loading, orders, onRefresh }) {
+  const [tableView, setTableView] = useState("all");
   const buckets = orders?.buckets || emptyAutoTradeOrders().buckets;
   const counts = orders?.counts || emptyAutoTradeOrders().counts;
+  const allOrders = orders?.orders || [];
+  const tableViews = [
+    { id: "all", label: "All", count: allOrders.length },
+    { id: "buy", label: "Buy", count: counts.buy || 0 },
+    { id: "sell", label: "Sell", count: counts.sell || 0 },
+    { id: "open", label: "Open", count: counts.open || 0 },
+    { id: "filled", label: "Filled", count: counts.filled || 0 },
+  ];
+  const visibleOrders = tableView === "all" ? allOrders : (buckets[tableView] || []);
+  const activeTable = tableViews.find((item) => item.id === tableView) || tableViews[0];
+  const tradeDate = orders?.trade_date;
+  const historyTradeDate = orders?.history_trade_date;
+  const dateText = accountId
+    ? historyTradeDate && tradeDate && historyTradeDate !== tradeDate
+      ? `Latest Webull history session ${historyTradeDate}, plus today's open orders for ${accountId}`
+      : `Today's Webull orders for ${accountId}`
+    : "Select a margin account to view broker orders.";
   return (
     <section className="auto-trades-page">
       <div className="auto-trades-header">
         <div>
           <h2>Auto Trades</h2>
-          <p className="muted">
-            {accountId ? `Today's Webull orders for ${accountId}` : "Select a margin account to view today's broker orders."}
-          </p>
+          <p className="muted">{dateText}</p>
         </div>
         <button type="button" className="secondary-button" onClick={() => onRefresh()} disabled={loading || !accountId}>
           {loading ? "Refreshing" : "Refresh"}
@@ -1323,12 +1339,21 @@ function AutoTradesPage({ accountId, alert, loading, orders, onRefresh }) {
         <SummaryTile label="Open Orders" value={counts.open || 0} />
         <SummaryTile label="Filled Orders" value={counts.filled || 0} />
       </div>
-      <div className="auto-trade-buckets">
-        <OrderBucket title="Buy" items={buckets.buy || []} />
-        <OrderBucket title="Sell" items={buckets.sell || []} />
-        <OrderBucket title="Open" items={buckets.open || []} />
-        <OrderBucket title="Filled" items={buckets.filled || []} />
+      <div className="table-view-tabs" role="tablist" aria-label="Trade table view">
+        {tableViews.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={tableView === item.id ? "active" : ""}
+            onClick={() => setTableView(item.id)}
+            role="tab"
+            aria-selected={tableView === item.id}
+          >
+            {item.label} <span>{item.count}</span>
+          </button>
+        ))}
       </div>
+      <OrderBucket title={activeTable.label} items={visibleOrders} />
     </section>
   );
 }
@@ -1430,6 +1455,7 @@ function orderTimeText(item) {
 function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
   const [query, setQuery] = useState("");
   const [outcomeFilter, setOutcomeFilter] = useState("all");
+  const [tableView, setTableView] = useState("long");
   const searched = useMemo(() => {
     const needle = query.trim().toUpperCase();
     if (!needle) return alertLog;
@@ -1455,6 +1481,10 @@ function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
   }, [outcomeFilter, searched]);
   const longAlerts = useMemo(() => filtered.filter((item) => item.action === "Long"), [filtered]);
   const shortAlerts = useMemo(() => filtered.filter((item) => item.action === "Short"), [filtered]);
+  const tableViews = [
+    { id: "long", label: "Long", count: longAlerts.length },
+    { id: "short", label: "Short", count: shortAlerts.length },
+  ];
 
   return (
     <section className="alert-log-page">
@@ -1513,10 +1543,25 @@ function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
           SL <span>{outcomeCounts.sl}</span>
         </button>
       </div>
-      <div className="alert-log-tables">
-        <AlertLogTable title="Long" items={longAlerts} onSelectSymbol={onSelectSymbol} />
-        <AlertLogTable title="Short" items={shortAlerts} onSelectSymbol={onSelectSymbol} />
+      <div className="table-view-tabs" role="tablist" aria-label="Alert table view">
+        {tableViews.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={tableView === item.id ? "active" : ""}
+            onClick={() => setTableView(item.id)}
+            role="tab"
+            aria-selected={tableView === item.id}
+          >
+            {item.label} <span>{item.count}</span>
+          </button>
+        ))}
       </div>
+      <AlertLogTable
+        title={tableView === "short" ? "Short" : "Long"}
+        items={tableView === "short" ? shortAlerts : longAlerts}
+        onSelectSymbol={onSelectSymbol}
+      />
     </section>
   );
 }

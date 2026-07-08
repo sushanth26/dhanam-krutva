@@ -1296,6 +1296,42 @@ select {
   font-size: 24px;
 }
 
+.table-view-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.table-view-tabs button {
+  align-items: center;
+  background: #eef2f5;
+  border: 1px solid #dbe2d8;
+  border-radius: 999px;
+  color: #19211f;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 900;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 13px;
+}
+
+.table-view-tabs button.active {
+  background: #12664f;
+  border-color: #12664f;
+  color: #ffffff;
+}
+
+.table-view-tabs span {
+  background: rgba(255, 255, 255, 0.78);
+  border-radius: 999px;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  min-width: 20px;
+  padding: 2px 6px;
+}
+
 .auto-trade-buckets {
   display: grid;
   gap: 14px;
