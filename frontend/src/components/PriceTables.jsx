@@ -237,7 +237,7 @@ function mtfTriggerTime(matches) {
 }
 
 function aPlusPlusRiskPlan(matches) {
-  return (matches || []).find((match) => match.label === "10m bounce 34/50" && match.risk_plan)?.risk_plan || null;
+  return (matches || []).find((match) => match.trade_action === "Long" && match.risk_plan)?.risk_plan || null;
 }
 
 function tradeActionForMatches(matches) {

@@ -26,6 +26,12 @@ export const ALERT_STRATEGIES = [
     match: (match) => String(match?.label || "") === "10m bounce 34/50",
   },
   {
+    id: "ten-minute-9ema-touch",
+    name: "10m 9 EMA touch",
+    description: "Bullish 10m stock touches the 9 EMA with SL $2 below the 5/12 cloud.",
+    match: (match) => String(match?.label || "") === "10m 9 EMA touch",
+  },
+  {
     id: "ten-minute-bounce-hourly",
     name: "10m bounce/rejection 1hr 34/50",
     description: "10m candle rejects or bounces through the hourly 34/50 EMA cloud with trend direction.",
