@@ -52,7 +52,7 @@ class WebullService:
 
     def order_history(self, account_id: str, page_size: int = 10, days: int = 30) -> dict[str, Any]:
         end_date = date.today()
-        start_date = end_date - timedelta(days=max(0, days - 1))
+        start_date = end_date - timedelta(days=max(1, days - 1))
         return self._call(
             lambda: self._trade_client().order_v2.get_order_history(
                 account_id=account_id,
@@ -75,10 +75,10 @@ class WebullService:
         open_orders = self.open_orders(account_id, page_size=page_size)
         history_orders = self._normalized_order_records(history.get("data"), source="history")
         open_order_records = self._normalized_order_records(open_orders.get("data"), source="open")
-        orders = [
-            order for order in self._dedupe_orders([*open_order_records, *history_orders])
-            if self._is_order_on_date(order, trade_date) and self._is_auto_trade_order(order)
-        ]
+        history_trade_date = self._history_trade_date(history_orders, trade_date)
+        selected_history_orders = [order for order in history_orders if self._is_order_on_date(order, history_trade_date)]
+        selected_open_orders = [order for order in open_order_records if self._is_order_on_date(order, trade_date)]
+        orders = self._dedupe_orders([*selected_open_orders, *selected_history_orders])
         buckets = {
             "buy": [order for order in orders if order.get("side") == "BUY"],
             "sell": [order for order in orders if order.get("side") == "SELL"],
@@ -89,6 +89,7 @@ class WebullService:
             "ok": bool(history.get("ok") or open_orders.get("ok")),
             "account_id": account_id,
             "trade_date": trade_date.isoformat(),
+            "history_trade_date": history_trade_date.isoformat() if history_trade_date else None,
             "orders": orders,
             "buckets": buckets,
             "counts": {key: len(value) for key, value in buckets.items()},
@@ -297,7 +298,7 @@ class WebullService:
                 "place": buy_place,
             }
 
-        buy_fill = self._wait_for_order_fill(account_id, buy_client_order_id)
+        buy_fill = self._wait_for_order_fill(account_id, buy_client_order_id, expected_quantity=quantity)
         if not buy_fill.get("filled"):
             return {
                 "ok": False,
@@ -617,6 +618,7 @@ class WebullService:
         self,
         account_id: str,
         client_order_id: str,
+        expected_quantity: int | None = None,
         max_attempts: int = 20,
         sleep_seconds: float = 1.1,
     ) -> dict[str, Any]:
@@ -644,7 +646,9 @@ class WebullService:
                     "attempts": attempt,
                     "detail": last_detail,
                 }
-            if self._is_filled_order_status(status):
+            if self._is_filled_order_status(status) or (
+                expected_quantity is not None and filled_quantity is not None and filled_quantity >= expected_quantity
+            ):
                 return {
                     "filled": True,
                     "stage": "buy_filled",
@@ -679,14 +683,25 @@ class WebullService:
 
     @classmethod
     def _order_status(cls, data: Any) -> str | None:
-        status = cls._find_first_value(data, ("order_status", "orderStatus", "status"))
+        status = cls._find_first_value(
+            data,
+            (
+                "order_status",
+                "orderStatus",
+                "status",
+                "order_status_name",
+                "orderStatusName",
+                "status_name",
+                "statusName",
+            ),
+        )
         if status is None:
             return None
         return str(status).strip().upper().replace("_", " ")
 
     @classmethod
     def _order_symbol(cls, data: Any) -> str | None:
-        symbol = cls._find_first_value(data, ("symbol", "ticker", "tickerSymbol"))
+        symbol = cls._find_first_value(data, ("symbol", "ticker", "tickerSymbol", "symbolName"))
         if symbol is None:
             return None
         return str(symbol).strip().upper()
@@ -704,6 +719,11 @@ class WebullService:
                 "cumQuantity",
                 "executed_quantity",
                 "executedQuantity",
+                "filled",
+                "totalFilledQuantity",
+                "totalFilledQty",
+                "cumQty",
+                "executedQty",
             ),
         )
         parsed = cls._to_float(value)
@@ -741,9 +761,32 @@ class WebullService:
         fields = (
             cls._find_direct_value(data, ("symbol", "ticker", "tickerSymbol")),
             cls._find_direct_value(data, ("side", "action", "orderSide")),
-            cls._find_direct_value(data, ("order_status", "orderStatus", "status")),
+            cls._find_direct_value(
+                data,
+                (
+                    "order_status",
+                    "orderStatus",
+                    "status",
+                    "order_status_name",
+                    "orderStatusName",
+                    "status_name",
+                    "statusName",
+                ),
+            ),
             cls._find_direct_value(data, ("order_type", "orderType", "type")),
-            cls._find_direct_value(data, ("client_order_id", "clientOrderId", "order_id", "orderId", "id")),
+            cls._find_direct_value(
+                data,
+                (
+                    "client_order_id",
+                    "clientOrderId",
+                    "clientOrderID",
+                    "client_order_no",
+                    "clientOrderNo",
+                    "order_id",
+                    "orderId",
+                    "id",
+                ),
+            ),
         )
         return sum(value not in (None, "") for value in fields) >= 2
 
@@ -753,7 +796,10 @@ class WebullService:
         status = cls._order_status(data)
         symbol = cls._order_symbol(data)
         order_type = cls._order_type(data)
-        client_order_id = cls._find_first_value(data, ("client_order_id", "clientOrderId", "clientOrderID"))
+        client_order_id = cls._find_first_value(
+            data,
+            ("client_order_id", "clientOrderId", "clientOrderID", "client_order_no", "clientOrderNo"),
+        )
         order_id = cls._find_first_value(data, ("order_id", "orderId", "id"))
         if not any((side, status, symbol, order_type, client_order_id, order_id)):
             return None
@@ -766,16 +812,44 @@ class WebullService:
             "filled_quantity": cls._order_filled_quantity(data),
             "limit_price": cls._order_price(data, ("limit_price", "limitPrice", "lmtPrice")),
             "stop_price": cls._order_price(data, ("stop_price", "stopPrice", "auxPrice")),
-            "avg_price": cls._order_price(data, ("avg_price", "avgPrice", "filledAvgPrice", "averageFilledPrice")),
+            "avg_price": cls._order_price(
+                data,
+                ("avg_price", "avgPrice", "filled_price", "filledPrice", "filledAvgPrice", "averageFilledPrice"),
+            ),
             "client_order_id": str(client_order_id) if client_order_id not in (None, "") else None,
             "order_id": str(order_id) if order_id not in (None, "") else None,
             "created_at": cls._find_first_value(
                 data,
-                ("created_at", "createdAt", "createTime", "placedTime", "placed_at", "submittedTime", "orderTime", "time", "timestamp"),
+                (
+                    "created_at",
+                    "createdAt",
+                    "createTime",
+                    "place_time_at",
+                    "placeTimeAt",
+                    "place_time",
+                    "placeTime",
+                    "placedTime",
+                    "placed_at",
+                    "submittedTime",
+                    "orderTime",
+                    "time",
+                    "timestamp",
+                ),
             ),
             "updated_at": cls._find_first_value(
                 data,
-                ("updated_at", "updatedAt", "updateTime", "filledTime", "filled_at", "transactionTime", "lastUpdateTime"),
+                (
+                    "updated_at",
+                    "updatedAt",
+                    "updateTime",
+                    "filled_time_at",
+                    "filledTimeAt",
+                    "filled_time",
+                    "filledTime",
+                    "filled_at",
+                    "transactionTime",
+                    "lastUpdateTime",
+                ),
             ),
             "source": source,
             "raw": data,
@@ -793,14 +867,20 @@ class WebullService:
 
     @classmethod
     def _order_type(cls, data: Any) -> str | None:
-        order_type = cls._find_first_value(data, ("order_type", "orderType", "type"))
+        order_type = cls._find_first_value(
+            data,
+            ("order_type", "orderType", "type", "order_type_name", "orderTypeName"),
+        )
         if order_type is None:
             return None
         return str(order_type).strip().upper().replace("_", " ")
 
     @classmethod
     def _order_quantity(cls, data: Any) -> int | None:
-        value = cls._find_first_value(data, ("quantity", "qty", "totalQuantity", "orderQuantity"))
+        value = cls._find_first_value(
+            data,
+            ("quantity", "qty", "total_quantity", "totalQuantity", "orderQuantity", "orderQty"),
+        )
         parsed = cls._to_float(value)
         if parsed is None or parsed <= 0:
             return None
@@ -836,7 +916,16 @@ class WebullService:
     @classmethod
     def _is_auto_trade_order(cls, order: dict[str, Any]) -> bool:
         client_order_id = str(order.get("client_order_id") or "")
-        return client_order_id.startswith(AUTO_TRADE_CLIENT_ORDER_PREFIX)
+        if client_order_id.startswith(AUTO_TRADE_CLIENT_ORDER_PREFIX):
+            return True
+        return cls._looks_like_auto_trade_exit(order)
+
+    @staticmethod
+    def _looks_like_auto_trade_exit(order: dict[str, Any]) -> bool:
+        if order.get("source") != "open" or order.get("side") != "SELL":
+            return False
+        order_type = str(order.get("order_type") or "")
+        return order.get("stop_price") is not None or order_type in {"STOP LOSS", "STOP LOSS LIMIT", "STOP_LOSS", "STOP_LOSS_LIMIT"}
 
     @classmethod
     def _is_order_on_date(cls, order: dict[str, Any], target_date: date) -> bool:
@@ -845,6 +934,18 @@ class WebullService:
             cls._parse_order_date(order.get("updated_at")),
         ]
         return any(parsed == target_date for parsed in dates if parsed is not None)
+
+    @classmethod
+    def _history_trade_date(cls, orders: list[dict[str, Any]], preferred_date: date) -> date:
+        order_dates = [
+            parsed
+            for order in orders
+            for parsed in (cls._parse_order_date(order.get("created_at")), cls._parse_order_date(order.get("updated_at")))
+            if parsed is not None
+        ]
+        if preferred_date in order_dates:
+            return preferred_date
+        return max(order_dates, default=preferred_date)
 
     @staticmethod
     def _parse_order_date(value: Any) -> date | None:
@@ -888,15 +989,27 @@ class WebullService:
 
     @staticmethod
     def _is_filled_order_status(status: str | None) -> bool:
-        return status == "FILLED"
+        return status in {"FILLED", "FULLY FILLED", "EXECUTED", "DONE", "COMPLETE", "COMPLETED"}
 
     @staticmethod
     def _is_open_order_status(status: str | None) -> bool:
-        return status in {"SUBMITTED", "PENDING", "WORKING", "PARTIAL FILLED", "PARTIALLY FILLED", "NEW", "OPEN"}
+        return status in {
+            "SUBMITTED",
+            "PENDING",
+            "WORKING",
+            "PARTIAL FILLED",
+            "PARTIALLY FILLED",
+            "PARTIALFILLED",
+            "NEW",
+            "OPEN",
+            "QUEUED",
+            "ACCEPTED",
+            "LIVE",
+        }
 
     @staticmethod
     def _is_terminal_unfilled_order_status(status: str | None) -> bool:
-        return status in {"CANCELLED", "CANCELED", "FAILED", "REJECTED", "EXPIRED"}
+        return status in {"CANCELLED", "CANCELED", "FAILED", "REJECTED", "EXPIRED", "VOIDED"}
 
     @classmethod
     def _find_first_value(cls, data: Any, keys: tuple[str, ...]) -> Any:
