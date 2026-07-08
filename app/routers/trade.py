@@ -58,7 +58,7 @@ def buy_one_share(request: BuyRequest):
 @router.post("/auto-long")
 def auto_buy_with_bracket(request: AutoLongRequest):
     symbol = request.symbol.strip().upper()
-    if symbol not in approved_trade_symbols():
+    if symbol not in approved_auto_trade_symbols():
         raise HTTPException(status_code=400, detail="Symbol is not in the approved strategy watchlist.")
     try:
         webull = service()
@@ -76,8 +76,18 @@ def auto_buy_with_bracket(request: AutoLongRequest):
 
 
 def approved_trade_symbols() -> set[str]:
+    return watchlist_symbols(include_auto_trade_disabled=True)
+
+
+def approved_auto_trade_symbols() -> set[str]:
+    return watchlist_symbols(include_auto_trade_disabled=False)
+
+
+def watchlist_symbols(*, include_auto_trade_disabled: bool) -> set[str]:
     symbols: set[str] = set()
     for watchlist in WatchlistStore(get_settings().watchlist_file).all():
+        if not include_auto_trade_disabled and watchlist.get("auto_trade_enabled") is False:
+            continue
         symbols.update(str(symbol or "").strip().upper() for symbol in watchlist.get("symbols", []))
     return {symbol for symbol in symbols if symbol}
 

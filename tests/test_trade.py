@@ -21,6 +21,21 @@ def test_approved_trade_symbols_use_saved_watchlists(tmp_path, monkeypatch):
     assert {"BE", "PLTR", "AAOI"}.issubset(trade.approved_trade_symbols())
 
 
+def test_approved_auto_trade_symbols_skip_disabled_watchlists(tmp_path, monkeypatch):
+    watchlist_file = tmp_path / "watchlists.json"
+    WatchlistStore(watchlist_file).replace(
+        [
+            {"id": "og", "symbols": ["BE"]},
+            {"name": "Daily", "symbols": ["PLTR", "AAOI"], "auto_trade_enabled": False},
+        ]
+    )
+    monkeypatch.setattr(trade, "get_settings", lambda: SimpleNamespace(watchlist_file=watchlist_file))
+
+    assert "BE" in trade.approved_auto_trade_symbols()
+    assert "PLTR" not in trade.approved_auto_trade_symbols()
+    assert "AAOI" not in trade.approved_auto_trade_symbols()
+
+
 def test_auto_long_uses_saved_watchlist_and_places_full_size_exit_payload(tmp_path, monkeypatch):
     watchlist_file = tmp_path / "watchlists.json"
     WatchlistStore(watchlist_file).replace([{"id": "og", "symbols": ["AAOI"]}])
@@ -139,6 +154,27 @@ def test_auto_long_rejects_symbols_outside_saved_watchlists(tmp_path, monkeypatc
         assert exc.detail == "Symbol is not in the approved strategy watchlist."
     else:
         raise AssertionError("auto long should reject symbols outside saved watchlists")
+
+
+def test_auto_long_rejects_symbols_from_auto_trade_disabled_watchlists(tmp_path, monkeypatch):
+    watchlist_file = tmp_path / "watchlists.json"
+    WatchlistStore(watchlist_file).replace(
+        [
+            {"id": "og", "symbols": ["BE"]},
+            {"name": "Daily", "symbols": ["AAOI"], "auto_trade_enabled": False},
+        ]
+    )
+    monkeypatch.setattr(trade, "get_settings", lambda: SimpleNamespace(watchlist_file=watchlist_file))
+
+    try:
+        trade.auto_buy_with_bracket(
+            trade.AutoLongRequest(account_id="acct-1", symbol="AAOI", quantity=7, entry_price=100, stop_price=95, target_price=105)
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert exc.detail == "Symbol is not in the approved strategy watchlist."
+    else:
+        raise AssertionError("auto long should reject symbols from disabled watchlists")
 
 
 def test_auto_long_buys_first_then_places_linked_target_and_stop_for_full_size(monkeypatch):

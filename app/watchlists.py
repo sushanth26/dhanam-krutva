@@ -16,6 +16,7 @@ def default_watchlists() -> list[dict[str, Any]]:
             "name": "OG list",
             "symbols": LIVE_WATCHLIST,
             "locked": True,
+            "auto_trade_enabled": True,
         }
     ]
 
@@ -58,6 +59,9 @@ def normalize_watchlists(watchlists: list[dict[str, Any]]) -> list[dict[str, Any
                 "name": "OG list" if watchlist_id == OG_WATCHLIST_ID else name,
                 "symbols": normalize_symbols(item.get("symbols", []))[:25],
                 "locked": watchlist_id == OG_WATCHLIST_ID,
+                "auto_trade_enabled": item.get("auto_trade_enabled") is not False
+                and item.get("autoTradeEnabled") is not False
+                and item.get("do_not_auto_trade") is not True,
             }
         )
     if not any(item["id"] == OG_WATCHLIST_ID for item in normalized):
