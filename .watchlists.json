@@ -15,7 +15,8 @@
       "ASTS",
       "APP"
     ],
-    "locked": true
+    "locked": true,
+    "auto_trade_enabled": true
   },
   {
     "id": "mag7",
@@ -30,6 +31,7 @@
       "AMZN",
       "AVGO"
     ],
-    "locked": false
+    "locked": false,
+    "auto_trade_enabled": true
   }
 ]

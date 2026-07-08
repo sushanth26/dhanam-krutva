@@ -69,10 +69,11 @@ function normalizeWatchlists(watchlists) {
       name: id === OG_WATCHLIST_ID ? "OG list" : name,
       symbols: normalizeSymbols(item?.symbols || []).slice(0, 25),
       locked: id === OG_WATCHLIST_ID,
+      autoTradeEnabled: item?.autoTradeEnabled !== false && item?.auto_trade_enabled !== false && item?.do_not_auto_trade !== true,
     });
   }
   if (!normalized.some((item) => item.id === OG_WATCHLIST_ID)) {
-    normalized.unshift({ id: OG_WATCHLIST_ID, name: "OG list", symbols: OG_SYMBOLS, locked: true });
+    normalized.unshift({ id: OG_WATCHLIST_ID, name: "OG list", symbols: OG_SYMBOLS, locked: true, autoTradeEnabled: true });
   }
   return normalized;
 }
@@ -349,6 +350,10 @@ function autoLongTradePlan(tab, quote, riskSettings, autoTradeSettings) {
     setup: displayMtfLabel(match),
     candleTime: match.candle_time || "",
   };
+}
+
+function canAutoTradeWatchlist(watchlist) {
+  return watchlist?.autoTradeEnabled !== false;
 }
 
 function roundMoney(value) {
@@ -787,6 +792,8 @@ export default function App() {
 
   async function autoBuyLongAlerts(tab, quotes) {
     if (!autoTradeRef.current.enabled) return;
+    const watchlist = watchlistsRef.current.find((item) => item.id === tab);
+    if (!canAutoTradeWatchlist(watchlist)) return;
     const accountId = marginTradingAccountId(accountsRef.current, selectedAccountIdRef.current);
     if (!accountId) {
       addNotification({
@@ -897,7 +904,7 @@ export default function App() {
     if (!name) return;
     const usedIds = new Set(watchlistsRef.current.map((item) => item.id));
     const id = uniqueId(slugify(name), usedIds);
-    const nextWatchlist = { id, name, symbols: [], locked: false };
+    const nextWatchlist = { id, name, symbols: [], locked: false, autoTradeEnabled: true };
     updateWatchlists((current) => [...current, nextWatchlist]);
     setQuotesByTab((current) => ({ ...current, [id]: [] }));
     setUpdatedTextByTab((current) => ({ ...current, [id]: "Add symbols to this list" }));
@@ -944,6 +951,12 @@ export default function App() {
       ...current,
       [tab]: current[tab] || "Watchlist selected",
     }));
+  }
+
+  function toggleWatchlistAutoTrade(id, autoTradeEnabled) {
+    updateWatchlists((current) => current.map((watchlist) => (
+      watchlist.id === id ? { ...watchlist, autoTradeEnabled } : watchlist
+    )));
   }
 
   function updateWatchlists(updater) {
@@ -1220,6 +1233,7 @@ export default function App() {
                 loading={loading.watchlists || loading.prices}
                 onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
                 onSwitchTab={switchWatchlistTab}
+                onToggleAutoTrade={toggleWatchlistAutoTrade}
                 selectedWatchlist={activeWatchlist}
                 symbolInput={symbolInputs[watchlistTab] || ""}
                 watchlists={watchlists}
@@ -1749,6 +1763,7 @@ function WatchlistTabs({
   loading,
   onSwitchTab,
   onSymbolInput,
+  onToggleAutoTrade,
   selectedWatchlist,
   symbolInput,
   watchlists,
@@ -1798,6 +1813,15 @@ function WatchlistTabs({
         </button>
       </div>
       <div className="daily-list-editor">
+        <label className="watchlist-auto-trade-toggle">
+          <input
+            type="checkbox"
+            checked={selectedWatchlist?.autoTradeEnabled === false}
+            disabled={!selectedWatchlist || loading}
+            onChange={(event) => onToggleAutoTrade(selectedWatchlist.id, !event.target.checked)}
+          />
+          <span>Do not auto trade this watchlist</span>
+        </label>
         <form onSubmit={onAddSymbols}>
           <input
             aria-label={`Add symbols to ${selectedWatchlist?.name || "watchlist"}`}
