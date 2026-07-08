@@ -637,6 +637,18 @@ class WebullService:
             }
 
             if not detail.get("ok"):
+                history_fill = self._filled_order_from_history(account_id, client_order_id, expected_quantity)
+                if history_fill:
+                    return {
+                        "filled": True,
+                        "stage": "buy_filled_history",
+                        "status": history_fill.get("status"),
+                        "filled_quantity": history_fill.get("filled_quantity"),
+                        "symbol": history_fill.get("symbol"),
+                        "attempts": attempt,
+                        "detail": last_detail,
+                        "history_order": history_fill,
+                    }
                 return {
                     "filled": False,
                     "stage": "buy_fill_check",
@@ -671,6 +683,19 @@ class WebullService:
             if attempt < max_attempts:
                 time.sleep(sleep_seconds)
 
+        history_fill = self._filled_order_from_history(account_id, client_order_id, expected_quantity)
+        if history_fill:
+            return {
+                "filled": True,
+                "stage": "buy_filled_history",
+                "status": history_fill.get("status"),
+                "filled_quantity": history_fill.get("filled_quantity"),
+                "symbol": history_fill.get("symbol"),
+                "attempts": max_attempts,
+                "detail": last_detail,
+                "history_order": history_fill,
+            }
+
         return {
             "filled": False,
             "stage": "buy_fill_timeout",
@@ -680,6 +705,28 @@ class WebullService:
             "attempts": max_attempts,
             "detail": last_detail,
         }
+
+    def _filled_order_from_history(
+        self,
+        account_id: str,
+        client_order_id: str,
+        expected_quantity: int | None = None,
+    ) -> dict[str, Any] | None:
+        try:
+            history = self.order_history(account_id, page_size=50, days=1)
+        except Exception:
+            return None
+        if not history.get("ok"):
+            return None
+        for order in self._normalized_order_records(history.get("data"), source="history"):
+            if order.get("client_order_id") != client_order_id:
+                continue
+            filled_quantity = order.get("filled_quantity")
+            if self._is_filled_order_status(order.get("status")) or (
+                expected_quantity is not None and filled_quantity is not None and filled_quantity >= expected_quantity
+            ):
+                return order
+        return None
 
     @classmethod
     def _order_status(cls, data: Any) -> str | None:
@@ -693,6 +740,10 @@ class WebullService:
                 "orderStatusName",
                 "status_name",
                 "statusName",
+                "order_status_desc",
+                "orderStatusDesc",
+                "status_desc",
+                "statusDesc",
             ),
         )
         if status is None:
@@ -989,7 +1040,16 @@ class WebullService:
 
     @staticmethod
     def _is_filled_order_status(status: str | None) -> bool:
-        return status in {"FILLED", "FULLY FILLED", "EXECUTED", "DONE", "COMPLETE", "COMPLETED"}
+        return status in {
+            "FILLED",
+            "FULLY FILLED",
+            "FILLED ALL",
+            "ALL FILLED",
+            "EXECUTED",
+            "DONE",
+            "COMPLETE",
+            "COMPLETED",
+        }
 
     @staticmethod
     def _is_open_order_status(status: str | None) -> bool:

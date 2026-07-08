@@ -360,6 +360,73 @@ def test_auto_long_does_not_place_exits_until_buy_is_filled(monkeypatch):
     assert not any(call[0] in {"preview", "place"} and call[1] == 2 for call in calls)
 
 
+def test_auto_long_places_exits_when_history_reports_fill_after_detail_timeout(monkeypatch):
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+        headers = {}
+
+        def __init__(self, body=None):
+            self.body = body or {"ok": True}
+
+        def json(self):
+            return self.body
+
+    class FakeOrderV2:
+        def get_order_history(self, account_id, page_size, start_date, end_date):
+            return FakeResponse(
+                {
+                    "orders": [
+                        {
+                            "clientOrderId": captured["buy_client_order_id"],
+                            "symbol": "AAOI",
+                            "side": "BUY",
+                            "orderStatusDesc": "Filled_All",
+                            "orderType": "MARKET",
+                            "quantity": "7",
+                            "filledQuantity": "7",
+                        }
+                    ]
+                }
+            )
+
+    class FakeOrderV3:
+        def preview_order(self, account_id, new_orders, client_combo_order_id=None):
+            return FakeResponse()
+
+        def place_order(self, account_id, new_orders, client_combo_order_id=None):
+            if client_combo_order_id:
+                captured["exit_place_orders"] = new_orders
+            else:
+                captured["buy_client_order_id"] = new_orders[0]["client_order_id"]
+            return FakeResponse()
+
+        def get_order_detail(self, account_id, client_order_id):
+            return FakeResponse({"orderStatus": "SUBMITTED"})
+
+    service = WebullService.__new__(WebullService)
+    service._trade_client = lambda: SimpleNamespace(order_v2=FakeOrderV2(), order_v3=FakeOrderV3())
+    monkeypatch.setattr("app.webull_service.time.sleep", lambda _seconds: None)
+
+    response = service.buy_with_bracket(
+        account_id="acct-1",
+        symbol="AAOI",
+        quantity=7,
+        entry_price=100,
+        stop_price=95,
+        target_price=105,
+    )
+
+    assert response["ok"] is True
+    assert response["stage"] == "complete"
+    assert response["buy_fill"]["stage"] == "buy_filled_history"
+    assert response["buy_fill"]["filled_quantity"] == 7
+    target, stop = captured["exit_place_orders"]
+    assert target["side"] == "SELL"
+    assert stop["side"] == "SELL"
+
+
 def test_auto_long_uses_filled_quantity_for_exits(monkeypatch):
     captured = {}
 
