@@ -185,6 +185,18 @@ def test_filter_payload_by_strategies_can_disable_10m_hourly_bounces_only():
     ]
 
 
+def test_filter_payload_by_strategies_can_disable_9ema_touch_only():
+    payload = {
+        "matches": [
+            {"symbol": "BE", "labels": ["10m bounce 34/50", "10m 9 EMA touch"]},
+        ],
+    }
+
+    filtered = filter_payload_by_strategies(payload, {"ten-minute-9ema-touch": False})
+
+    assert filtered["matches"][0]["labels"] == ["10m bounce 34/50"]
+
+
 def test_filter_payload_by_strategies_can_disable_daily_bounces_only():
     payload = {
         "matches": [

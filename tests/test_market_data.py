@@ -9,6 +9,7 @@ from app.market_data import (
     ema_values,
     mtf_matches,
     mtf_signal_matches,
+    nine_ema_touch_matches,
     parse_symbols,
     symbol_chunks,
 )
@@ -96,6 +97,38 @@ def test_ema_values_returns_latest_values_by_period():
     assert values["5"] is not None
     assert values["12"] is not None
     assert values["20"] is None
+
+
+def test_nine_ema_touch_matches_buys_bullish_stock_at_9ema_with_5_12_cloud_stop():
+    matches = nine_ema_touch_matches(
+        [{"low": 108.5, "high": 110.5, "close": 110, "time": "2026-07-02T09:50:00"}],
+        {"5": 112, "9": 109.5, "12": 111, "34": 100, "50": 105},
+        risk_amount=100,
+    )
+
+    assert [match["label"] for match in matches] == ["10m 9 EMA touch"]
+    assert matches[0]["entry_price"] == 109.5
+    assert matches[0]["trade_action"] == "Long"
+    assert matches[0]["type"] == "10m_9ema_touch"
+    assert matches[0]["risk_plan"]["entry"] == 109.5
+    assert matches[0]["risk_plan"]["stop"] == 109
+    assert matches[0]["risk_plan"]["stop_buffer"] == 2
+    assert matches[0]["risk_plan"]["risk_per_share"] == 0.5
+    assert matches[0]["risk_plan"]["shares"] == 200
+
+
+def test_nine_ema_touch_matches_ignores_non_bullish_or_not_touching():
+    bearish = nine_ema_touch_matches(
+        [{"low": 108.5, "high": 110.5, "close": 110}],
+        {"5": 102, "9": 109.5, "12": 103, "34": 105, "50": 106},
+    )
+    above_ema = nine_ema_touch_matches(
+        [{"low": 110, "high": 112, "close": 111}],
+        {"5": 112, "9": 109.5, "12": 111, "34": 100, "50": 105},
+    )
+
+    assert bearish == []
+    assert above_ema == []
 
 
 def test_mtf_matches_waits_when_active_candle_tests_cloud_ranges():

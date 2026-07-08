@@ -100,7 +100,7 @@ def build_live_prices(
         price = snapshot_price(snapshot_map.get(symbol))
         ema_1h = ema_values(h1_candles, [20, 21, 34, 50, 55])
         ema_daily = ema_values(daily_candles, [20, 21, 50, 55])
-        ten_minute_ema = ema_values(ten_minute_candles, [5, 12, 34, 50])
+        ten_minute_ema = ema_values(ten_minute_candles, [5, 9, 12, 34, 50])
         ten_minute_trend = cloud_status(ten_minute_ema, ["5", "12"], ["34", "50"])
         candle_price = latest_ten_minute_price(ten_minute_candles, price)
         quotes.append(
@@ -337,6 +337,13 @@ def mtf_signal_matches(
             fixed_stop_buffer=fixed_stop_buffer,
         )
     )
+    matches.extend(
+        nine_ema_touch_matches(
+            ten_minute_candles,
+            ema_10m,
+            risk_amount=risk_amount,
+        )
+    )
     visible_matches = []
     for match in matches:
         if status == "waiting":
@@ -515,12 +522,100 @@ def ema_cloud_bounce_matches(
     return matches
 
 
+def nine_ema_touch_matches(
+    ten_minute_candles: list[dict[str, Any]],
+    ema_10m: dict[str, float | None],
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
+) -> list[dict[str, Any]]:
+    candle = latest_ten_minute_candle(ten_minute_candles)
+    if not candle:
+        return []
+
+    ema9 = ema_10m.get("9")
+    ema5 = ema_10m.get("5")
+    ema12 = ema_10m.get("12")
+    if ema9 is None or ema5 is None or ema12 is None:
+        return []
+
+    ten_minute_trend = cloud_status(ema_10m, ["5", "12"], ["34", "50"])
+    if ten_minute_trend != "Bullish":
+        return []
+
+    low = candle.get("low")
+    high = candle.get("high")
+    close = candle.get("close")
+    if low is None or close is None:
+        return []
+    high = high if high is not None else max(value for value in (candle.get("open"), close, low) if value is not None)
+    if not (low <= ema9 <= high):
+        return []
+
+    fast_cloud_low = min(ema5, ema12)
+    stop = fast_cloud_low - 2
+    risk_plan = fixed_stop_risk_plan(
+        entry=ema9,
+        stop=stop,
+        max_risk=risk_amount,
+        stop_buffer=2,
+        stop_mode="fixed-5-12-cloud",
+    )
+    if not risk_plan:
+        return []
+
+    candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
+    return [
+        {
+            "label": "10m 9 EMA touch",
+            "display_label": "10m 9 EMA touch",
+            "timeframe": "10m",
+            "ema9": round(ema9, 4),
+            "cloud_low": round(fast_cloud_low, 4),
+            "cloud_high": round(max(ema5, ema12), 4),
+            "candle_low": round(low, 4),
+            "candle_high": round(high, 4),
+            "candle_close": round(close, 4),
+            "entry_price": round(ema9, 4),
+            "candle_time": candle_time,
+            "type": "10m_9ema_touch",
+            "status": "confirmed",
+            "trend": ten_minute_trend,
+            "trade_action": "Long",
+            "risk_plan": risk_plan,
+        }
+    ]
+
+
 def trade_action_for_trend(trend: str | None) -> str | None:
     if trend == "Bullish":
         return "Long"
     if trend == "Bearish":
         return "Short"
     return None
+
+
+def fixed_stop_risk_plan(
+    entry: float,
+    stop: float,
+    max_risk: float,
+    stop_buffer: float,
+    stop_mode: str,
+) -> dict[str, Any] | None:
+    risk_per_share = abs(entry - stop)
+    if risk_per_share <= 0:
+        return None
+
+    risk_amount = max(1, float(max_risk or A_PLUS_PLUS_MAX_RISK))
+    shares = int(risk_amount // risk_per_share)
+    return {
+        "entry": round(entry, 4),
+        "stop": round(stop, 4),
+        "stop_buffer": round(stop_buffer, 4),
+        "stop_mode": stop_mode,
+        "risk_per_share": round(risk_per_share, 4),
+        "max_risk": round(risk_amount, 2),
+        "shares": shares,
+        "volatility": {"grade": "fixed", "average_range": None, "average_range_pct": None, "sample_size": 0},
+    }
 
 
 def a_plus_plus_risk_plan(
