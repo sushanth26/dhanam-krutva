@@ -1,0 +1,35 @@
+[
+  {
+    "id": "og",
+    "name": "OG list",
+    "symbols": [
+      "BE",
+      "CRDO",
+      "AAOI",
+      "SNDK",
+      "MU",
+      "GLW",
+      "MRVL",
+      "COHR",
+      "RKLB",
+      "ASTS",
+      "APP"
+    ],
+    "locked": true
+  },
+  {
+    "id": "mag7",
+    "name": "MAG7",
+    "symbols": [
+      "AAPL",
+      "MSFT",
+      "TSLA",
+      "META",
+      "NVDA",
+      "GOOGL",
+      "AMZN",
+      "AVGO"
+    ],
+    "locked": false
+  }
+]

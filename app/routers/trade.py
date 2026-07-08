@@ -13,6 +13,7 @@ router = APIRouter(prefix="/api/trade")
 class BuyRequest(BaseModel):
     account_id: str = Field(min_length=1)
     symbol: str = Field(min_length=1, max_length=12)
+    limit_price: float | None = Field(default=None, gt=0)
 
 
 class AutoLongRequest(BuyRequest):
@@ -40,10 +41,16 @@ def buy_one_share(request: BuyRequest):
     symbol = request.symbol.strip().upper()
     if symbol not in approved_trade_symbols():
         raise HTTPException(status_code=400, detail="Symbol is not in the approved strategy watchlist.")
+    if request.limit_price is None:
+        raise HTTPException(status_code=400, detail="Limit price is required for buy orders.")
     try:
         webull = service()
         require_margin_account(webull, request.account_id)
-        return webull.buy_one_market_order(account_id=request.account_id, symbol=symbol)
+        return webull.buy_one_order(
+            account_id=request.account_id,
+            symbol=symbol,
+            limit_price=round(request.limit_price, 4),
+        )
     except WebullConfigurationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

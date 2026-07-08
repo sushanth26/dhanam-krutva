@@ -5,8 +5,9 @@ import io
 import logging
 import time
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time as datetime_time, timedelta
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 from webull.core.client import ApiClient
 from webull.core.exception.exceptions import ClientException, ServerException
@@ -18,6 +19,10 @@ from app.config import Settings
 
 class WebullConfigurationError(RuntimeError):
     pass
+
+
+AUTO_TRADE_CLIENT_ORDER_PREFIX = "DKAT"
+MARKET_TIMEZONE = ZoneInfo("America/New_York")
 
 
 class WebullService:
@@ -72,7 +77,7 @@ class WebullService:
         open_order_records = self._normalized_order_records(open_orders.get("data"), source="open")
         orders = [
             order for order in self._dedupe_orders([*open_order_records, *history_orders])
-            if self._is_order_on_date(order, trade_date)
+            if self._is_order_on_date(order, trade_date) and self._is_auto_trade_order(order)
         ]
         buckets = {
             "buy": [order for order in orders if order.get("side") == "BUY"],
@@ -175,11 +180,17 @@ class WebullService:
             "quote": quote,
         }
 
-    def buy_market_order(self, account_id: str, symbol: str, quantity: int = 1) -> dict[str, Any]:
+    def buy_order(self, account_id: str, symbol: str, limit_price: float, quantity: int = 1) -> dict[str, Any]:
         symbol = symbol.strip().upper()
         quantity = max(1, int(quantity))
+        limit_price = round(float(limit_price), 2)
         client_order_id = uuid.uuid4().hex
-        order = self._stock_order_payload(symbol=symbol, quantity=str(quantity), client_order_id=client_order_id)
+        order = self._buy_entry_order_payload(
+            symbol=symbol,
+            quantity=str(quantity),
+            client_order_id=client_order_id,
+            limit_price=limit_price,
+        )
         new_orders = [order]
 
         preview = self._call(lambda: self._trade_client().order_v3.preview_order(account_id, new_orders))
@@ -189,6 +200,7 @@ class WebullService:
                 "stage": "preview",
                 "symbol": symbol,
                 "quantity": quantity,
+                "limit_price": limit_price,
                 "client_order_id": client_order_id,
                 "preview": preview,
                 "place": None,
@@ -201,13 +213,14 @@ class WebullService:
             "stage": "place",
             "symbol": symbol,
             "quantity": quantity,
+            "limit_price": limit_price,
             "client_order_id": client_order_id,
             "preview": preview,
             "place": place,
         }
 
-    def buy_one_market_order(self, account_id: str, symbol: str) -> dict[str, Any]:
-        return self.buy_market_order(account_id=account_id, symbol=symbol, quantity=1)
+    def buy_one_order(self, account_id: str, symbol: str, limit_price: float) -> dict[str, Any]:
+        return self.buy_order(account_id=account_id, symbol=symbol, limit_price=limit_price, quantity=1)
 
     def buy_with_bracket(
         self,
@@ -220,12 +233,17 @@ class WebullService:
     ) -> dict[str, Any]:
         symbol = symbol.strip().upper()
         quantity = max(1, int(quantity))
-        exit_combo_order_id = uuid.uuid4().hex
-        buy_client_order_id = uuid.uuid4().hex
-        target_client_order_id = uuid.uuid4().hex
-        stop_client_order_id = uuid.uuid4().hex
+        exit_combo_order_id = self._auto_trade_client_order_id()
+        buy_client_order_id = self._auto_trade_client_order_id()
+        target_client_order_id = self._auto_trade_client_order_id()
+        stop_client_order_id = self._auto_trade_client_order_id()
         buy_orders = [
-            self._stock_order_payload(symbol=symbol, quantity=str(quantity), client_order_id=buy_client_order_id)
+            self._buy_entry_order_payload(
+                symbol=symbol,
+                quantity=str(quantity),
+                client_order_id=buy_client_order_id,
+                limit_price=entry_price,
+            )
         ]
 
         buy_preview = self._call(lambda: self._trade_client().order_v3.preview_order(account_id, buy_orders))
@@ -530,6 +548,7 @@ class WebullService:
         combo_type: str = "NORMAL",
         limit_price: float | None = None,
         stop_price: float | None = None,
+        support_trading_session: str = "CORE",
     ) -> dict[str, str]:
         payload = {
             "combo_type": combo_type,
@@ -539,7 +558,7 @@ class WebullService:
             "market": "US",
             "order_type": order_type,
             "quantity": quantity,
-            "support_trading_session": "CORE",
+            "support_trading_session": support_trading_session,
             "side": side,
             "time_in_force": "DAY",
             "entrust_type": "QTY",
@@ -549,6 +568,43 @@ class WebullService:
         if stop_price is not None:
             payload["stop_price"] = f"{float(stop_price):.2f}"
         return payload
+
+    @classmethod
+    def _buy_entry_order_payload(
+        cls,
+        symbol: str,
+        quantity: str,
+        client_order_id: str,
+        limit_price: float,
+    ) -> dict[str, str]:
+        if cls._is_regular_market_open():
+            return cls._stock_order_payload(
+                symbol=symbol,
+                quantity=quantity,
+                client_order_id=client_order_id,
+                order_type="MARKET",
+                support_trading_session="CORE",
+            )
+        return cls._stock_order_payload(
+            symbol=symbol,
+            quantity=quantity,
+            client_order_id=client_order_id,
+            order_type="LIMIT",
+            limit_price=limit_price,
+            support_trading_session="ALL",
+        )
+
+    @classmethod
+    def _is_regular_market_open(cls, now: datetime | None = None) -> bool:
+        market_now = now or datetime.now(MARKET_TIMEZONE)
+        if market_now.tzinfo is None:
+            market_now = market_now.replace(tzinfo=MARKET_TIMEZONE)
+        else:
+            market_now = market_now.astimezone(MARKET_TIMEZONE)
+        if market_now.weekday() >= 5:
+            return False
+        current_time = market_now.time()
+        return datetime_time(9, 30) <= current_time < datetime_time(16, 0)
 
     @staticmethod
     def _response_body(response: Any) -> Any:
@@ -772,6 +828,15 @@ class WebullService:
             seen.add(key)
             output.append(order)
         return output
+
+    @classmethod
+    def _auto_trade_client_order_id(cls) -> str:
+        return f"{AUTO_TRADE_CLIENT_ORDER_PREFIX}{uuid.uuid4().hex[:28]}"
+
+    @classmethod
+    def _is_auto_trade_order(cls, order: dict[str, Any]) -> bool:
+        client_order_id = str(order.get("client_order_id") or "")
+        return client_order_id.startswith(AUTO_TRADE_CLIENT_ORDER_PREFIX)
 
     @classmethod
     def _is_order_on_date(cls, order: dict[str, Any], target_date: date) -> bool:

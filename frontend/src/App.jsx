@@ -761,17 +761,24 @@ export default function App() {
       setLiveAlert(`${symbol} is a short signal. Short order placement is not wired yet.`);
       return;
     }
-    const confirmed = window.confirm(`Buy 1 share of ${symbol} with a market order in account ${accountId}?`);
+    const limitPrice = Number(quote.price);
+    if (!Number.isFinite(limitPrice) || limitPrice <= 0) {
+      setLiveAlert(`${symbol} does not have a valid limit price yet. Refresh prices and try again.`);
+      return;
+    }
+    const confirmed = window.confirm(
+      `Buy 1 share of ${symbol} in account ${accountId}? Regular market uses market order; pre/after-hours uses a ${formatPrice(limitPrice)} limit order.`
+    );
     if (!confirmed) return;
 
     setBuyState((current) => ({ ...current, [symbol]: { status: "loading" } }));
     try {
-      const payload = await postJson("/api/trade/buy", { account_id: accountId, symbol });
+      const payload = await postJson("/api/trade/buy", { account_id: accountId, symbol, limit_price: limitPrice });
       if (!payload.ok) {
         throw new Error(payload.error || payload.preview?.error || payload.place?.error || `Webull rejected ${symbol} buy order.`);
       }
       setBuyState((current) => ({ ...current, [symbol]: { status: "ok" } }));
-      setLiveAlert(`Submitted buy order for 1 share of ${symbol}.`);
+      setLiveAlert(`Submitted buy order for 1 share of ${symbol}. Extended-hours limit fallback: ${formatPrice(limitPrice)}.`);
     } catch (error) {
       setBuyState((current) => ({ ...current, [symbol]: { status: "error" } }));
       setLiveAlert(error.message);
@@ -1216,12 +1223,6 @@ export default function App() {
                 selectedWatchlist={activeWatchlist}
                 symbolInput={symbolInputs[watchlistTab] || ""}
                 watchlists={watchlists}
-              />
-              <RiskSettingsPanel
-                disabled={loading.prices}
-                onApply={refreshAllPrices}
-                riskSettings={riskSettings}
-                onChange={updateRiskSettings}
               />
               <div className="section-heading">
                 <div>
