@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 
 from fastapi import HTTPException
@@ -55,6 +55,42 @@ def test_auto_long_uses_saved_watchlist_and_places_full_size_exit_payload(tmp_pa
     assert response["entry_price"] == 100
     assert response["stop_price"] == 95
     assert response["target_price"] == 105
+
+
+def test_manual_buy_requires_limit_price(tmp_path, monkeypatch):
+    watchlist_file = tmp_path / "watchlists.json"
+    WatchlistStore(watchlist_file).replace([{"id": "og", "symbols": ["AAOI"]}])
+    monkeypatch.setattr(trade, "get_settings", lambda: SimpleNamespace(watchlist_file=watchlist_file))
+
+    try:
+        trade.buy_one_share(trade.BuyRequest(account_id="acct-1", symbol="AAOI"))
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert exc.detail == "Limit price is required for buy orders."
+    else:
+        raise AssertionError("manual buy should require a limit price")
+
+
+def test_manual_buy_uses_limit_price(tmp_path, monkeypatch):
+    watchlist_file = tmp_path / "watchlists.json"
+    WatchlistStore(watchlist_file).replace([{"id": "og", "symbols": ["AAOI"]}])
+    monkeypatch.setattr(trade, "get_settings", lambda: SimpleNamespace(watchlist_file=watchlist_file))
+
+    class FakeService:
+        def account_list(self):
+            return {"data": [{"accountId": "acct-1", "accountType": "MARGIN"}]}
+
+        def buy_one_order(self, **kwargs):
+            return {"ok": True, **kwargs}
+
+    monkeypatch.setattr(trade, "service", lambda: FakeService())
+
+    response = trade.buy_one_share(trade.BuyRequest(account_id="acct-1", symbol="aaoi", limit_price=12.3456))
+
+    assert response["ok"] is True
+    assert response["account_id"] == "acct-1"
+    assert response["symbol"] == "AAOI"
+    assert response["limit_price"] == 12.3456
 
 
 def test_auto_long_rejects_cash_account(tmp_path, monkeypatch):
@@ -148,6 +184,7 @@ def test_auto_long_buys_first_then_places_linked_target_and_stop_for_full_size(m
     service = WebullService.__new__(WebullService)
     service._trade_client = lambda: SimpleNamespace(order_v3=FakeOrderV3())
     monkeypatch.setattr("app.webull_service.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr(WebullService, "_is_regular_market_open", classmethod(lambda cls: False))
 
     response = service.buy_with_bracket(
         account_id="acct-1",
@@ -176,11 +213,16 @@ def test_auto_long_buys_first_then_places_linked_target_and_stop_for_full_size(m
     ]
     assert exit_preview["client_combo_order_id"] == exit_place["client_combo_order_id"]
     assert response["exit_combo_order_id"] == exit_place["client_combo_order_id"]
+    assert response["orders"]["buy"]["client_order_id"].startswith("DKAT")
+    assert response["orders"]["target"]["client_order_id"].startswith("DKAT")
+    assert response["orders"]["stop"]["client_order_id"].startswith("DKAT")
 
     assert buy["combo_type"] == "NORMAL"
     assert buy["side"] == "BUY"
-    assert buy["order_type"] == "MARKET"
+    assert buy["order_type"] == "LIMIT"
     assert buy["quantity"] == "7"
+    assert buy["limit_price"] == "100.00"
+    assert buy["support_trading_session"] == "ALL"
 
     target, stop = exit_place["new_orders"]
     assert target["combo_type"] == "STOP_PROFIT"
@@ -193,6 +235,44 @@ def test_auto_long_buys_first_then_places_linked_target_and_stop_for_full_size(m
     assert stop["order_type"] == "STOP_LOSS"
     assert stop["quantity"] == "7"
     assert stop["stop_price"] == "95.00"
+
+
+def test_buy_entry_payload_uses_market_order_during_regular_market(monkeypatch):
+    monkeypatch.setattr(WebullService, "_is_regular_market_open", classmethod(lambda cls: True))
+
+    payload = WebullService._buy_entry_order_payload(
+        symbol="AAOI",
+        quantity="7",
+        client_order_id="client-1",
+        limit_price=100,
+    )
+
+    assert payload["order_type"] == "MARKET"
+    assert payload["support_trading_session"] == "CORE"
+    assert "limit_price" not in payload
+
+
+def test_buy_entry_payload_uses_limit_order_outside_regular_market(monkeypatch):
+    monkeypatch.setattr(WebullService, "_is_regular_market_open", classmethod(lambda cls: False))
+
+    payload = WebullService._buy_entry_order_payload(
+        symbol="AAOI",
+        quantity="7",
+        client_order_id="client-1",
+        limit_price=100,
+    )
+
+    assert payload["order_type"] == "LIMIT"
+    assert payload["support_trading_session"] == "ALL"
+    assert payload["limit_price"] == "100.00"
+
+
+def test_regular_market_open_uses_new_york_trading_hours():
+    assert WebullService._is_regular_market_open(datetime.fromisoformat("2026-07-08T09:29:59-04:00")) is False
+    assert WebullService._is_regular_market_open(datetime.fromisoformat("2026-07-08T09:30:00-04:00")) is True
+    assert WebullService._is_regular_market_open(datetime.fromisoformat("2026-07-08T15:59:59-04:00")) is True
+    assert WebullService._is_regular_market_open(datetime.fromisoformat("2026-07-08T16:00:00-04:00")) is False
+    assert WebullService._is_regular_market_open(datetime.fromisoformat("2026-07-11T10:00:00-04:00")) is False
 
 
 def test_auto_long_does_not_place_exits_until_buy_is_filled(monkeypatch):
@@ -387,7 +467,7 @@ def test_auto_trade_orders_buckets_buy_sell_open_and_filled(monkeypatch):
             "data": {
                 "orders": [
                     {
-                        "clientOrderId": "buy-1",
+                        "clientOrderId": "DKAT-buy-1",
                         "symbol": "AAOI",
                         "side": "BUY",
                         "orderStatus": "FILLED",
@@ -397,7 +477,7 @@ def test_auto_trade_orders_buckets_buy_sell_open_and_filled(monkeypatch):
                         "createdAt": f"{today}T10:00:00",
                     },
                     {
-                        "clientOrderId": "sell-1",
+                        "clientOrderId": "DKAT-sell-1",
                         "symbol": "AAOI",
                         "side": "SELL",
                         "orderStatus": "FILLED",
@@ -407,7 +487,17 @@ def test_auto_trade_orders_buckets_buy_sell_open_and_filled(monkeypatch):
                         "filledTime": f"{today}T10:30:00",
                     },
                     {
-                        "clientOrderId": "old-buy-1",
+                        "clientOrderId": "manual-buy-1",
+                        "symbol": "NVDA",
+                        "side": "BUY",
+                        "orderStatus": "FILLED",
+                        "orderType": "MARKET",
+                        "quantity": "1",
+                        "filledQuantity": "1",
+                        "createdAt": f"{today}T11:00:00",
+                    },
+                    {
+                        "clientOrderId": "DKAT-old-buy-1",
                         "symbol": "MSFT",
                         "side": "BUY",
                         "orderStatus": "FILLED",
@@ -425,7 +515,7 @@ def test_auto_trade_orders_buckets_buy_sell_open_and_filled(monkeypatch):
             "ok": True,
             "data": [
                 {
-                    "clientOrderId": "stop-1",
+                    "clientOrderId": "DKAT-stop-1",
                     "symbol": "AAOI",
                     "side": "SELL",
                     "orderStatus": "SUBMITTED",
@@ -435,7 +525,7 @@ def test_auto_trade_orders_buckets_buy_sell_open_and_filled(monkeypatch):
                     "placedTime": f"{today}T10:31:00",
                 },
                 {
-                    "clientOrderId": "old-stop-1",
+                    "clientOrderId": "DKAT-old-stop-1",
                     "symbol": "MSFT",
                     "side": "SELL",
                     "orderStatus": "SUBMITTED",
@@ -457,7 +547,8 @@ def test_auto_trade_orders_buckets_buy_sell_open_and_filled(monkeypatch):
     assert captured["history_days"] == 1
     assert response["trade_date"] == today
     assert response["counts"] == {"buy": 1, "sell": 2, "open": 1, "filled": 2}
-    assert [order["client_order_id"] for order in response["buckets"]["buy"]] == ["buy-1"]
-    assert {order["client_order_id"] for order in response["buckets"]["sell"]} == {"sell-1", "stop-1"}
-    assert [order["client_order_id"] for order in response["buckets"]["open"]] == ["stop-1"]
-    assert {order["client_order_id"] for order in response["buckets"]["filled"]} == {"buy-1", "sell-1"}
+    assert [order["client_order_id"] for order in response["buckets"]["buy"]] == ["DKAT-buy-1"]
+    assert {order["client_order_id"] for order in response["buckets"]["sell"]} == {"DKAT-sell-1", "DKAT-stop-1"}
+    assert [order["client_order_id"] for order in response["buckets"]["open"]] == ["DKAT-stop-1"]
+    assert {order["client_order_id"] for order in response["buckets"]["filled"]} == {"DKAT-buy-1", "DKAT-sell-1"}
+    assert all(order["client_order_id"].startswith("DKAT") for order in response["orders"])
