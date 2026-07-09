@@ -292,7 +292,7 @@ function alertLogEntries(tab, quotes, watchlists, riskSettings) {
   const alertedAt = new Date().toISOString();
   const watchlist = watchlists.find((item) => item.id === tab);
   return quotes.flatMap((quote) => (
-    (quote.mtf_matches || []).map((match) => {
+    (quote.mtf_matches || []).filter((match) => match.trade_action === "Long").map((match) => {
       const outcomePlan = alertOutcomePlan(match, quote.price, riskSettings);
       return {
         id: `${alertedAt}-${tab}-${quote.symbol}-${match.label}`,
@@ -1584,18 +1584,18 @@ function orderTimeText(item) {
 function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
   const [query, setQuery] = useState("");
   const [outcomeFilter, setOutcomeFilter] = useState("all");
-  const [tableView, setTableView] = useState("long");
+  const longAlertLog = useMemo(() => alertLog.filter((item) => item.action === "Long"), [alertLog]);
   const searched = useMemo(() => {
     const needle = query.trim().toUpperCase();
-    if (!needle) return alertLog;
-    return alertLog.filter((item) => (
+    if (!needle) return longAlertLog;
+    return longAlertLog.filter((item) => (
       item.symbol.includes(needle)
       || item.reason.toUpperCase().includes(needle)
       || item.action.toUpperCase().includes(needle)
       || item.watchlistName.toUpperCase().includes(needle)
       || String(item.outcome || "").toUpperCase().includes(needle)
     ));
-  }, [alertLog, query]);
+  }, [longAlertLog, query]);
   const outcomeCounts = useMemo(() => ({
     all: searched.length,
     open: searched.filter((item) => !item.outcome).length,
@@ -1608,13 +1608,6 @@ function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
     if (outcomeFilter === "sl") return searched.filter((item) => item.outcome === "SL");
     return searched;
   }, [outcomeFilter, searched]);
-  const longAlerts = useMemo(() => filtered.filter((item) => item.action === "Long"), [filtered]);
-  const shortAlerts = useMemo(() => filtered.filter((item) => item.action === "Short"), [filtered]);
-  const tableViews = [
-    { id: "long", label: "Long", count: longAlerts.length },
-    { id: "short", label: "Short", count: shortAlerts.length },
-  ];
-
   return (
     <section className="alert-log-page">
       <div className="alert-log-header">
@@ -1672,23 +1665,9 @@ function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
           SL <span>{outcomeCounts.sl}</span>
         </button>
       </div>
-      <div className="table-view-tabs" role="tablist" aria-label="Alert table view">
-        {tableViews.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={tableView === item.id ? "active" : ""}
-            onClick={() => setTableView(item.id)}
-            role="tab"
-            aria-selected={tableView === item.id}
-          >
-            {item.label} <span>{item.count}</span>
-          </button>
-        ))}
-      </div>
       <AlertLogTable
-        title={tableView === "short" ? "Short" : "Long"}
-        items={tableView === "short" ? shortAlerts : longAlerts}
+        title="Long"
+        items={filtered}
         onSelectSymbol={onSelectSymbol}
       />
     </section>
