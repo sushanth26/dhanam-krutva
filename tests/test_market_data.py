@@ -189,6 +189,7 @@ def test_mtf_matches_waits_when_active_candle_tests_cloud_ranges():
     matches = mtf_matches(
         105,
         "Bullish",
+        {"34": 96, "50": 101},
         {"34": 100, "50": 110},
         {"20": 100, "21": 103, "50": 104, "55": 106},
         previous_price=95,
@@ -206,6 +207,7 @@ def test_mtf_matches_alerts_bullish_only_after_price_closes_above_cloud():
         113,
         "Bullish",
         {"34": 100, "50": 110},
+        {"34": 100, "50": 110},
         {"20": 108, "21": 112, "50": 104, "55": 106},
         previous_price=105,
         current_low=104,
@@ -216,12 +218,15 @@ def test_mtf_matches_alerts_bullish_only_after_price_closes_above_cloud():
     assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 20/21", "Daily 50/55"]
     assert all(match["status"] == "confirmed" and match["direction"] == "above" for match in matches)
     assert all(match["trade_action"] == "Long" for match in matches)
+    assert all(match["risk_plan"]["stop"] == 100 for match in matches)
+    assert all(match["risk_plan"]["stop_mode"] == "10m-34-50-cloud" for match in matches)
 
 
 def test_mtf_matches_alerts_bearish_only_after_price_closes_below_cloud():
     matches = mtf_matches(
         99,
         "Bearish",
+        {"34": 100, "50": 110},
         {"34": 100, "50": 110},
         {"20": 80, "21": 90, "50": 104, "55": 106},
         previous_price=105,
@@ -533,10 +538,13 @@ def test_ema_cloud_bounce_sizes_a_plus_plus_bullish_after_touch_and_move_above_c
     assert [match["label"] for match in matches] == ["10m bounce 34/50"]
     assert matches[0]["trend"] == "Bullish"
     assert matches[0]["risk_plan"]["entry"] == 112
-    assert matches[0]["risk_plan"]["stop"] == 99
-    assert matches[0]["risk_plan"]["stop_buffer"] == 1
-    assert matches[0]["risk_plan"]["risk_per_share"] == 13
-    assert matches[0]["risk_plan"]["shares"] == 7
+    assert matches[0]["risk_plan"]["stop"] == 100
+    assert matches[0]["risk_plan"]["stop_buffer"] == 0
+    assert matches[0]["risk_plan"]["stop_mode"] == "10m-34-50-cloud"
+    assert matches[0]["risk_plan"]["risk_per_share"] == 12
+    assert matches[0]["risk_plan"]["shares"] == 8
+    assert matches[0]["stop_cloud_low"] == 100
+    assert matches[0]["stop_cloud_high"] == 110
 
 
 def test_ema_cloud_bounce_sizes_a_plus_plus_bearish_stop_above_cloud():
@@ -576,14 +584,14 @@ def test_ema_cloud_bounce_auto_sizes_from_last_three_daily_ranges():
     )
 
     risk_plan = matches[0]["risk_plan"]
-    assert risk_plan["stop_mode"] == "auto"
-    assert risk_plan["stop_buffer"] == 2.52
-    assert risk_plan["stop"] == 97.48
-    assert risk_plan["risk_per_share"] == 14.52
+    assert risk_plan["stop_mode"] == "10m-34-50-cloud"
+    assert risk_plan["stop_buffer"] == 0
+    assert risk_plan["stop"] == 100
+    assert risk_plan["risk_per_share"] == 12
     assert risk_plan["max_risk"] == 200
-    assert risk_plan["shares"] == 13
-    assert risk_plan["volatility"]["grade"] == "fast"
-    assert risk_plan["volatility"]["average_range"] == 21
+    assert risk_plan["shares"] == 16
+    assert risk_plan["volatility"]["grade"] == "fixed"
+    assert risk_plan["volatility"]["average_range"] is None
 
 
 def test_daily_volatility_grades_slow_names_from_last_three_days():

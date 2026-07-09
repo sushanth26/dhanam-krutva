@@ -254,12 +254,14 @@ def snapshot_number(snapshot: dict[str, Any] | None, *keys: str) -> float | None
 def mtf_matches(
     price: float | None,
     trend: str,
+    ema_10m: dict[str, float | None],
     ema_1h: dict[str, float | None],
     ema_daily: dict[str, float | None],
     previous_price: float | None = None,
     current_high: float | None = None,
     current_low: float | None = None,
     candle_complete: bool = True,
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
 ) -> list[dict[str, Any]]:
     checks = [
         ("Hourly 34/50", ema_1h.get("34"), ema_1h.get("50")),
@@ -282,6 +284,8 @@ def mtf_matches(
             "trade_action": trade_action_for_trend(trend),
             "type": "mtf_cloud_breakout",
         }
+        if trend == "Bullish":
+            match.update(bullish_ten_minute_cloud_risk_fields(price, ema_10m, risk_amount))
         if trend == "Bullish":
             if candle_complete and previous_price is not None and previous_price <= high and price > high:
                 matches.append({**match, "status": "confirmed", "direction": "above"})
@@ -321,12 +325,14 @@ def mtf_signal_matches(
     matches = mtf_matches(
         price,
         ten_minute_trend,
+        ema_10m,
         ema_1h,
         ema_daily,
         previous_price=previous_price,
         current_high=candle_high,
         current_low=candle_low,
         candle_complete=status == "confirmed",
+        risk_amount=risk_amount,
     )
     matches.extend(
         ema_cloud_bounce_matches(
@@ -475,16 +481,21 @@ def ema_cloud_bounce_matches(
                 should_enter = touched_cloud and confirmed_bounce
             if not should_enter:
                 continue
-            risk_plan = a_plus_plus_risk_plan(
-                entry=close,
-                cloud_low=cloud_low,
-                cloud_high=cloud_high,
-                trend=trend_value,
-                daily_candles=daily_candles,
-                risk_amount=risk_amount,
-                stop_mode=stop_mode,
-                fixed_stop_buffer=fixed_stop_buffer,
-            )
+            if trend_value == "Bullish":
+                risk_fields = bullish_ten_minute_cloud_risk_fields(close, ema_10m, risk_amount)
+                risk_plan = risk_fields.get("risk_plan")
+            else:
+                risk_fields = {}
+                risk_plan = a_plus_plus_risk_plan(
+                    entry=close,
+                    cloud_low=cloud_low,
+                    cloud_high=cloud_high,
+                    trend=trend_value,
+                    daily_candles=daily_candles,
+                    risk_amount=risk_amount,
+                    stop_mode=stop_mode,
+                    fixed_stop_buffer=fixed_stop_buffer,
+                )
             matches.append(
                 {
                     "label": label,
@@ -501,11 +512,13 @@ def ema_cloud_bounce_matches(
                     "status": "confirmed",
                     "trend": trend_value,
                     "trade_action": trade_action,
+                    **risk_fields,
                     **({"risk_plan": risk_plan} if risk_plan else {}),
                 }
             )
             continue
         if candle_complete and touched_cloud and confirmed_bounce:
+            risk_fields = bullish_ten_minute_cloud_risk_fields(close, ema_10m, risk_amount) if trend_value == "Bullish" else {}
             matches.append(
                 {
                     "label": label,
@@ -521,6 +534,7 @@ def ema_cloud_bounce_matches(
                     "type": "10m_cloud_bounce",
                     "trend": trend_value,
                     "trade_action": trade_action,
+                    **risk_fields,
                 }
             )
     return matches
@@ -659,6 +673,31 @@ def fixed_stop_risk_plan(
         "max_risk": round(risk_amount, 2),
         "shares": shares,
         "volatility": {"grade": "fixed", "average_range": None, "average_range_pct": None, "sample_size": 0},
+    }
+
+
+def bullish_ten_minute_cloud_risk_fields(
+    entry: float | None,
+    ema_10m: dict[str, float | None],
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
+) -> dict[str, Any]:
+    ema34 = ema_10m.get("34")
+    ema50 = ema_10m.get("50")
+    if entry is None or ema34 is None or ema50 is None:
+        return {}
+    stop_cloud_low = min(ema34, ema50)
+    stop_cloud_high = max(ema34, ema50)
+    risk_plan = fixed_stop_risk_plan(
+        entry=entry,
+        stop=stop_cloud_low,
+        max_risk=risk_amount,
+        stop_buffer=0,
+        stop_mode="10m-34-50-cloud",
+    )
+    return {
+        "stop_cloud_low": round(stop_cloud_low, 4),
+        "stop_cloud_high": round(stop_cloud_high, 4),
+        **({"risk_plan": risk_plan} if risk_plan else {}),
     }
 
 

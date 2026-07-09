@@ -365,7 +365,7 @@ function alertOutcomePlan(match, fallbackPrice, riskSettings) {
   const entry = Number(matchEntryPrice(match) ?? fallbackPrice);
   if (!Number.isFinite(entry) || !["Long", "Short"].includes(action)) return null;
   const riskPlan = match.risk_plan || null;
-  const cloudLow = Number(match.low ?? match.cloud_low);
+  const cloudLow = Number((action === "Long" ? match.stop_cloud_low : null) ?? match.low ?? match.cloud_low);
   const cloudHigh = Number(match.high ?? match.cloud_high);
   const fixedBuffer = Number(riskSettings?.fixedStopBuffer || 1);
   const stop = riskPlan?.stop != null
