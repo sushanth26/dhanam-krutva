@@ -565,13 +565,13 @@ def nine_ema_touch_matches(
     fast_cloud_low = min(ema5, ema12)
     slow_cloud_low = min(ema34, ema50)
     slow_cloud_high = max(ema34, ema50)
-    stop = slow_cloud_low - 2
+    stop = slow_cloud_low
     risk_plan = fixed_stop_risk_plan(
         entry=ema9,
         stop=stop,
         max_risk=risk_amount,
-        stop_buffer=2,
-        stop_mode="fixed-10m-34-50-cloud",
+        stop_buffer=0,
+        stop_mode="10m-34-50-cloud",
     )
     if not risk_plan:
         return []

@@ -28,7 +28,7 @@ export const ALERT_STRATEGIES = [
   {
     id: "ten-minute-9ema-touch",
     name: "10m 9 EMA touch",
-    description: "Bullish 10m stock touches the 9 EMA with SL $2 below the 10m 34/50 cloud.",
+    description: "Bullish 10m stock touches the 9 EMA with SL at the 10m 34/50 cloud low.",
     match: (match) => String(match?.label || "") === "10m 9 EMA touch",
   },
   {

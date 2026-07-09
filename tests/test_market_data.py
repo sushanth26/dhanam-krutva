@@ -111,11 +111,11 @@ def test_nine_ema_touch_matches_buys_bullish_stock_at_9ema_with_34_50_cloud_stop
     assert matches[0]["trade_action"] == "Long"
     assert matches[0]["type"] == "10m_9ema_touch"
     assert matches[0]["risk_plan"]["entry"] == 109.5
-    assert matches[0]["risk_plan"]["stop"] == 98
-    assert matches[0]["risk_plan"]["stop_buffer"] == 2
-    assert matches[0]["risk_plan"]["stop_mode"] == "fixed-10m-34-50-cloud"
-    assert matches[0]["risk_plan"]["risk_per_share"] == 11.5
-    assert matches[0]["risk_plan"]["shares"] == 8
+    assert matches[0]["risk_plan"]["stop"] == 100
+    assert matches[0]["risk_plan"]["stop_buffer"] == 0
+    assert matches[0]["risk_plan"]["stop_mode"] == "10m-34-50-cloud"
+    assert matches[0]["risk_plan"]["risk_per_share"] == 9.5
+    assert matches[0]["risk_plan"]["shares"] == 10
     assert matches[0]["stop_cloud_low"] == 100
     assert matches[0]["stop_cloud_high"] == 105
 
