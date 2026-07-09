@@ -1664,6 +1664,7 @@ function AlertLogPage({
 }) {
   const [query, setQuery] = useState("");
   const [outcomeFilter, setOutcomeFilter] = useState("all");
+  const [reviewNotice, setReviewNotice] = useState("");
   const longAlertLog = useMemo(() => alertLog.filter((item) => item.action === "Long"), [alertLog]);
   const searched = useMemo(() => {
     const needle = query.trim().toUpperCase();
@@ -1692,6 +1693,17 @@ function AlertLogPage({
   }, [outcomeFilter, searched]);
   const strategySections = useMemo(() => alertLogStrategySections(filtered), [filtered]);
   const proposals = useMemo(() => analyzeStrategyProposals(longAlertLog, strategyState), [longAlertLog, strategyState]);
+  const disabledStrategies = useMemo(() => (
+    ALERT_STRATEGIES.filter((strategy) => strategyState?.[strategy.id] === false)
+  ), [strategyState]);
+  function approveProposal(proposal) {
+    onApplyStrategyProposal(proposal);
+    if (proposal?.action === "disable") {
+      setReviewNotice(`${proposal.strategyName} disabled. It will stop creating new alerts and auto-trade candidates after the next refresh.`);
+    } else if (proposal?.action === "enable") {
+      setReviewNotice(`${proposal.strategyName} enabled. It can create new alerts again after the next refresh.`);
+    }
+  }
   return (
     <section className="alert-log-page">
       <div className="alert-log-header">
@@ -1701,7 +1713,12 @@ function AlertLogPage({
         </div>
         <button type="button" className="secondary-button" onClick={onClear} disabled={!alertLog.length}>Clear</button>
       </div>
-      <StrategyReviewPanel proposals={proposals} onApply={onApplyStrategyProposal} />
+      <StrategyReviewPanel
+        disabledStrategies={disabledStrategies}
+        notice={reviewNotice}
+        proposals={proposals}
+        onApply={approveProposal}
+      />
       <div className="alert-log-search">
         <input
           type="search"
@@ -1768,7 +1785,7 @@ function AlertLogPage({
   );
 }
 
-function StrategyReviewPanel({ proposals, onApply }) {
+function StrategyReviewPanel({ disabledStrategies, notice, proposals, onApply }) {
   return (
     <section className="strategy-review-panel" aria-label="AI strategy review">
       <div className="strategy-review-heading">
@@ -1778,6 +1795,13 @@ function StrategyReviewPanel({ proposals, onApply }) {
         </div>
         <strong>{proposals.length}</strong>
       </div>
+      {notice ? <div className="strategy-review-notice">{notice}</div> : null}
+      {disabledStrategies.length ? (
+        <div className="strategy-disabled-list" aria-label="Disabled strategies">
+          <span>Disabled</span>
+          {disabledStrategies.map((strategy) => <em key={strategy.id}>{strategy.name}</em>)}
+        </div>
+      ) : null}
       {proposals.length ? (
         <div className="strategy-proposals">
           {proposals.map((proposal) => (
@@ -1791,7 +1815,7 @@ function StrategyReviewPanel({ proposals, onApply }) {
                 <em>Review</em>
               ) : (
                 <button type="button" onClick={() => onApply(proposal)}>
-                  Approve {proposal.action}
+                  Approve: {proposal.action} strategy
                 </button>
               )}
             </article>
