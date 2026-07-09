@@ -535,17 +535,22 @@ def nine_ema_touch_matches(
     if not candle:
         return []
     candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
-    if not is_first_hour_regular_market_time(candle_time):
-        return []
 
     ema9 = ema_10m.get("9")
     ema5 = ema_10m.get("5")
     ema12 = ema_10m.get("12")
-    if ema9 is None or ema5 is None or ema12 is None:
+    ema34 = ema_10m.get("34")
+    ema50 = ema_10m.get("50")
+    if ema9 is None or ema5 is None or ema12 is None or ema34 is None or ema50 is None:
         return []
 
     ten_minute_trend = cloud_status(ema_10m, ["5", "12"], ["34", "50"])
     if ten_minute_trend != "Bullish":
+        return []
+    if not (
+        is_first_hour_regular_market_time(candle_time)
+        or previous_candle_touched_or_below_cloud(ten_minute_candles, ema34, ema50)
+    ):
         return []
 
     low = candle.get("low")
@@ -601,6 +606,23 @@ def is_first_hour_regular_market_time(value: Any) -> bool:
         market_time = parsed_time.astimezone(MARKET_TIMEZONE)
     current_time = market_time.time()
     return REGULAR_MARKET_OPEN <= current_time < NINE_EMA_TOUCH_CUTOFF
+
+
+def previous_candle_touched_or_below_cloud(candles: list[dict[str, Any]], first: float, second: float) -> bool:
+    cloud_low = min(first, second)
+    cloud_high = max(first, second)
+    for candle in candles[:-1]:
+        low = candle.get("low")
+        high = candle.get("high")
+        close = candle.get("close")
+        if low is None:
+            continue
+        if low <= cloud_low:
+            return True
+        candle_high = high if high is not None else max(value for value in (candle.get("open"), close, low) if value is not None)
+        if low <= cloud_high and candle_high >= cloud_low:
+            return True
+    return False
 
 
 def trade_action_for_trend(trend: str | None) -> str | None:

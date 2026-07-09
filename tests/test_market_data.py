@@ -157,6 +157,31 @@ def test_nine_ema_touch_matches_only_during_first_regular_market_hour():
     assert after_first_hour == []
 
 
+def test_nine_ema_touch_matches_all_day_after_prior_34_50_cloud_touch():
+    matches = nine_ema_touch_matches(
+        [
+            {"low": 100, "high": 107, "close": 106, "time": "2026-07-02T13:10:00"},
+            {"low": 108.5, "high": 110.5, "close": 110, "time": "2026-07-02T13:20:00"},
+        ],
+        {"5": 112, "9": 109.5, "12": 111, "34": 100, "50": 105},
+    )
+
+    assert [match["label"] for match in matches] == ["10m 9 EMA touch"]
+    assert matches[0]["entry_price"] == 109.5
+
+
+def test_nine_ema_touch_matches_after_first_hour_requires_prior_34_50_cloud_touch():
+    matches = nine_ema_touch_matches(
+        [
+            {"low": 106, "high": 108, "close": 107, "time": "2026-07-02T13:10:00"},
+            {"low": 108.5, "high": 110.5, "close": 110, "time": "2026-07-02T13:20:00"},
+        ],
+        {"5": 112, "9": 109.5, "12": 111, "34": 100, "50": 105},
+    )
+
+    assert matches == []
+
+
 def test_mtf_matches_waits_when_active_candle_tests_cloud_ranges():
     matches = mtf_matches(
         105,
