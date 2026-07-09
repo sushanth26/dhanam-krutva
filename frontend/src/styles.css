@@ -1338,6 +1338,94 @@ select {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.mtf-page {
+  display: grid;
+  gap: 14px;
+  margin-top: 0;
+  order: 0;
+  position: static;
+}
+
+.mtf-page-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.mtf-page-header h2 {
+  font-size: 22px;
+}
+
+.mtf-page-header strong {
+  align-items: center;
+  background: #12664f;
+  border-radius: 999px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 14px;
+  justify-content: center;
+  min-height: 34px;
+  min-width: 42px;
+  padding: 0 12px;
+}
+
+.mtf-strategy-sections {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.mtf-desktop-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mtf-signal-group {
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.mtf-signal-heading {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.mtf-signal-heading h3 {
+  font-size: 16px;
+}
+
+.mtf-signal-heading span {
+  background: #f8faf7;
+  border: 1px solid #dbe2d8;
+  border-radius: 999px;
+  color: #68766c;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 8px;
+}
+
+.mtf-page .mtf-bucket + .mtf-bucket {
+  margin-top: 0;
+}
+
+.mtf-empty-state {
+  background: #f8faf7;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  color: #68766c;
+  font-weight: 900;
+  padding: 18px;
+  text-align: center;
+}
+
 .auto-trade-bucket {
   border: 1px solid #dbe2d8;
   border-radius: 8px;
@@ -2895,12 +2983,17 @@ h1 {
 
 @media (min-width: 1120px) {
   .homepage-market-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .global-mtf-panel {
     order: 0;
     position: sticky;
     top: 72px;
+  }
+
+  .mtf-page {
+    position: static;
+    top: auto;
   }
 }

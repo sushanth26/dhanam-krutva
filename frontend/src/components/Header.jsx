@@ -18,6 +18,7 @@ export function Header({
   activePage,
   alertLogCount,
   autoTradeOrderCount,
+  mtfCount,
   onNavigate,
   settingsBadge,
   settingsControls,
@@ -93,6 +94,17 @@ export function Header({
           >
             <span>Alerts</span>
             <b>{alertLogCount}</b>
+          </button>
+          <button
+            type="button"
+            className={`account-menu-button secondary-button ${activePage === "mtfs" ? "active" : ""}`}
+            disabled={pageLoading}
+            onClick={() => onNavigate("mtfs")}
+            aria-label="Open MTFs"
+            title="MTFs"
+          >
+            <span>MTFs</span>
+            <b>{mtfCount}</b>
           </button>
           <button
             type="button"

@@ -403,6 +403,7 @@ export default function App() {
   const [alertLog, setAlertLog] = useState(loadAlertLog);
   const [activePage, setActivePage] = useState(() => {
     if (window.location.hash === "#alerts") return "alerts";
+    if (window.location.hash === "#mtfs") return "mtfs";
     if (window.location.hash === "#trades") return "trades";
     return "home";
   });
@@ -706,7 +707,7 @@ export default function App() {
 
   function navigatePage(page) {
     setActivePage(page);
-    const hash = page === "alerts" ? "#alerts" : page === "trades" ? "#trades" : "";
+    const hash = page === "alerts" ? "#alerts" : page === "mtfs" ? "#mtfs" : page === "trades" ? "#trades" : "";
     window.history.replaceState(null, "", hash || window.location.pathname);
   }
 
@@ -1095,6 +1096,7 @@ export default function App() {
       if (event.data?.type !== "MTF_PUSH_UPDATE") return;
       const targetSymbol = event.data.payload?.targetSymbol;
       if (targetSymbol) focusMtfSymbol(targetSymbol);
+      navigatePage("mtfs");
       refreshAppMarketData({ showLoading: false });
     }
 
@@ -1105,7 +1107,10 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const symbol = params.get("mtf");
-    if (symbol) focusMtfSymbol(symbol);
+    if (symbol) {
+      focusMtfSymbol(symbol);
+      navigatePage("mtfs");
+    }
   }, []);
 
   useEffect(() => {
@@ -1175,6 +1180,7 @@ export default function App() {
         activePage={activePage}
         alertLogCount={alertLog.length}
         autoTradeOrderCount={autoTradeOrderCount}
+        mtfCount={allMtfQuotes.length}
         onNavigate={navigatePage}
         settingsBadge={autoTrade.enabled ? "Auto" : enabledStrategyCount}
         settingsControls={(
@@ -1210,8 +1216,18 @@ export default function App() {
             onClear={clearAlertLog}
             onSelectSymbol={(symbol) => {
               focusMtfSymbol(symbol);
-              navigatePage("home");
+              navigatePage("mtfs");
             }}
+          />
+        ) : activePage === "mtfs" ? (
+          <MtfPage
+            buyState={buyState}
+            focusedSymbol={focusedMtfSymbol}
+            longMtfs={longMtfs}
+            onBuy={buyMtfQuote}
+            onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
+            shortMtfs={shortMtfs}
+            waitingMtfs={waitingMtfs}
           />
         ) : activePage === "trades" ? (
           <AutoTradesPage
@@ -1261,43 +1277,156 @@ export default function App() {
                 <p className="muted">{updatedText}</p>
               </div>
             </section>
-            <aside className="global-mtf-panel" aria-label="MTFs from all tabs">
-              <MtfTable
-                quotes={longMtfs}
-                title="Long"
-                showWatchlist
-                buyState={buyState}
-                emptyText="None"
-                focusedSymbol={focusedMtfSymbol}
-                onBuy={buyMtfQuote}
-                onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
-                showSignalTags={false}
-              />
-              <MtfTable
-                quotes={shortMtfs}
-                title="Short"
-                showWatchlist
-                buyState={buyState}
-                emptyText="None"
-                focusedSymbol={focusedMtfSymbol}
-                onBuy={buyMtfQuote}
-                onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
-                showSignalTags={false}
-              />
-              <MtfTable
-                quotes={waitingMtfs}
-                title="Wait"
-                showWatchlist
-                emptyText="None"
-                focusedSymbol={focusedMtfSymbol}
-              />
-            </aside>
           </div>
         )}
         <HiddenLegacyPanels />
       </main>
     </>
   );
+}
+
+function MtfPage({
+  buyState,
+  focusedSymbol,
+  longMtfs,
+  onBuy,
+  onDismissNew,
+  shortMtfs,
+  waitingMtfs,
+}) {
+  const [showAllTables, setShowAllTables] = useState(() => window.matchMedia("(min-width: 900px)").matches);
+  const [tableView, setTableView] = useState("long");
+  const tableViews = [
+    { id: "long", label: "Long", count: longMtfs.length },
+    { id: "short", label: "Short", count: shortMtfs.length },
+    { id: "wait", label: "Wait", count: waitingMtfs.length },
+  ];
+  const selectedQuotes = tableView === "short" ? shortMtfs : tableView === "wait" ? waitingMtfs : longMtfs;
+  const selectedView = tableViews.find((item) => item.id === tableView) || tableViews[0];
+  const totalCount = longMtfs.length + shortMtfs.length + waitingMtfs.length;
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 900px)");
+    const updateLayout = () => setShowAllTables(query.matches);
+    updateLayout();
+    query.addEventListener("change", updateLayout);
+    return () => query.removeEventListener("change", updateLayout);
+  }, []);
+
+  return (
+    <section className="mtf-page global-mtf-panel">
+      <div className="mtf-page-header">
+        <div>
+          <h2>MTFs</h2>
+          <p className="muted">Long, short, and wait signals from every watchlist.</p>
+        </div>
+        <strong>{totalCount}</strong>
+      </div>
+
+      {showAllTables ? (
+        <div className="mtf-desktop-grid">
+          <MtfSignalGroup
+            buyState={buyState}
+            focusedSymbol={focusedSymbol}
+            label="Long"
+            onBuy={onBuy}
+            onDismissNew={onDismissNew}
+            quotes={longMtfs}
+          />
+          <MtfSignalGroup
+            buyState={buyState}
+            focusedSymbol={focusedSymbol}
+            label="Short"
+            onBuy={onBuy}
+            onDismissNew={onDismissNew}
+            quotes={shortMtfs}
+          />
+          <MtfSignalGroup
+            buyState={buyState}
+            focusedSymbol={focusedSymbol}
+            label="Wait"
+            onDismissNew={onDismissNew}
+            quotes={waitingMtfs}
+          />
+        </div>
+      ) : (
+        <>
+          <div className="table-view-tabs" role="tablist" aria-label="MTF table view">
+            {tableViews.map((view) => (
+              <button
+                key={view.id}
+                type="button"
+                className={tableView === view.id ? "active" : ""}
+                onClick={() => setTableView(view.id)}
+                role="tab"
+                aria-selected={tableView === view.id}
+              >
+                {view.label} <span>{view.count}</span>
+              </button>
+            ))}
+          </div>
+          <MtfSignalGroup
+            buyState={buyState}
+            focusedSymbol={focusedSymbol}
+            label={selectedView.label}
+            onBuy={tableView === "wait" ? undefined : onBuy}
+            onDismissNew={onDismissNew}
+            quotes={selectedQuotes}
+          />
+        </>
+      )}
+    </section>
+  );
+}
+
+function MtfSignalGroup({
+  buyState,
+  focusedSymbol,
+  label,
+  onBuy,
+  onDismissNew,
+  quotes,
+}) {
+  const strategySections = mtfStrategySections(quotes);
+
+  return (
+    <section className="mtf-signal-group">
+      <div className="mtf-signal-heading">
+        <h3>{label}</h3>
+        <span>{quotes.length}</span>
+      </div>
+      <div className="mtf-strategy-sections">
+        {strategySections.length ? strategySections.map((section) => (
+          <MtfTable
+            key={section.id}
+            quotes={section.quotes}
+            title={section.name}
+            showWatchlist
+            buyState={buyState}
+            emptyText="None"
+            focusedSymbol={focusedSymbol}
+            onBuy={onBuy}
+            onDismissNew={onDismissNew}
+            showSignalTags={false}
+          />
+        )) : (
+          <div className="mtf-empty-state">No {label.toLowerCase()} MTFs right now.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function mtfStrategySections(quotes) {
+  return ALERT_STRATEGIES.map((strategy) => {
+    const strategyQuotes = quotes
+      .map((quote) => ({
+        ...quote,
+        mtf_matches: (quote.mtf_matches || []).filter((match) => strategy.match(match)),
+      }))
+      .filter((quote) => quote.mtf_matches.length);
+    return { id: strategy.id, name: strategy.name, quotes: strategyQuotes };
+  }).filter((section) => section.quotes.length);
 }
 
 function AutoTradesPage({ accountId, alert, loading, orders, onRefresh }) {

@@ -20,6 +20,7 @@ WEBULL_BATCH_BAR_LIMIT = 20
 MARKET_TIMEZONE = ZoneInfo("America/New_York")
 REGULAR_MARKET_OPEN = time(9, 30)
 NINE_EMA_TOUCH_CUTOFF = time(10, 30)
+NINE_EMA_RECENT_CLOUD_LOOKBACK = 4
 A_PLUS_PLUS_MAX_RISK = 100
 A_PLUS_PLUS_STOP_BUFFER = 1
 A_PLUS_PLUS_STOP_MODE_FIXED = "fixed"
@@ -476,7 +477,7 @@ def ema_cloud_bounce_matches(
             confirmed_bounce = False
         if timeframe == "10m":
             if trend_value == "Bullish":
-                should_enter = touched_cloud and confirmed_bounce and (previous_price is None or previous_price <= cloud_high)
+                should_enter = candle_complete and touched_cloud and confirmed_bounce and (previous_price is None or previous_price <= cloud_high)
             else:
                 should_enter = touched_cloud and confirmed_bounce
             if not should_enter:
@@ -563,7 +564,7 @@ def nine_ema_touch_matches(
         return []
     if not (
         is_first_hour_regular_market_time(candle_time)
-        or previous_candle_touched_or_below_cloud(ten_minute_candles, ema34, ema50)
+        or recent_previous_candle_touched_or_below_cloud(ten_minute_candles, ema34, ema50)
     ):
         return []
 
@@ -579,12 +580,13 @@ def nine_ema_touch_matches(
     fast_cloud_low = min(ema5, ema12)
     slow_cloud_low = min(ema34, ema50)
     slow_cloud_high = max(ema34, ema50)
-    stop = slow_cloud_low
+    stop_buffer = A_PLUS_PLUS_STOP_BUFFER
+    stop = slow_cloud_low - stop_buffer
     risk_plan = fixed_stop_risk_plan(
         entry=ema9,
         stop=stop,
         max_risk=risk_amount,
-        stop_buffer=0,
+        stop_buffer=stop_buffer,
         stop_mode="10m-34-50-cloud",
     )
     if not risk_plan:
@@ -626,10 +628,10 @@ def is_first_hour_regular_market_time(value: Any) -> bool:
     return REGULAR_MARKET_OPEN <= current_time < NINE_EMA_TOUCH_CUTOFF
 
 
-def previous_candle_touched_or_below_cloud(candles: list[dict[str, Any]], first: float, second: float) -> bool:
+def recent_previous_candle_touched_or_below_cloud(candles: list[dict[str, Any]], first: float, second: float) -> bool:
     cloud_low = min(first, second)
     cloud_high = max(first, second)
-    for candle in candles[:-1]:
+    for candle in candles[-(NINE_EMA_RECENT_CLOUD_LOOKBACK + 1):-1]:
         low = candle.get("low")
         high = candle.get("high")
         close = candle.get("close")
@@ -687,11 +689,12 @@ def bullish_ten_minute_cloud_risk_fields(
         return {}
     stop_cloud_low = min(ema34, ema50)
     stop_cloud_high = max(ema34, ema50)
+    stop_buffer = A_PLUS_PLUS_STOP_BUFFER
     risk_plan = fixed_stop_risk_plan(
         entry=entry,
-        stop=stop_cloud_low,
+        stop=stop_cloud_low - stop_buffer,
         max_risk=risk_amount,
-        stop_buffer=0,
+        stop_buffer=stop_buffer,
         stop_mode="10m-34-50-cloud",
     )
     return {
