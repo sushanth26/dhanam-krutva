@@ -1,5 +1,3 @@
-const TEN_MINUTE_MIN_CLOUD_THICKNESS = 0.50;
-
 export function formatPrice(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return "-";
@@ -92,9 +90,6 @@ export function cloudStatus(emaSet, fastKeys, slowKeys) {
   const fastTop = Math.max(...fastValues);
   const slowBottom = Math.min(...slowValues);
   const slowTop = Math.max(...slowValues);
-
-  if ((fastTop - fastBottom) < TEN_MINUTE_MIN_CLOUD_THICKNESS) return "Chop";
-  if ((slowTop - slowBottom) < TEN_MINUTE_MIN_CLOUD_THICKNESS) return "Chop";
 
   if (fastBottom > slowTop) return "Bullish";
   if (fastTop < slowBottom) return "Bearish";
