@@ -23,6 +23,7 @@ NINE_EMA_TOUCH_CUTOFF = time(10, 30)
 NINE_EMA_RECENT_CLOUD_LOOKBACK = 4
 A_PLUS_PLUS_MAX_RISK = 100
 A_PLUS_PLUS_STOP_BUFFER = 1
+MTF_CLOUD_STOP_BUFFER = 3
 A_PLUS_PLUS_STOP_MODE_FIXED = "fixed"
 A_PLUS_PLUS_STOP_MODE_AUTO = "auto"
 
@@ -285,8 +286,8 @@ def mtf_matches(
             "trade_action": trade_action_for_trend(trend),
             "type": "mtf_cloud_breakout",
         }
-        if trend == "Bullish":
-            match.update(bullish_ten_minute_cloud_risk_fields(price, ema_10m, risk_amount))
+        if trend in ("Bullish", "Bearish"):
+            match.update(mtf_cloud_breakout_risk_fields(price, low, high, trend, risk_amount))
         if trend == "Bullish":
             if candle_complete and previous_price is not None and previous_price <= high and price > high:
                 matches.append({**match, "status": "confirmed", "direction": "above"})
@@ -675,6 +676,36 @@ def fixed_stop_risk_plan(
         "max_risk": round(risk_amount, 2),
         "shares": shares,
         "volatility": {"grade": "fixed", "average_range": None, "average_range_pct": None, "sample_size": 0},
+    }
+
+
+def mtf_cloud_breakout_risk_fields(
+    entry: float | None,
+    cloud_low: float,
+    cloud_high: float,
+    trend: str,
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
+) -> dict[str, Any]:
+    if entry is None:
+        return {}
+    stop_buffer = MTF_CLOUD_STOP_BUFFER
+    if trend == "Bullish":
+        stop = cloud_low - stop_buffer
+    elif trend == "Bearish":
+        stop = cloud_high + stop_buffer
+    else:
+        return {}
+    risk_plan = fixed_stop_risk_plan(
+        entry=entry,
+        stop=stop,
+        max_risk=risk_amount,
+        stop_buffer=stop_buffer,
+        stop_mode="mtf-cloud-3-dollar",
+    )
+    return {
+        "stop_cloud_low": round(cloud_low, 4),
+        "stop_cloud_high": round(cloud_high, 4),
+        **({"risk_plan": risk_plan} if risk_plan else {}),
     }
 
 

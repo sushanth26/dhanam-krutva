@@ -236,8 +236,9 @@ def test_mtf_matches_alerts_bullish_only_after_price_closes_above_cloud():
     assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 20/21", "Daily 50/55"]
     assert all(match["status"] == "confirmed" and match["direction"] == "above" for match in matches)
     assert all(match["trade_action"] == "Long" for match in matches)
-    assert all(match["risk_plan"]["stop"] == 99 for match in matches)
-    assert all(match["risk_plan"]["stop_mode"] == "10m-34-50-cloud" for match in matches)
+    assert [match["risk_plan"]["stop"] for match in matches] == [97, 105, 101]
+    assert all(match["risk_plan"]["stop_buffer"] == 3 for match in matches)
+    assert all(match["risk_plan"]["stop_mode"] == "mtf-cloud-3-dollar" for match in matches)
 
 
 def test_mtf_matches_alerts_bearish_only_after_price_closes_below_cloud():
@@ -256,6 +257,9 @@ def test_mtf_matches_alerts_bearish_only_after_price_closes_below_cloud():
     assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 50/55"]
     assert all(match["status"] == "confirmed" and match["direction"] == "below" for match in matches)
     assert all(match["trade_action"] == "Short" for match in matches)
+    assert [match["risk_plan"]["stop"] for match in matches] == [113, 109]
+    assert all(match["risk_plan"]["stop_buffer"] == 3 for match in matches)
+    assert all(match["risk_plan"]["stop_mode"] == "mtf-cloud-3-dollar" for match in matches)
 
 
 def test_mtf_signal_matches_skips_chop_trend():
