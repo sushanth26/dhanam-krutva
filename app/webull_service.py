@@ -360,16 +360,7 @@ class WebullService:
             }
 
         exit_quantity = max(1, int(buy_fill.get("filled_quantity") or quantity))
-        exit_orders = [
-            self._stock_order_payload(
-                symbol=symbol,
-                quantity=str(exit_quantity),
-                client_order_id=target_client_order_id,
-                side="SELL",
-                order_type="LIMIT",
-                combo_type="STOP_PROFIT",
-                limit_price=target_price,
-            ),
+        stop_orders = [
             self._stock_order_payload(
                 symbol=symbol,
                 quantity=str(exit_quantity),
@@ -378,20 +369,13 @@ class WebullService:
                 order_type="STOP_LOSS",
                 combo_type="STOP_LOSS",
                 stop_price=stop_price,
-            ),
-        ]
-
-        exit_preview = self._call(
-            lambda: self._trade_client().order_v3.preview_order(
-                account_id,
-                exit_orders,
-                client_combo_order_id=exit_combo_order_id,
             )
-        )
-        if not exit_preview.get("ok"):
+        ]
+        stop_preview = self._call(lambda: self._trade_client().order_v3.preview_order(account_id, stop_orders))
+        if not stop_preview.get("ok"):
             return {
                 "ok": False,
-                "stage": "exit_preview",
+                "stage": "stop_preview",
                 "symbol": symbol,
                 "quantity": quantity,
                 "entry_price": entry_price,
@@ -404,26 +388,75 @@ class WebullService:
                     "target": {"client_order_id": target_client_order_id},
                     "stop": {"client_order_id": stop_client_order_id},
                 },
-                "preview": exit_preview,
+                "preview": stop_preview,
                 "buy_preview": buy_preview,
                 "buy_place": buy_place,
                 "buy_fill": buy_fill,
-                "exit_preview": exit_preview,
+                "stop_preview": stop_preview,
+                "stop_place": None,
+                "target_preview": None,
+                "target_place": None,
+                "exit_preview": stop_preview,
                 "exit_place": None,
                 "place": buy_place,
             }
 
         time.sleep(1.1)
-        exit_place = self._call(
-            lambda: self._trade_client().order_v3.place_order(
-                account_id,
-                exit_orders,
-                client_combo_order_id=exit_combo_order_id,
+        stop_place = self._call(lambda: self._trade_client().order_v3.place_order(account_id, stop_orders))
+        if not stop_place.get("ok"):
+            return {
+                "ok": False,
+                "stage": "stop_place",
+                "symbol": symbol,
+                "quantity": quantity,
+                "entry_price": entry_price,
+                "stop_price": stop_price,
+                "target_price": target_price,
+                "risk_per_share": round(abs(entry_price - stop_price), 4),
+                "exit_combo_order_id": exit_combo_order_id,
+                "orders": {
+                    "buy": {"client_order_id": buy_client_order_id},
+                    "target": {"client_order_id": target_client_order_id},
+                    "stop": {"client_order_id": stop_client_order_id},
+                },
+                "preview": stop_preview,
+                "buy_preview": buy_preview,
+                "buy_place": buy_place,
+                "buy_fill": buy_fill,
+                "stop_preview": stop_preview,
+                "stop_place": stop_place,
+                "target_preview": None,
+                "target_place": None,
+                "exit_preview": stop_preview,
+                "exit_place": stop_place,
+                "place": stop_place,
+            }
+
+        target_orders = [
+            self._stock_order_payload(
+                symbol=symbol,
+                quantity=str(exit_quantity),
+                client_order_id=target_client_order_id,
+                side="SELL",
+                order_type="LIMIT",
+                combo_type="STOP_PROFIT",
+                limit_price=target_price,
             )
-        )
+        ]
+        target_preview = self._call(lambda: self._trade_client().order_v3.preview_order(account_id, target_orders))
+        if target_preview.get("ok"):
+            time.sleep(1.1)
+            target_place = self._call(lambda: self._trade_client().order_v3.place_order(account_id, target_orders))
+        else:
+            target_place = None
+
+        target_ok = bool(target_place and target_place.get("ok"))
+        exit_preview = {"ok": bool(stop_preview.get("ok") and target_preview.get("ok")), "stop": stop_preview, "target": target_preview}
+        exit_place = {"ok": bool(stop_place.get("ok") and target_ok), "stop": stop_place, "target": target_place}
+        stage = "complete" if target_ok else "stop_placed_target_failed"
         return {
-            "ok": bool(exit_place.get("ok")),
-            "stage": "complete" if exit_place.get("ok") else "exit_place",
+            "ok": bool(stop_place.get("ok")),
+            "stage": stage,
             "symbol": symbol,
             "quantity": quantity,
             "entry_price": entry_price,
@@ -440,6 +473,10 @@ class WebullService:
             "buy_preview": buy_preview,
             "buy_place": buy_place,
             "buy_fill": buy_fill,
+            "stop_preview": stop_preview,
+            "stop_place": stop_place,
+            "target_preview": target_preview,
+            "target_place": target_place,
             "exit_preview": exit_preview,
             "exit_place": exit_place,
             "place": exit_place,
