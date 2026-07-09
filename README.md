@@ -58,9 +58,15 @@ WEBULL_APP_SECRET=...
 WEBULL_ENV=prod
 WEBULL_REGION=us
 WEBULL_TOKEN_DIR=/data/.webull-token
+WEBULL_GUARD_ENABLED=true
+WEBULL_GUARD_FILE=/data/webull-guard.json
 APP_USERNAME=sushanth
 APP_PASSWORD=<strong private password>
 ```
+
+`WEBULL_GUARD_ENABLED=false` is an emergency override for one controlled retry
+when Webull support has reset a verification/rate-limit lock. Turn it back on
+after the retry.
 
 For phone app-style MTF push notifications, generate VAPID keys once:
 

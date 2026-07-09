@@ -42,6 +42,7 @@ class WebullService:
             "endpoint": self.settings.endpoint,
             "data_mode": "live" if self.settings.environment == "prod" else "test",
             "auth_enabled": self.settings.auth_enabled,
+            "webull_guard_enabled": self.settings.webull_guard_enabled,
             "webull_guard": self._guard_status(),
         }
 
@@ -634,6 +635,8 @@ class WebullService:
     def _guard_settings(self) -> Settings | None:
         settings = getattr(self, "settings", None)
         if not settings or not hasattr(settings, "webull_guard_file"):
+            return None
+        if not getattr(settings, "webull_guard_enabled", True):
             return None
         return settings
 

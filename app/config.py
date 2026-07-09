@@ -33,6 +33,7 @@ class Settings:
     vapid_subject: str
     push_subscription_file: Path
     watchlist_file: Path
+    webull_guard_enabled: bool
     webull_guard_file: Path
     webull_verify_cooldown_seconds: int
     webull_rate_limit_cooldown_seconds: int
@@ -76,6 +77,7 @@ def get_settings() -> Settings:
         vapid_subject=os.getenv("VAPID_SUBJECT", "mailto:sushanth@example.com").strip() or "mailto:sushanth@example.com",
         push_subscription_file=Path(os.getenv("PUSH_SUBSCRIPTION_FILE", "").strip() or default_push_subscription_file()),
         watchlist_file=Path(os.getenv("WATCHLIST_FILE", "").strip() or default_watchlist_file()),
+        webull_guard_enabled=env_bool("WEBULL_GUARD_ENABLED", True),
         webull_guard_file=Path(os.getenv("WEBULL_GUARD_FILE", "").strip() or default_webull_guard_file()),
         webull_verify_cooldown_seconds=max(300, int(os.getenv("WEBULL_VERIFY_COOLDOWN_SECONDS", "43200") or "43200")),
         webull_rate_limit_cooldown_seconds=max(60, int(os.getenv("WEBULL_RATE_LIMIT_COOLDOWN_SECONDS", "1800") or "1800")),
@@ -106,3 +108,10 @@ def default_webull_guard_file() -> str:
     if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
         return "/data/webull-guard.json"
     return ".webull-guard.json"
+
+
+def env_bool(name: str, default: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() not in {"0", "false", "no", "off", "disabled"}

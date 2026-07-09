@@ -19,6 +19,7 @@ def settings(tmp_path: Path) -> Settings:
         vapid_subject="mailto:test@example.com",
         push_subscription_file=tmp_path / "push.json",
         watchlist_file=tmp_path / "watchlists.json",
+        webull_guard_enabled=True,
         webull_guard_file=tmp_path / "webull-guard.json",
         webull_verify_cooldown_seconds=3600,
         webull_rate_limit_cooldown_seconds=300,
@@ -66,3 +67,35 @@ def test_active_webull_guard_blocks_future_sdk_calls(tmp_path):
     assert result["status_code"] == 423
     assert result["error_code"] == "WEBULL_GUARD_ACTIVE"
     assert result["webull_guard_reason"] == "rate_limit"
+
+
+def test_disabled_webull_guard_does_not_block_future_sdk_calls(tmp_path):
+    disabled_settings = settings(tmp_path)
+    disabled_settings = Settings(
+        **{
+            **disabled_settings.__dict__,
+            "webull_guard_enabled": False,
+        }
+    )
+    service = WebullService(disabled_settings)
+    service._guarded_result(
+        {
+            "ok": False,
+            "status_code": 429,
+            "request_id": "request-3",
+            "error_code": "TOO_MANY_REQUESTS",
+            "error": "Too many requests",
+        }
+    )
+
+    class FakeResponse:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            return {"ok": True}
+
+    result = service._call(lambda: FakeResponse())
+
+    assert service.status()["webull_guard_enabled"] is False
+    assert result["ok"] is True
