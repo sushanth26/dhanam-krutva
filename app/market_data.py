@@ -24,7 +24,6 @@ NINE_EMA_RECENT_CLOUD_LOOKBACK = 4
 A_PLUS_PLUS_MAX_RISK = 100
 A_PLUS_PLUS_STOP_BUFFER = 1
 MTF_CLOUD_STOP_BUFFER = 3
-TEN_MINUTE_MIN_CLOUD_THICKNESS = 0.50
 A_PLUS_PLUS_STOP_MODE_FIXED = "fixed"
 A_PLUS_PLUS_STOP_MODE_AUTO = "auto"
 
@@ -819,11 +818,6 @@ def cloud_status(ema_set: dict[str, float | None], fast_keys: list[str], slow_ke
     fast_top = max(fast_values)
     slow_bottom = min(slow_values)
     slow_top = max(slow_values)
-
-    if (fast_top - fast_bottom) < TEN_MINUTE_MIN_CLOUD_THICKNESS:
-        return "Chop"
-    if (slow_top - slow_bottom) < TEN_MINUTE_MIN_CLOUD_THICKNESS:
-        return "Chop"
 
     if fast_bottom > slow_top:
         return "Bullish"
