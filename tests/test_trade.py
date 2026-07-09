@@ -177,7 +177,7 @@ def test_auto_long_rejects_symbols_from_auto_trade_disabled_watchlists(tmp_path,
         raise AssertionError("auto long should reject symbols from disabled watchlists")
 
 
-def test_auto_long_buys_first_then_places_linked_target_and_stop_for_full_size(monkeypatch):
+def test_auto_long_buys_first_then_places_stop_only_for_full_size(monkeypatch):
     captured = {}
     calls = []
 
@@ -194,7 +194,12 @@ def test_auto_long_buys_first_then_places_linked_target_and_stop_for_full_size(m
     class FakeOrderV3:
         def preview_order(self, account_id, new_orders, client_combo_order_id=None):
             calls.append(("preview", len(new_orders), client_combo_order_id))
-            key = "exit_preview" if client_combo_order_id else "buy_preview"
+            order = new_orders[0]
+            key = "buy_preview"
+            if order.get("order_type") == "STOP_LOSS":
+                key = "stop_preview"
+            elif order.get("side") == "SELL":
+                key = "target_preview"
             captured[key] = {
                 "account_id": account_id,
                 "new_orders": new_orders,
@@ -204,7 +209,12 @@ def test_auto_long_buys_first_then_places_linked_target_and_stop_for_full_size(m
 
         def place_order(self, account_id, new_orders, client_combo_order_id=None):
             calls.append(("place", len(new_orders), client_combo_order_id))
-            key = "exit_place" if client_combo_order_id else "buy_place"
+            order = new_orders[0]
+            key = "buy_place"
+            if order.get("order_type") == "STOP_LOSS":
+                key = "stop_place"
+            elif order.get("side") == "SELL":
+                key = "target_place"
             captured[key] = {
                 "account_id": account_id,
                 "new_orders": new_orders,
@@ -232,11 +242,10 @@ def test_auto_long_buys_first_then_places_linked_target_and_stop_for_full_size(m
     )
 
     buy_place = captured["buy_place"]
-    exit_preview = captured["exit_preview"]
-    exit_place = captured["exit_place"]
+    stop_place = captured["stop_place"]
     buy = buy_place["new_orders"][0]
     assert response["ok"] is True
-    assert response["stage"] == "complete"
+    assert response["stage"] == "stop_placed"
     assert response["quantity"] == 7
     assert response["buy_fill"]["symbol"] == "AAOI"
     assert response["buy_fill"]["filled_quantity"] == 7
@@ -244,14 +253,14 @@ def test_auto_long_buys_first_then_places_linked_target_and_stop_for_full_size(m
         ("preview", 1, None),
         ("place", 1, None),
         ("detail", response["orders"]["buy"]["client_order_id"], None),
-        ("preview", 2, exit_preview["client_combo_order_id"]),
-        ("place", 2, exit_place["client_combo_order_id"]),
+        ("preview", 1, None),
+        ("place", 1, None),
     ]
-    assert exit_preview["client_combo_order_id"] == exit_place["client_combo_order_id"]
-    assert response["exit_combo_order_id"] == exit_place["client_combo_order_id"]
     assert response["orders"]["buy"]["client_order_id"].startswith("DKAT")
     assert response["orders"]["target"]["client_order_id"].startswith("DKAT")
     assert response["orders"]["stop"]["client_order_id"].startswith("DKAT")
+    assert response["target_preview"] is None
+    assert response["target_place"] is None
 
     assert buy["combo_type"] == "NORMAL"
     assert buy["side"] == "BUY"
@@ -260,12 +269,7 @@ def test_auto_long_buys_first_then_places_linked_target_and_stop_for_full_size(m
     assert buy["limit_price"] == "100.00"
     assert buy["support_trading_session"] == "ALL"
 
-    target, stop = exit_place["new_orders"]
-    assert target["combo_type"] == "STOP_PROFIT"
-    assert target["side"] == "SELL"
-    assert target["order_type"] == "LIMIT"
-    assert target["quantity"] == "7"
-    assert target["limit_price"] == "105.00"
+    stop = stop_place["new_orders"][0]
     assert stop["combo_type"] == "STOP_LOSS"
     assert stop["side"] == "SELL"
     assert stop["order_type"] == "STOP_LOSS"
@@ -273,7 +277,7 @@ def test_auto_long_buys_first_then_places_linked_target_and_stop_for_full_size(m
     assert stop["stop_price"] == "95.00"
 
 
-def test_buy_entry_payload_uses_market_order_during_regular_market(monkeypatch):
+def test_buy_entry_payload_uses_core_limit_order_during_regular_market(monkeypatch):
     monkeypatch.setattr(WebullService, "_is_regular_market_open", classmethod(lambda cls: True))
 
     payload = WebullService._buy_entry_order_payload(
@@ -283,9 +287,9 @@ def test_buy_entry_payload_uses_market_order_during_regular_market(monkeypatch):
         limit_price=100,
     )
 
-    assert payload["order_type"] == "MARKET"
+    assert payload["order_type"] == "LIMIT"
     assert payload["support_trading_session"] == "CORE"
-    assert "limit_price" not in payload
+    assert payload["limit_price"] == "100.00"
 
 
 def test_buy_entry_payload_uses_limit_order_outside_regular_market(monkeypatch):
@@ -396,10 +400,13 @@ def test_auto_long_places_exits_when_history_reports_fill_after_detail_timeout(m
             return FakeResponse()
 
         def place_order(self, account_id, new_orders, client_combo_order_id=None):
-            if client_combo_order_id:
-                captured["exit_place_orders"] = new_orders
-            else:
+            order = new_orders[0]
+            if order.get("side") == "BUY":
                 captured["buy_client_order_id"] = new_orders[0]["client_order_id"]
+            elif order.get("order_type") == "STOP_LOSS":
+                captured["stop_place_orders"] = new_orders
+            else:
+                captured["target_place_orders"] = new_orders
             return FakeResponse()
 
         def get_order_detail(self, account_id, client_order_id):
@@ -419,12 +426,12 @@ def test_auto_long_places_exits_when_history_reports_fill_after_detail_timeout(m
     )
 
     assert response["ok"] is True
-    assert response["stage"] == "complete"
+    assert response["stage"] == "stop_placed"
     assert response["buy_fill"]["stage"] == "buy_filled_history"
     assert response["buy_fill"]["filled_quantity"] == 7
-    target, stop = captured["exit_place_orders"]
-    assert target["side"] == "SELL"
+    stop = captured["stop_place_orders"][0]
     assert stop["side"] == "SELL"
+    assert "target_place_orders" not in captured
 
 
 def test_auto_long_uses_filled_quantity_for_exits(monkeypatch):
@@ -442,13 +449,15 @@ def test_auto_long_uses_filled_quantity_for_exits(monkeypatch):
 
     class FakeOrderV3:
         def preview_order(self, account_id, new_orders, client_combo_order_id=None):
-            if client_combo_order_id:
-                captured["exit_preview_orders"] = new_orders
+            if new_orders[0].get("order_type") == "STOP_LOSS":
+                captured["stop_preview_orders"] = new_orders
             return FakeResponse()
 
         def place_order(self, account_id, new_orders, client_combo_order_id=None):
-            if client_combo_order_id:
-                captured["exit_place_orders"] = new_orders
+            if new_orders[0].get("order_type") == "STOP_LOSS":
+                captured["stop_place_orders"] = new_orders
+            elif new_orders[0].get("side") == "SELL":
+                captured["target_place_orders"] = new_orders
             return FakeResponse()
 
         def get_order_detail(self, account_id, client_order_id):
@@ -469,9 +478,9 @@ def test_auto_long_uses_filled_quantity_for_exits(monkeypatch):
 
     assert response["ok"] is True
     assert response["buy_fill"]["filled_quantity"] == 5
-    target, stop = captured["exit_place_orders"]
-    assert target["quantity"] == "5"
+    stop = captured["stop_place_orders"][0]
     assert stop["quantity"] == "5"
+    assert "target_place_orders" not in captured
 
 
 def test_auto_long_places_exits_when_detail_reports_full_quantity_without_filled_status(monkeypatch):
@@ -492,8 +501,10 @@ def test_auto_long_places_exits_when_detail_reports_full_quantity_without_filled
             return FakeResponse()
 
         def place_order(self, account_id, new_orders, client_combo_order_id=None):
-            if client_combo_order_id:
-                captured["exit_place_orders"] = new_orders
+            if new_orders[0].get("order_type") == "STOP_LOSS":
+                captured["stop_place_orders"] = new_orders
+            elif new_orders[0].get("side") == "SELL":
+                captured["target_place_orders"] = new_orders
             return FakeResponse()
 
         def get_order_detail(self, account_id, client_order_id):
@@ -513,10 +524,10 @@ def test_auto_long_places_exits_when_detail_reports_full_quantity_without_filled
     )
 
     assert response["ok"] is True
-    assert response["stage"] == "complete"
+    assert response["stage"] == "stop_placed"
     assert response["buy_fill"]["filled_quantity"] == 7
-    assert captured["exit_place_orders"][0]["side"] == "SELL"
-    assert captured["exit_place_orders"][1]["side"] == "SELL"
+    assert captured["stop_place_orders"][0]["side"] == "SELL"
+    assert "target_place_orders" not in captured
 
 
 def test_filled_status_accepts_common_broker_variants():
