@@ -6,7 +6,7 @@ from webull.data.common.category import Category
 
 from app.config import get_settings
 from app.dependencies import service
-from app.market_data import LIVE_WATCHLIST, build_live_prices
+from app.market_data import LIVE_WATCHLIST, build_live_prices, build_mtf_backtest
 from app.watchlists import WatchlistStore
 from app.webull_service import WebullConfigurationError
 
@@ -35,6 +35,25 @@ def webull_live_prices(
 ):
     try:
         return build_live_prices(
+            service(),
+            symbols,
+            risk_amount=risk_amount,
+            stop_mode=stop_mode,
+            fixed_stop_buffer=fixed_stop_buffer,
+        )
+    except WebullConfigurationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/mtf-backtest")
+def webull_mtf_backtest(
+    symbols: str = Query(default=",".join(LIVE_WATCHLIST)),
+    risk_amount: float = Query(default=100, ge=1, le=10000),
+    stop_mode: str = Query(default="fixed", pattern="^(fixed|auto)$"),
+    fixed_stop_buffer: float = Query(default=1, ge=0.05, le=25),
+):
+    try:
+        return build_mtf_backtest(
             service(),
             symbols,
             risk_amount=risk_amount,

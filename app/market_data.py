@@ -26,6 +26,18 @@ A_PLUS_PLUS_STOP_BUFFER = 1
 MTF_CLOUD_STOP_BUFFER = 3
 A_PLUS_PLUS_STOP_MODE_FIXED = "fixed"
 A_PLUS_PLUS_STOP_MODE_AUTO = "auto"
+BACKTEST_MAX_TRADES_PER_SYMBOL = 100
+
+PREFERRED_LONG_LABELS = [
+    "10m 9 EMA touch",
+    "10m bounce 34/50",
+    "10m bounce Hourly 34/50",
+    "10m bounce Daily 20/21",
+    "10m bounce Daily 50/55",
+    "Hourly 34/50",
+    "Daily 20/21",
+    "Daily 50/55",
+]
 
 SYMBOL_SECTORS = {
     "BE": "Clean Energy",
@@ -119,6 +131,7 @@ def build_live_prices(
                 "ema_10m": ten_minute_ema,
                 "ema_1h": ema_1h,
                 "ema_daily": ema_daily,
+                "latest_10m_candle": compact_candle(latest_ten_minute_candle(ten_minute_candles)),
                 "mtf_matches": mtf_signal_matches(
                     candle_price,
                     ten_minute_trend,
@@ -151,6 +164,73 @@ def build_live_prices(
         "symbols": selected_symbols,
         "quotes": quotes,
         "errors": errors,
+    }
+
+
+def build_mtf_backtest(
+    webull: WebullService,
+    symbols: str,
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
+    stop_mode: str = A_PLUS_PLUS_STOP_MODE_FIXED,
+    fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
+) -> dict[str, Any]:
+    selected_symbols = parse_symbols(symbols)
+    m5_response = batch_history_bars_chunked(
+        webull,
+        selected_symbols,
+        Category.US_STOCK.name,
+        Timespan.M5.name,
+        count="1200",
+        trading_sessions=INTRADAY_EMA_SESSIONS,
+    )
+    h1_response = batch_history_bars_chunked(
+        webull,
+        selected_symbols,
+        Category.US_STOCK.name,
+        Timespan.M60.name,
+        count="1200",
+        real_time_required=None,
+        trading_sessions=INTRADAY_EMA_SESSIONS,
+    )
+    daily_response = batch_history_bars_chunked(
+        webull,
+        selected_symbols,
+        Category.US_STOCK.name,
+        Timespan.D.name,
+        count="1200",
+        real_time_required=None,
+    )
+
+    m5_map = batch_bar_map(m5_response.get("data"))
+    h1_map = batch_bar_map(h1_response.get("data"))
+    daily_map = batch_bar_map(daily_response.get("data"))
+    results = []
+    for symbol in selected_symbols:
+        ten_minute_candles = aggregate_by_minutes(normalize_bars(m5_map.get(symbol)), 10)
+        h1_candles = normalize_bars(h1_map.get(symbol))
+        daily_candles = normalize_bars(daily_map.get(symbol))
+        results.append(backtest_symbol_mtf(
+            symbol,
+            ten_minute_candles,
+            h1_candles,
+            daily_candles,
+            risk_amount=risk_amount,
+            stop_mode=stop_mode,
+            fixed_stop_buffer=fixed_stop_buffer,
+        ))
+
+    all_trades = [trade for result in results for trade in result["trades"]]
+    return {
+        "ok": all(response.get("ok") for response in (m5_response, h1_response, daily_response)),
+        "symbols": selected_symbols,
+        "summary": summarize_backtest_trades(all_trades),
+        "by_strategy": summarize_backtest_by_strategy(all_trades),
+        "results": results,
+        "data_errors": [
+            {"source": label, "error": response}
+            for label, response in (("5m bars", m5_response), ("1h bars", h1_response), ("daily bars", daily_response))
+            if not response.get("ok")
+        ],
     }
 
 
@@ -253,6 +333,18 @@ def snapshot_number(snapshot: dict[str, Any] | None, *keys: str) -> float | None
     return None
 
 
+def compact_candle(candle: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not candle:
+        return None
+    return {
+        "time": candle.get("time") or candle.get("sort_time") or candle.get("timestamp"),
+        "open": candle.get("open"),
+        "high": candle.get("high"),
+        "low": candle.get("low"),
+        "close": candle.get("close"),
+    }
+
+
 def mtf_matches(
     price: float | None,
     trend: str,
@@ -299,6 +391,175 @@ def mtf_matches(
             elif not candle_complete and previous_price is not None and previous_price >= low and candle_touches_cloud(current_low, current_high, low, high):
                 matches.append({**match, "status": "waiting", "direction": "below"})
     return matches
+
+
+def preferred_long_match(matches: list[dict[str, Any]]) -> dict[str, Any] | None:
+    candidates = [
+        match for match in matches
+        if (match.get("status") or "confirmed") == "confirmed"
+        and match.get("trade_action") == "Long"
+        and isinstance(match.get("risk_plan"), dict)
+    ]
+    if not candidates:
+        return None
+    return sorted(candidates, key=long_match_rank)[0]
+
+
+def long_match_rank(match: dict[str, Any]) -> tuple[int, str]:
+    label = str(match.get("label") or "")
+    try:
+        return (PREFERRED_LONG_LABELS.index(label), label)
+    except ValueError:
+        return (len(PREFERRED_LONG_LABELS), label)
+
+
+def backtest_symbol_mtf(
+    symbol: str,
+    ten_minute_candles: list[dict[str, Any]],
+    h1_candles: list[dict[str, Any]],
+    daily_candles: list[dict[str, Any]],
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
+    stop_mode: str = A_PLUS_PLUS_STOP_MODE_FIXED,
+    fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
+) -> dict[str, Any]:
+    trades = []
+    index = 0
+    while index < len(ten_minute_candles) - 1 and len(trades) < BACKTEST_MAX_TRADES_PER_SYMBOL:
+        candle_window = ten_minute_candles[:index + 1]
+        if len(candle_window) < 50:
+            index += 1
+            continue
+        candle = candle_window[-1]
+        candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
+        scoped_h1 = candles_until(h1_candles, candle_time)
+        scoped_daily = candles_until(daily_candles, candle_time)
+        ema_10m = ema_values(candle_window, [5, 9, 12, 34, 50])
+        ema_1h = ema_values(scoped_h1, [20, 21, 34, 50, 55])
+        ema_daily = ema_values(scoped_daily, [20, 21, 50, 55])
+        ten_minute_trend = cloud_status(ema_10m, ["5", "12"], ["34", "50"])
+        matches = mtf_signal_matches(
+            candle.get("close"),
+            ten_minute_trend,
+            candle_window,
+            ema_10m,
+            ema_1h,
+            ema_daily,
+            daily_candles=scoped_daily,
+            risk_amount=risk_amount,
+            stop_mode=stop_mode,
+            fixed_stop_buffer=fixed_stop_buffer,
+        )
+        match = preferred_long_match(matches)
+        if not match:
+            index += 1
+            continue
+        plan = trade_plan_from_match(match, candle.get("close"))
+        if not plan:
+            index += 1
+            continue
+        outcome = resolve_trade_from_future_candles(ten_minute_candles[index + 1:], plan)
+        trades.append({
+            "symbol": symbol,
+            "strategy": display_label_for_setup(str(match.get("label") or ""), match.get("trade_action")),
+            "entry_time": candle_time,
+            "entry": plan["entry"],
+            "stop": plan["stop"],
+            "target": plan["target"],
+            "outcome": outcome["outcome"],
+            "outcome_time": outcome.get("time"),
+            "outcome_price": outcome.get("price"),
+            "bars_held": outcome.get("bars_held"),
+        })
+        if outcome.get("exit_index") is None:
+            break
+        index += int(outcome["exit_index"]) + 1
+    return {
+        "symbol": symbol,
+        "bar_count": len(ten_minute_candles),
+        "trades": trades,
+        "summary": summarize_backtest_trades(trades),
+    }
+
+
+def candles_until(candles: list[dict[str, Any]], value: Any) -> list[dict[str, Any]]:
+    parsed = parse_iso_time(value)
+    if not parsed:
+        return candles
+    parsed_key = comparable_time(parsed)
+    output = []
+    for candle in candles:
+        candle_time = parse_iso_time(candle.get("time") or candle.get("sort_time") or candle.get("timestamp"))
+        if candle_time is None or comparable_time(candle_time) <= parsed_key:
+            output.append(candle)
+    return output
+
+
+def comparable_time(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def trade_plan_from_match(match: dict[str, Any], fallback_price: float | None = None) -> dict[str, float] | None:
+    risk_plan = match.get("risk_plan") if isinstance(match.get("risk_plan"), dict) else {}
+    entry = number_or_none(match.get("entry_price")) or number_or_none(risk_plan.get("entry")) or number_or_none(fallback_price)
+    stop = number_or_none(risk_plan.get("stop"))
+    if entry is None or stop is None or stop >= entry:
+        return None
+    risk = entry - stop
+    if risk <= 0:
+        return None
+    return {"entry": round(entry, 4), "stop": round(stop, 4), "target": round(entry + risk, 4)}
+
+
+def resolve_trade_from_future_candles(candles: list[dict[str, Any]], plan: dict[str, float]) -> dict[str, Any]:
+    for index, candle in enumerate(candles):
+        high = number_or_none(candle.get("high"))
+        low = number_or_none(candle.get("low"))
+        if high is None or low is None:
+            continue
+        hit_target = high >= plan["target"]
+        hit_stop = low <= plan["stop"]
+        candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
+        if hit_stop and hit_target:
+            return {"outcome": "SL", "time": candle_time, "price": plan["stop"], "bars_held": index + 1, "exit_index": index}
+        if hit_target:
+            return {"outcome": "Target", "time": candle_time, "price": plan["target"], "bars_held": index + 1, "exit_index": index}
+        if hit_stop:
+            return {"outcome": "SL", "time": candle_time, "price": plan["stop"], "bars_held": index + 1, "exit_index": index}
+    return {"outcome": "Open", "time": None, "price": None, "bars_held": len(candles), "exit_index": None}
+
+
+def summarize_backtest_trades(trades: list[dict[str, Any]]) -> dict[str, Any]:
+    closed = [trade for trade in trades if trade.get("outcome") in ("Target", "SL")]
+    wins = sum(1 for trade in closed if trade.get("outcome") == "Target")
+    losses = sum(1 for trade in closed if trade.get("outcome") == "SL")
+    total = len(closed)
+    return {
+        "trades": len(trades),
+        "closed": total,
+        "targets": wins,
+        "sl": losses,
+        "open": sum(1 for trade in trades if trade.get("outcome") == "Open"),
+        "win_rate": round(wins / total * 100, 2) if total else None,
+    }
+
+
+def summarize_backtest_by_strategy(trades: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    strategies = sorted({str(trade.get("strategy") or "Unknown") for trade in trades})
+    return [
+        {"strategy": strategy, **summarize_backtest_trades([trade for trade in trades if trade.get("strategy") == strategy])}
+        for strategy in strategies
+    ]
+
+
+def number_or_none(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def mtf_signal_matches(

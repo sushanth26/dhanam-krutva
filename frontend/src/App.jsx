@@ -21,6 +21,16 @@ const AUTO_TRADE_KEY = "dhanam-auto-trade";
 const AUTO_TRADE_EXECUTIONS_KEY = "dhanam-auto-trade-executions";
 const MAX_AUTO_TRADE_EXECUTIONS = 500;
 const OG_WATCHLIST_ID = "og";
+const PREFERRED_LONG_STRATEGIES = [
+  "ten-minute-9ema-touch",
+  "ten-minute-bounce-10m",
+  "ten-minute-bounce-hourly",
+  "ten-minute-bounce-daily-fast",
+  "ten-minute-bounce-daily-slow",
+  "hourly-cloud",
+  "daily-fast-cloud",
+  "daily-slow-cloud",
+];
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
   "ASTS", "AMD", "ARM", "AVGO", "DELL", "INTC", "APP", "LLY",
@@ -291,32 +301,33 @@ function saveAlertLog(items) {
 function alertLogEntries(tab, quotes, watchlists, riskSettings) {
   const alertedAt = new Date().toISOString();
   const watchlist = watchlists.find((item) => item.id === tab);
-  return quotes.flatMap((quote) => (
-    (quote.mtf_matches || []).filter((match) => match.trade_action === "Long").map((match) => {
-      const outcomePlan = alertOutcomePlan(match, quote.price, riskSettings);
-      return {
-        id: `${alertedAt}-${tab}-${quote.symbol}-${match.label}`,
-        alertedAt,
-        candleTime: match.candle_time || "",
-        symbol: quote.symbol,
-        watchlistId: tab,
-        watchlistName: watchlist?.name || tab,
-        action: match.trade_action || "",
-        label: match.label || "",
-        reason: displayMtfLabel(match),
-        entryPrice: matchEntryPrice(match),
-        status: match.status || "confirmed",
-        price: quote.price ?? null,
-        lastPrice: quote.price ?? null,
-        riskPlan: match.risk_plan || null,
-        stopPrice: outcomePlan?.stop ?? null,
-        targetPrice: outcomePlan?.target ?? null,
-        outcome: "",
-        outcomeAt: "",
-        trend: match.trend || "",
-      };
-    })
-  ));
+  return quotes.flatMap((quote) => {
+    const match = preferredLongMatch(quote.mtf_matches || []);
+    if (!match) return [];
+    const outcomePlan = alertOutcomePlan(match, quote.price, riskSettings);
+    return [{
+      id: `${alertedAt}-${tab}-${quote.symbol}-${match.label}`,
+      alertedAt,
+      candleTime: match.candle_time || "",
+      symbol: quote.symbol,
+      watchlistId: tab,
+      watchlistName: watchlist?.name || tab,
+      action: match.trade_action || "",
+      label: match.label || "",
+      reason: displayMtfLabel(match),
+      entryPrice: matchEntryPrice(match),
+      status: match.status || "confirmed",
+      price: quote.price ?? null,
+      lastPrice: quote.price ?? null,
+      lastCandleTime: quote.latest_10m_candle?.time || "",
+      riskPlan: match.risk_plan || null,
+      stopPrice: outcomePlan?.stop ?? null,
+      targetPrice: outcomePlan?.target ?? null,
+      outcome: "",
+      outcomeAt: "",
+      trend: match.trend || "",
+    }];
+  });
 }
 
 function autoTradeKey(tab, symbol, match) {
@@ -325,11 +336,9 @@ function autoTradeKey(tab, symbol, match) {
 }
 
 function autoLongTradePlan(tab, quote, riskSettings, autoTradeSettings) {
-  const match = (quote.mtf_matches || []).find((item) => (
-    (item.status || "confirmed") === "confirmed"
-    && item.trade_action === "Long"
-    && autoTradeSettings?.strategies?.[strategyIdForMatch(item)] === true
-  ));
+  const match = preferredLongMatch((quote.mtf_matches || []).filter((item) => (
+    autoTradeSettings?.strategies?.[strategyIdForMatch(item)] === true
+  )));
   if (!match) return null;
 
   const outcomePlan = alertOutcomePlan(match, quote.price, riskSettings);
@@ -350,6 +359,22 @@ function autoLongTradePlan(tab, quote, riskSettings, autoTradeSettings) {
     setup: displayMtfLabel(match),
     candleTime: match.candle_time || "",
   };
+}
+
+function preferredLongMatch(matches = []) {
+  const candidates = matches.filter((match) => (
+    (match.status || "confirmed") === "confirmed"
+    && match.trade_action === "Long"
+    && match.risk_plan
+  ));
+  if (!candidates.length) return null;
+  return [...candidates].sort((left, right) => longMatchRank(left) - longMatchRank(right))[0];
+}
+
+function longMatchRank(match) {
+  const id = strategyIdForMatch(match);
+  const index = PREFERRED_LONG_STRATEGIES.indexOf(id);
+  return index === -1 ? PREFERRED_LONG_STRATEGIES.length : index;
 }
 
 function canAutoTradeWatchlist(watchlist) {
@@ -675,29 +700,38 @@ export default function App() {
   }
 
   function updateAlertOutcomes(nextQuotes) {
-    const prices = Object.fromEntries(nextQuotes.map((quote) => [quote.symbol, Number(quote.price)]));
+    const priceBySymbol = Object.fromEntries(nextQuotes.map((quote) => [quote.symbol, {
+      price: Number(quote.price),
+      high: Number(quote.latest_10m_candle?.high ?? quote.price),
+      low: Number(quote.latest_10m_candle?.low ?? quote.price),
+      candleTime: quote.latest_10m_candle?.time || "",
+    }]));
     setAlertLog((current) => {
       let changed = false;
       const next = current.map((item) => {
         if (item.outcome || !["Long", "Short"].includes(item.action)) return item;
-        const price = prices[item.symbol];
+        const currentPrice = priceBySymbol[item.symbol];
+        if (!currentPrice) return item;
+        const { price, high, low, candleTime } = currentPrice;
         const stop = Number(item.stopPrice ?? item.riskPlan?.stop);
         const target = Number(item.targetPrice);
-        if (!Number.isFinite(price) || !Number.isFinite(stop) || !Number.isFinite(target)) return item;
-        const hitTarget = item.action === "Long" ? price >= target : price <= target;
-        const hitStop = item.action === "Long" ? price <= stop : price >= stop;
+        if (!Number.isFinite(price) || !Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(stop) || !Number.isFinite(target)) return item;
+        const hitTarget = item.action === "Long" ? high >= target : low <= target;
+        const hitStop = item.action === "Long" ? low <= stop : high >= stop;
         if (!hitTarget && !hitStop) {
-          if (item.lastPrice === price) return item;
+          if (item.lastPrice === price && item.lastCandleTime === candleTime) return item;
           changed = true;
-          return { ...item, lastPrice: price };
+          return { ...item, lastPrice: price, lastCandleTime: candleTime };
         }
+        const outcome = hitStop && hitTarget ? "SL" : hitTarget ? "Target" : "SL";
         changed = true;
         return {
           ...item,
-          outcome: hitTarget ? "Target" : "SL",
+          outcome,
           outcomeAt: new Date().toISOString(),
-          outcomePrice: price > 0 ? price : (hitTarget ? target : stop),
+          outcomePrice: outcome === "Target" ? target : stop,
           lastPrice: price,
+          lastCandleTime: candleTime,
         };
       });
       if (changed) saveAlertLog(next);
