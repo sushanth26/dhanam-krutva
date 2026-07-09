@@ -11,6 +11,7 @@ from app.market_data import (
     mtf_signal_matches,
     nine_ema_touch_matches,
     parse_symbols,
+    resolve_trade_from_future_candles,
     symbol_chunks,
 )
 
@@ -97,6 +98,25 @@ def test_ema_values_returns_latest_values_by_period():
     assert values["5"] is not None
     assert values["12"] is not None
     assert values["20"] is None
+
+
+def test_resolve_trade_from_future_candles_uses_high_low_path():
+    target = resolve_trade_from_future_candles(
+        [{"low": 101, "high": 111, "time": "2026-07-02T10:00:00"}],
+        {"entry": 105, "stop": 100, "target": 110},
+    )
+    stop = resolve_trade_from_future_candles(
+        [{"low": 99, "high": 107, "time": "2026-07-02T10:00:00"}],
+        {"entry": 105, "stop": 100, "target": 110},
+    )
+    both = resolve_trade_from_future_candles(
+        [{"low": 99, "high": 111, "time": "2026-07-02T10:00:00"}],
+        {"entry": 105, "stop": 100, "target": 110},
+    )
+
+    assert target["outcome"] == "Target"
+    assert stop["outcome"] == "SL"
+    assert both["outcome"] == "SL"
 
 
 def test_nine_ema_touch_matches_buys_bullish_stock_at_9ema_with_34_50_cloud_stop():

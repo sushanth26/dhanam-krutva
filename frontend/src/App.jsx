@@ -21,6 +21,16 @@ const AUTO_TRADE_KEY = "dhanam-auto-trade";
 const AUTO_TRADE_EXECUTIONS_KEY = "dhanam-auto-trade-executions";
 const MAX_AUTO_TRADE_EXECUTIONS = 500;
 const OG_WATCHLIST_ID = "og";
+const PREFERRED_LONG_STRATEGIES = [
+  "ten-minute-9ema-touch",
+  "ten-minute-bounce-10m",
+  "ten-minute-bounce-hourly",
+  "ten-minute-bounce-daily-fast",
+  "ten-minute-bounce-daily-slow",
+  "hourly-cloud",
+  "daily-fast-cloud",
+  "daily-slow-cloud",
+];
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
   "ASTS", "AMD", "ARM", "AVGO", "DELL", "INTC", "APP", "LLY",
@@ -291,32 +301,37 @@ function saveAlertLog(items) {
 function alertLogEntries(tab, quotes, watchlists, riskSettings) {
   const alertedAt = new Date().toISOString();
   const watchlist = watchlists.find((item) => item.id === tab);
-  return quotes.flatMap((quote) => (
-    (quote.mtf_matches || []).map((match) => {
-      const outcomePlan = alertOutcomePlan(match, quote.price, riskSettings);
-      return {
-        id: `${alertedAt}-${tab}-${quote.symbol}-${match.label}`,
-        alertedAt,
-        candleTime: match.candle_time || "",
-        symbol: quote.symbol,
-        watchlistId: tab,
-        watchlistName: watchlist?.name || tab,
-        action: match.trade_action || "",
-        label: match.label || "",
-        reason: displayMtfLabel(match),
-        entryPrice: matchEntryPrice(match),
-        status: match.status || "confirmed",
-        price: quote.price ?? null,
-        lastPrice: quote.price ?? null,
-        riskPlan: match.risk_plan || null,
-        stopPrice: outcomePlan?.stop ?? null,
-        targetPrice: outcomePlan?.target ?? null,
-        outcome: "",
-        outcomeAt: "",
-        trend: match.trend || "",
-      };
-    })
-  ));
+  return quotes.flatMap((quote) => {
+    const match = preferredLongMatch(quote.mtf_matches || []);
+    if (!match) return [];
+    const outcomePlan = alertOutcomePlan(match, quote.price, riskSettings);
+    return [{
+      id: `${alertedAt}-${tab}-${quote.symbol}-${match.label}`,
+      alertedAt,
+      candleTime: match.candle_time || "",
+      symbol: quote.symbol,
+      watchlistId: tab,
+      watchlistName: watchlist?.name || tab,
+      action: match.trade_action || "",
+      label: match.label || "",
+      strategyId: strategyIdForMatch(match),
+      strategyName: strategyNameForMatch(match),
+      reason: displayMtfLabel(match),
+      entryPrice: matchEntryPrice(match),
+      status: match.status || "confirmed",
+      price: quote.price ?? null,
+      lastPrice: quote.price ?? null,
+      lastCandleTime: quote.latest_10m_candle?.time || "",
+      riskPlan: match.risk_plan || null,
+      stopPrice: outcomePlan?.stop ?? null,
+      targetPrice: outcomePlan?.target ?? null,
+      outcome: "",
+      outcomeAt: "",
+      comment: "",
+      commentUpdatedAt: "",
+      trend: match.trend || "",
+    }];
+  });
 }
 
 function autoTradeKey(tab, symbol, match) {
@@ -325,11 +340,9 @@ function autoTradeKey(tab, symbol, match) {
 }
 
 function autoLongTradePlan(tab, quote, riskSettings, autoTradeSettings) {
-  const match = (quote.mtf_matches || []).find((item) => (
-    (item.status || "confirmed") === "confirmed"
-    && item.trade_action === "Long"
-    && autoTradeSettings?.strategies?.[strategyIdForMatch(item)] === true
-  ));
+  const match = preferredLongMatch((quote.mtf_matches || []).filter((item) => (
+    autoTradeSettings?.strategies?.[strategyIdForMatch(item)] === true
+  )));
   if (!match) return null;
 
   const outcomePlan = alertOutcomePlan(match, quote.price, riskSettings);
@@ -350,6 +363,27 @@ function autoLongTradePlan(tab, quote, riskSettings, autoTradeSettings) {
     setup: displayMtfLabel(match),
     candleTime: match.candle_time || "",
   };
+}
+
+function preferredLongMatch(matches = []) {
+  const candidates = matches.filter((match) => (
+    (match.status || "confirmed") === "confirmed"
+    && match.trade_action === "Long"
+    && match.risk_plan
+  ));
+  if (!candidates.length) return null;
+  return [...candidates].sort((left, right) => longMatchRank(left) - longMatchRank(right))[0];
+}
+
+function longMatchRank(match) {
+  const id = strategyIdForMatch(match);
+  const index = PREFERRED_LONG_STRATEGIES.indexOf(id);
+  return index === -1 ? PREFERRED_LONG_STRATEGIES.length : index;
+}
+
+function strategyNameForMatch(match) {
+  const id = strategyIdForMatch(match);
+  return ALERT_STRATEGIES.find((strategy) => strategy.id === id)?.name || String(match?.label || "Unknown");
 }
 
 function canAutoTradeWatchlist(watchlist) {
@@ -674,30 +708,66 @@ export default function App() {
     saveAlertLog([]);
   }
 
+  function updateAlertComment(alertId, comment) {
+    setAlertLog((current) => {
+      const next = current.map((item) => (
+        item.id === alertId
+          ? { ...item, comment, commentUpdatedAt: comment.trim() ? new Date().toISOString() : "" }
+          : item
+      ));
+      saveAlertLog(next);
+      return next;
+    });
+  }
+
+  function applyStrategyProposal(proposal) {
+    if (!proposal?.strategyId || !["enable", "disable"].includes(proposal.action)) return;
+    setStrategyState((current) => {
+      const next = { ...current, [proposal.strategyId]: proposal.action === "enable" };
+      saveStrategyState(next);
+      return next;
+    });
+    lastMtfSignature.current = initialTabState(watchlistsRef.current, null);
+    addNotification({
+      title: "Strategy updated",
+      message: `${proposal.strategyName} is now ${proposal.action === "enable" ? "enabled" : "disabled"}.`,
+      kind: "system",
+    });
+  }
+
   function updateAlertOutcomes(nextQuotes) {
-    const prices = Object.fromEntries(nextQuotes.map((quote) => [quote.symbol, Number(quote.price)]));
+    const priceBySymbol = Object.fromEntries(nextQuotes.map((quote) => [quote.symbol, {
+      price: Number(quote.price),
+      high: Number(quote.latest_10m_candle?.high ?? quote.price),
+      low: Number(quote.latest_10m_candle?.low ?? quote.price),
+      candleTime: quote.latest_10m_candle?.time || "",
+    }]));
     setAlertLog((current) => {
       let changed = false;
       const next = current.map((item) => {
         if (item.outcome || !["Long", "Short"].includes(item.action)) return item;
-        const price = prices[item.symbol];
+        const currentPrice = priceBySymbol[item.symbol];
+        if (!currentPrice) return item;
+        const { price, high, low, candleTime } = currentPrice;
         const stop = Number(item.stopPrice ?? item.riskPlan?.stop);
         const target = Number(item.targetPrice);
-        if (!Number.isFinite(price) || !Number.isFinite(stop) || !Number.isFinite(target)) return item;
-        const hitTarget = item.action === "Long" ? price >= target : price <= target;
-        const hitStop = item.action === "Long" ? price <= stop : price >= stop;
+        if (!Number.isFinite(price) || !Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(stop) || !Number.isFinite(target)) return item;
+        const hitTarget = item.action === "Long" ? high >= target : low <= target;
+        const hitStop = item.action === "Long" ? low <= stop : high >= stop;
         if (!hitTarget && !hitStop) {
-          if (item.lastPrice === price) return item;
+          if (item.lastPrice === price && item.lastCandleTime === candleTime) return item;
           changed = true;
-          return { ...item, lastPrice: price };
+          return { ...item, lastPrice: price, lastCandleTime: candleTime };
         }
+        const outcome = hitStop && hitTarget ? "SL" : hitTarget ? "Target" : "SL";
         changed = true;
         return {
           ...item,
-          outcome: hitTarget ? "Target" : "SL",
+          outcome,
           outcomeAt: new Date().toISOString(),
-          outcomePrice: price > 0 ? price : (hitTarget ? target : stop),
+          outcomePrice: outcome === "Target" ? target : stop,
           lastPrice: price,
+          lastCandleTime: candleTime,
         };
       });
       if (changed) saveAlertLog(next);
@@ -1214,10 +1284,13 @@ export default function App() {
           <AlertLogPage
             alertLog={alertLog}
             onClear={clearAlertLog}
+            onCommentChange={updateAlertComment}
+            onApplyStrategyProposal={applyStrategyProposal}
             onSelectSymbol={(symbol) => {
               focusMtfSymbol(symbol);
               navigatePage("mtfs");
             }}
+            strategyState={strategyState}
           />
         ) : activePage === "mtfs" ? (
           <MtfPage
@@ -1581,21 +1654,31 @@ function orderTimeText(item) {
   return value ? formatDateTime(value) : "-";
 }
 
-function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
+function AlertLogPage({
+  alertLog,
+  onApplyStrategyProposal,
+  onClear,
+  onCommentChange,
+  onSelectSymbol,
+  strategyState,
+}) {
   const [query, setQuery] = useState("");
   const [outcomeFilter, setOutcomeFilter] = useState("all");
-  const [tableView, setTableView] = useState("long");
+  const [reviewNotice, setReviewNotice] = useState("");
+  const longAlertLog = useMemo(() => alertLog.filter((item) => item.action === "Long"), [alertLog]);
   const searched = useMemo(() => {
     const needle = query.trim().toUpperCase();
-    if (!needle) return alertLog;
-    return alertLog.filter((item) => (
+    if (!needle) return longAlertLog;
+    return longAlertLog.filter((item) => (
       item.symbol.includes(needle)
       || item.reason.toUpperCase().includes(needle)
       || item.action.toUpperCase().includes(needle)
       || item.watchlistName.toUpperCase().includes(needle)
+      || String(item.strategyName || item.label || "").toUpperCase().includes(needle)
+      || String(item.comment || "").toUpperCase().includes(needle)
       || String(item.outcome || "").toUpperCase().includes(needle)
     ));
-  }, [alertLog, query]);
+  }, [longAlertLog, query]);
   const outcomeCounts = useMemo(() => ({
     all: searched.length,
     open: searched.filter((item) => !item.outcome).length,
@@ -1608,28 +1691,40 @@ function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
     if (outcomeFilter === "sl") return searched.filter((item) => item.outcome === "SL");
     return searched;
   }, [outcomeFilter, searched]);
-  const longAlerts = useMemo(() => filtered.filter((item) => item.action === "Long"), [filtered]);
-  const shortAlerts = useMemo(() => filtered.filter((item) => item.action === "Short"), [filtered]);
-  const tableViews = [
-    { id: "long", label: "Long", count: longAlerts.length },
-    { id: "short", label: "Short", count: shortAlerts.length },
-  ];
-
+  const strategySections = useMemo(() => alertLogStrategySections(filtered), [filtered]);
+  const proposals = useMemo(() => analyzeStrategyProposals(longAlertLog, strategyState), [longAlertLog, strategyState]);
+  const disabledStrategies = useMemo(() => (
+    ALERT_STRATEGIES.filter((strategy) => strategyState?.[strategy.id] === false)
+  ), [strategyState]);
+  function approveProposal(proposal) {
+    onApplyStrategyProposal(proposal);
+    if (proposal?.action === "disable") {
+      setReviewNotice(`${proposal.strategyName} disabled. It will stop creating new alerts and auto-trade candidates after the next refresh.`);
+    } else if (proposal?.action === "enable") {
+      setReviewNotice(`${proposal.strategyName} enabled. It can create new alerts again after the next refresh.`);
+    }
+  }
   return (
     <section className="alert-log-page">
       <div className="alert-log-header">
         <div>
           <h2>Alert Log</h2>
-          <p className="muted">Search past MTF alerts by stock, setup, action, or list.</p>
+          <p className="muted">Each strategy has its own section. Add trade comments, then review strategy proposals before applying changes.</p>
         </div>
         <button type="button" className="secondary-button" onClick={onClear} disabled={!alertLog.length}>Clear</button>
       </div>
+      <StrategyReviewPanel
+        disabledStrategies={disabledStrategies}
+        notice={reviewNotice}
+        proposals={proposals}
+        onApply={approveProposal}
+      />
       <div className="alert-log-search">
         <input
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search ticker or setup"
+          placeholder="Search ticker, setup, or comment"
           aria-label="Search alert log"
         />
         <strong>{filtered.length}</strong>
@@ -1672,35 +1767,74 @@ function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
           SL <span>{outcomeCounts.sl}</span>
         </button>
       </div>
-      <div className="table-view-tabs" role="tablist" aria-label="Alert table view">
-        {tableViews.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={tableView === item.id ? "active" : ""}
-            onClick={() => setTableView(item.id)}
-            role="tab"
-            aria-selected={tableView === item.id}
-          >
-            {item.label} <span>{item.count}</span>
-          </button>
-        ))}
+      <div className="alert-log-strategy-sections">
+        {strategySections.length ? strategySections.map((section) => (
+          <AlertLogTable
+            key={section.id}
+            title={section.name}
+            items={section.items}
+            onCommentChange={onCommentChange}
+            onSelectSymbol={onSelectSymbol}
+            summary={section.summary}
+          />
+        )) : (
+          <div className="alert-log-empty-panel">No long alerts found.</div>
+        )}
       </div>
-      <AlertLogTable
-        title={tableView === "short" ? "Short" : "Long"}
-        items={tableView === "short" ? shortAlerts : longAlerts}
-        onSelectSymbol={onSelectSymbol}
-      />
     </section>
   );
 }
 
-function AlertLogTable({ title, items, onSelectSymbol }) {
+function StrategyReviewPanel({ disabledStrategies, notice, proposals, onApply }) {
   return (
-    <section className={`alert-log-table-card ${title.toLowerCase()}`}>
+    <section className="strategy-review-panel" aria-label="AI strategy review">
+      <div className="strategy-review-heading">
+        <div>
+          <h3>AI Strategy Review</h3>
+          <p className="muted">Uses outcomes plus your comments to suggest strategy changes.</p>
+        </div>
+        <strong>{proposals.length}</strong>
+      </div>
+      {notice ? <div className="strategy-review-notice">{notice}</div> : null}
+      {disabledStrategies.length ? (
+        <div className="strategy-disabled-list" aria-label="Disabled strategies">
+          <span>Disabled</span>
+          {disabledStrategies.map((strategy) => <em key={strategy.id}>{strategy.name}</em>)}
+        </div>
+      ) : null}
+      {proposals.length ? (
+        <div className="strategy-proposals">
+          {proposals.map((proposal) => (
+            <article key={`${proposal.strategyId}-${proposal.action}`} className={`strategy-proposal ${proposal.action}`}>
+              <div>
+                <strong>{proposal.strategyName}</strong>
+                <span>{proposal.summary}</span>
+                <small>{proposal.reason}</small>
+              </div>
+              {proposal.action === "manual-review" ? (
+                <em>Review</em>
+              ) : (
+                <button type="button" onClick={() => onApply(proposal)}>
+                  Approve: {proposal.action} strategy
+                </button>
+              )}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="strategy-review-empty">Add comments or collect more closed trades for review.</p>
+      )}
+    </section>
+  );
+}
+
+function AlertLogTable({ title, items, onCommentChange, onSelectSymbol, summary }) {
+  return (
+    <section className="alert-log-table-card long">
       <div className="alert-log-table-heading">
         <h3>{title}</h3>
         <span>{items.length}</span>
+        <small>{strategySummaryText(summary)}</small>
         <em>R:R 1:1</em>
       </div>
       <div className="alert-log-table-wrap">
@@ -1712,6 +1846,7 @@ function AlertLogTable({ title, items, onSelectSymbol }) {
               <th>Exit</th>
               <th>Alert</th>
               <th>Timestamp</th>
+              <th>Comment</th>
             </tr>
           </thead>
           <tbody>
@@ -1749,10 +1884,20 @@ function AlertLogTable({ title, items, onSelectSymbol }) {
                     {item.outcomeAt ? <small>Hit {formatDateTime(item.outcomeAt)}</small> : null}
                   </div>
                 </td>
+                <td data-label="Comment">
+                  <textarea
+                    className="alert-log-comment"
+                    value={item.comment || ""}
+                    onChange={(event) => onCommentChange(item.id, event.target.value)}
+                    placeholder="What happened?"
+                    aria-label={`Comment on ${item.symbol} ${title}`}
+                  />
+                  {item.commentUpdatedAt ? <small className="alert-log-comment-time">{formatDateTime(item.commentUpdatedAt)}</small> : null}
+                </td>
               </tr>
             )) : (
               <tr>
-                <td colSpan="5" className="alert-log-empty-cell">No {title.toLowerCase()} alerts found</td>
+                <td colSpan="6" className="alert-log-empty-cell">No {title.toLowerCase()} alerts found</td>
               </tr>
             )}
           </tbody>
@@ -1760,6 +1905,94 @@ function AlertLogTable({ title, items, onSelectSymbol }) {
       </div>
     </section>
   );
+}
+
+function alertLogStrategySections(items) {
+  return ALERT_STRATEGIES.map((strategy) => {
+    const strategyItems = items.filter((item) => alertStrategyId(item) === strategy.id);
+    return {
+      id: strategy.id,
+      name: strategy.name,
+      items: strategyItems,
+      summary: summarizeAlertItems(strategyItems),
+    };
+  }).filter((section) => section.items.length);
+}
+
+function analyzeStrategyProposals(items, strategyState) {
+  const proposals = [];
+  for (const strategy of ALERT_STRATEGIES) {
+    const strategyItems = items.filter((item) => alertStrategyId(item) === strategy.id);
+    const summary = summarizeAlertItems(strategyItems);
+    const commentSignal = commentSignalForItems(strategyItems);
+    const enabled = strategyState?.[strategy.id] !== false;
+    if (enabled && summary.closed >= 5 && summary.winRate != null && summary.winRate < 50) {
+      proposals.push({
+        strategyId: strategy.id,
+        strategyName: strategy.name,
+        action: "disable",
+        summary: `${summary.winRate}% win rate across ${summary.closed} closed trades`,
+        reason: commentSignal.negative
+          ? `Comments also flagged ${commentSignal.negative} weak setup${commentSignal.negative === 1 ? "" : "s"}.`
+          : "Closed results are below the minimum review threshold.",
+      });
+      continue;
+    }
+    if (!enabled && summary.closed >= 5 && summary.winRate != null && summary.winRate >= 60 && commentSignal.negative === 0) {
+      proposals.push({
+        strategyId: strategy.id,
+        strategyName: strategy.name,
+        action: "enable",
+        summary: `${summary.winRate}% win rate while disabled`,
+        reason: "Recent comments do not show a negative pattern.",
+      });
+      continue;
+    }
+    if (commentSignal.ruleChange >= 2) {
+      proposals.push({
+        strategyId: strategy.id,
+        strategyName: strategy.name,
+        action: "manual-review",
+        summary: `${commentSignal.ruleChange} comments ask for a rule change`,
+        reason: "This needs a coded rule update plus backtest before approval.",
+      });
+    }
+  }
+  return proposals;
+}
+
+function summarizeAlertItems(items) {
+  const closed = items.filter((item) => item.outcome === "Target" || item.outcome === "SL");
+  const targets = closed.filter((item) => item.outcome === "Target").length;
+  const sl = closed.filter((item) => item.outcome === "SL").length;
+  return {
+    closed: closed.length,
+    targets,
+    sl,
+    open: items.filter((item) => !item.outcome).length,
+    winRate: closed.length ? Math.round((targets / closed.length) * 10000) / 100 : null,
+  };
+}
+
+function strategySummaryText(summary) {
+  if (!summary?.closed) return `${summary?.open || 0} open`;
+  return `${summary.winRate}% win · ${summary.targets}T/${summary.sl}SL`;
+}
+
+function commentSignalForItems(items) {
+  const negativeWords = /\b(avoid|bad|chop|weak|late|extended|fake|trap|skip|no trade|loss)\b/i;
+  const ruleWords = /\b(rule|change|update|only if|after|before|filter|require|approval|disable|enable)\b/i;
+  return items.reduce((signal, item) => {
+    const comment = String(item.comment || "");
+    if (negativeWords.test(comment)) signal.negative += 1;
+    if (ruleWords.test(comment)) signal.ruleChange += 1;
+    return signal;
+  }, { negative: 0, ruleChange: 0 });
+}
+
+function alertStrategyId(item) {
+  if (item.strategyId) return item.strategyId;
+  return ALERT_STRATEGIES.find((strategy) => strategy.match(item))?.id || "unknown";
 }
 
 function alertExitPrice(item) {
