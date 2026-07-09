@@ -99,7 +99,7 @@ def test_ema_values_returns_latest_values_by_period():
     assert values["20"] is None
 
 
-def test_nine_ema_touch_matches_buys_bullish_stock_at_9ema_with_5_12_cloud_stop():
+def test_nine_ema_touch_matches_buys_bullish_stock_at_9ema_with_34_50_cloud_stop():
     matches = nine_ema_touch_matches(
         [{"low": 108.5, "high": 110.5, "close": 110, "time": "2026-07-02T09:50:00"}],
         {"5": 112, "9": 109.5, "12": 111, "34": 100, "50": 105},
@@ -111,10 +111,13 @@ def test_nine_ema_touch_matches_buys_bullish_stock_at_9ema_with_5_12_cloud_stop(
     assert matches[0]["trade_action"] == "Long"
     assert matches[0]["type"] == "10m_9ema_touch"
     assert matches[0]["risk_plan"]["entry"] == 109.5
-    assert matches[0]["risk_plan"]["stop"] == 109
+    assert matches[0]["risk_plan"]["stop"] == 98
     assert matches[0]["risk_plan"]["stop_buffer"] == 2
-    assert matches[0]["risk_plan"]["risk_per_share"] == 0.5
-    assert matches[0]["risk_plan"]["shares"] == 200
+    assert matches[0]["risk_plan"]["stop_mode"] == "fixed-10m-34-50-cloud"
+    assert matches[0]["risk_plan"]["risk_per_share"] == 11.5
+    assert matches[0]["risk_plan"]["shares"] == 8
+    assert matches[0]["stop_cloud_low"] == 100
+    assert matches[0]["stop_cloud_high"] == 105
 
 
 def test_nine_ema_touch_matches_ignores_non_bullish_or_not_touching():
