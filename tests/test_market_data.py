@@ -111,11 +111,11 @@ def test_nine_ema_touch_matches_buys_bullish_stock_at_9ema_with_34_50_cloud_stop
     assert matches[0]["trade_action"] == "Long"
     assert matches[0]["type"] == "10m_9ema_touch"
     assert matches[0]["risk_plan"]["entry"] == 109.5
-    assert matches[0]["risk_plan"]["stop"] == 100
-    assert matches[0]["risk_plan"]["stop_buffer"] == 0
+    assert matches[0]["risk_plan"]["stop"] == 99
+    assert matches[0]["risk_plan"]["stop_buffer"] == 1
     assert matches[0]["risk_plan"]["stop_mode"] == "10m-34-50-cloud"
-    assert matches[0]["risk_plan"]["risk_per_share"] == 9.5
-    assert matches[0]["risk_plan"]["shares"] == 10
+    assert matches[0]["risk_plan"]["risk_per_share"] == 10.5
+    assert matches[0]["risk_plan"]["shares"] == 9
     assert matches[0]["stop_cloud_low"] == 100
     assert matches[0]["stop_cloud_high"] == 105
 
@@ -173,6 +173,24 @@ def test_nine_ema_touch_matches_all_day_after_prior_34_50_cloud_touch():
     assert matches[0]["entry_price"] == 109.5
 
 
+def test_nine_ema_touch_matches_after_first_hour_requires_recent_34_50_cloud_touch():
+    candles = [
+        {"low": 100, "high": 107, "close": 106, "time": "2026-07-02T12:30:00"},
+        {"low": 112, "high": 114, "close": 113, "time": "2026-07-02T12:40:00"},
+        {"low": 112, "high": 114, "close": 113, "time": "2026-07-02T12:50:00"},
+        {"low": 112, "high": 114, "close": 113, "time": "2026-07-02T13:00:00"},
+        {"low": 112, "high": 114, "close": 113, "time": "2026-07-02T13:10:00"},
+        {"low": 108.5, "high": 110.5, "close": 110, "time": "2026-07-02T13:20:00"},
+    ]
+
+    matches = nine_ema_touch_matches(
+        candles,
+        {"5": 112, "9": 109.5, "12": 111, "34": 100, "50": 105},
+    )
+
+    assert matches == []
+
+
 def test_nine_ema_touch_matches_after_first_hour_requires_prior_34_50_cloud_touch():
     matches = nine_ema_touch_matches(
         [
@@ -218,7 +236,7 @@ def test_mtf_matches_alerts_bullish_only_after_price_closes_above_cloud():
     assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 20/21", "Daily 50/55"]
     assert all(match["status"] == "confirmed" and match["direction"] == "above" for match in matches)
     assert all(match["trade_action"] == "Long" for match in matches)
-    assert all(match["risk_plan"]["stop"] == 100 for match in matches)
+    assert all(match["risk_plan"]["stop"] == 99 for match in matches)
     assert all(match["risk_plan"]["stop_mode"] == "10m-34-50-cloud" for match in matches)
 
 
@@ -340,7 +358,7 @@ def test_mtf_signal_matches_waits_for_incomplete_breakouts_until_candle_close():
 
     statuses = {match["label"]: match["status"] for match in matches}
     assert statuses["Hourly 34/50"] == "waiting"
-    assert statuses["10m bounce 34/50"] == "confirmed"
+    assert "10m bounce 34/50" not in statuses
     assert "Daily 20/21" not in statuses
     assert "Daily 50/55" not in statuses
 
@@ -476,7 +494,7 @@ def test_ema_cloud_bounce_matches_uses_latest_10m_candle_not_previous_complete()
     assert matches == []
 
 
-def test_mtf_signal_matches_confirms_a_plus_plus_bullish_breakout_before_candle_close():
+def test_mtf_signal_matches_waits_for_a_plus_plus_bullish_breakout_before_candle_close():
     matches = mtf_signal_matches(
         113,
         "Bullish",
@@ -486,9 +504,7 @@ def test_mtf_signal_matches_confirms_a_plus_plus_bullish_breakout_before_candle_
         {"20": 122, "21": 123, "50": 124, "55": 125},
     )
 
-    assert [match["label"] for match in matches] == ["10m bounce 34/50"]
-    assert matches[0]["status"] == "confirmed"
-    assert matches[0]["trade_action"] == "Long"
+    assert all(match["label"] != "10m bounce 34/50" for match in matches)
 
 
 def test_mtf_signal_matches_confirms_a_plus_plus_bounce_after_candle_close():
@@ -529,7 +545,7 @@ def test_ema_cloud_bounce_ignores_10m_bullish_breakout_without_cloud_touch():
 
 def test_ema_cloud_bounce_sizes_a_plus_plus_bullish_after_touch_and_move_above_cloud():
     matches = ema_cloud_bounce_matches(
-        [{"low": 99, "high": 112, "close": 112, "source_count": 1}],
+        [{"low": 99, "high": 112, "close": 112, "source_count": 2}],
         {"5": 116, "12": 114, "34": 100, "50": 110},
         {"34": 111, "50": 112},
         {"20": 113, "21": 114, "50": 115, "55": 116},
@@ -538,11 +554,11 @@ def test_ema_cloud_bounce_sizes_a_plus_plus_bullish_after_touch_and_move_above_c
     assert [match["label"] for match in matches] == ["10m bounce 34/50"]
     assert matches[0]["trend"] == "Bullish"
     assert matches[0]["risk_plan"]["entry"] == 112
-    assert matches[0]["risk_plan"]["stop"] == 100
-    assert matches[0]["risk_plan"]["stop_buffer"] == 0
+    assert matches[0]["risk_plan"]["stop"] == 99
+    assert matches[0]["risk_plan"]["stop_buffer"] == 1
     assert matches[0]["risk_plan"]["stop_mode"] == "10m-34-50-cloud"
-    assert matches[0]["risk_plan"]["risk_per_share"] == 12
-    assert matches[0]["risk_plan"]["shares"] == 8
+    assert matches[0]["risk_plan"]["risk_per_share"] == 13
+    assert matches[0]["risk_plan"]["shares"] == 7
     assert matches[0]["stop_cloud_low"] == 100
     assert matches[0]["stop_cloud_high"] == 110
 
@@ -585,11 +601,11 @@ def test_ema_cloud_bounce_auto_sizes_from_last_three_daily_ranges():
 
     risk_plan = matches[0]["risk_plan"]
     assert risk_plan["stop_mode"] == "10m-34-50-cloud"
-    assert risk_plan["stop_buffer"] == 0
-    assert risk_plan["stop"] == 100
-    assert risk_plan["risk_per_share"] == 12
+    assert risk_plan["stop_buffer"] == 1
+    assert risk_plan["stop"] == 99
+    assert risk_plan["risk_per_share"] == 13
     assert risk_plan["max_risk"] == 200
-    assert risk_plan["shares"] == 16
+    assert risk_plan["shares"] == 15
     assert risk_plan["volatility"]["grade"] == "fixed"
     assert risk_plan["volatility"]["average_range"] is None
 
