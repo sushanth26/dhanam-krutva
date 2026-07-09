@@ -273,7 +273,7 @@ def test_auto_long_buys_first_then_places_linked_target_and_stop_for_full_size(m
     assert stop["stop_price"] == "95.00"
 
 
-def test_buy_entry_payload_uses_market_order_during_regular_market(monkeypatch):
+def test_buy_entry_payload_uses_core_limit_order_during_regular_market(monkeypatch):
     monkeypatch.setattr(WebullService, "_is_regular_market_open", classmethod(lambda cls: True))
 
     payload = WebullService._buy_entry_order_payload(
@@ -283,9 +283,9 @@ def test_buy_entry_payload_uses_market_order_during_regular_market(monkeypatch):
         limit_price=100,
     )
 
-    assert payload["order_type"] == "MARKET"
+    assert payload["order_type"] == "LIMIT"
     assert payload["support_trading_session"] == "CORE"
-    assert "limit_price" not in payload
+    assert payload["limit_price"] == "100.00"
 
 
 def test_buy_entry_payload_uses_limit_order_outside_regular_market(monkeypatch):

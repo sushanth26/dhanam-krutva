@@ -1,5 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from webull.data.common.category import Category
@@ -16,6 +17,9 @@ LIVE_WATCHLIST = [
 ]
 INTRADAY_EMA_SESSIONS = ["PRE", "RTH", "ATH"]
 WEBULL_BATCH_BAR_LIMIT = 20
+MARKET_TIMEZONE = ZoneInfo("America/New_York")
+REGULAR_MARKET_OPEN = time(9, 30)
+NINE_EMA_TOUCH_CUTOFF = time(10, 30)
 A_PLUS_PLUS_MAX_RISK = 100
 A_PLUS_PLUS_STOP_BUFFER = 1
 A_PLUS_PLUS_STOP_MODE_FIXED = "fixed"
@@ -530,6 +534,9 @@ def nine_ema_touch_matches(
     candle = latest_ten_minute_candle(ten_minute_candles)
     if not candle:
         return []
+    candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
+    if not is_first_hour_regular_market_time(candle_time):
+        return []
 
     ema9 = ema_10m.get("9")
     ema5 = ema_10m.get("5")
@@ -562,7 +569,6 @@ def nine_ema_touch_matches(
     if not risk_plan:
         return []
 
-    candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
     return [
         {
             "label": "10m 9 EMA touch",
@@ -583,6 +589,18 @@ def nine_ema_touch_matches(
             "risk_plan": risk_plan,
         }
     ]
+
+
+def is_first_hour_regular_market_time(value: Any) -> bool:
+    parsed_time = parse_iso_time(value)
+    if not parsed_time:
+        return False
+    if parsed_time.tzinfo is None:
+        market_time = parsed_time.replace(tzinfo=MARKET_TIMEZONE)
+    else:
+        market_time = parsed_time.astimezone(MARKET_TIMEZONE)
+    current_time = market_time.time()
+    return REGULAR_MARKET_OPEN <= current_time < NINE_EMA_TOUCH_CUTOFF
 
 
 def trade_action_for_trend(trend: str | None) -> str | None:

@@ -772,7 +772,7 @@ export default function App() {
       return;
     }
     const confirmed = window.confirm(
-      `Buy 1 share of ${symbol} in account ${accountId}? Regular market uses market order; pre/after-hours uses a ${formatPrice(limitPrice)} limit order.`
+      `Buy 1 share of ${symbol} in account ${accountId} with a ${formatPrice(limitPrice)} limit order?`
     );
     if (!confirmed) return;
 
@@ -783,7 +783,7 @@ export default function App() {
         throw new Error(payload.error || payload.preview?.error || payload.place?.error || `Webull rejected ${symbol} buy order.`);
       }
       setBuyState((current) => ({ ...current, [symbol]: { status: "ok" } }));
-      setLiveAlert(`Submitted buy order for 1 share of ${symbol}. Extended-hours limit fallback: ${formatPrice(limitPrice)}.`);
+      setLiveAlert(`Submitted ${formatPrice(limitPrice)} limit buy order for 1 share of ${symbol}.`);
     } catch (error) {
       setBuyState((current) => ({ ...current, [symbol]: { status: "error" } }));
       setLiveAlert(error.message);

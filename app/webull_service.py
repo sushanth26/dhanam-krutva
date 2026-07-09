@@ -693,21 +693,13 @@ class WebullService:
         client_order_id: str,
         limit_price: float,
     ) -> dict[str, str]:
-        if cls._is_regular_market_open():
-            return cls._stock_order_payload(
-                symbol=symbol,
-                quantity=quantity,
-                client_order_id=client_order_id,
-                order_type="MARKET",
-                support_trading_session="CORE",
-            )
         return cls._stock_order_payload(
             symbol=symbol,
             quantity=quantity,
             client_order_id=client_order_id,
             order_type="LIMIT",
             limit_price=limit_price,
-            support_trading_session="ALL",
+            support_trading_session="CORE" if cls._is_regular_market_open() else "ALL",
         )
 
     @classmethod

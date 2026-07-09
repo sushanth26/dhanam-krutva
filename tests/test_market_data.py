@@ -131,6 +131,32 @@ def test_nine_ema_touch_matches_ignores_non_bullish_or_not_touching():
     assert above_ema == []
 
 
+def test_nine_ema_touch_matches_only_during_first_regular_market_hour():
+    ema_set = {"5": 112, "9": 109.5, "12": 111, "34": 100, "50": 105}
+
+    premarket = nine_ema_touch_matches(
+        [{"low": 108.5, "high": 110.5, "close": 110, "time": "2026-07-02T09:20:00"}],
+        ema_set,
+    )
+    market_open = nine_ema_touch_matches(
+        [{"low": 108.5, "high": 110.5, "close": 110, "time": "2026-07-02T09:30:00"}],
+        ema_set,
+    )
+    last_first_hour_candle = nine_ema_touch_matches(
+        [{"low": 108.5, "high": 110.5, "close": 110, "time": "2026-07-02T10:20:00"}],
+        ema_set,
+    )
+    after_first_hour = nine_ema_touch_matches(
+        [{"low": 108.5, "high": 110.5, "close": 110, "time": "2026-07-02T10:30:00"}],
+        ema_set,
+    )
+
+    assert premarket == []
+    assert [match["label"] for match in market_open] == ["10m 9 EMA touch"]
+    assert [match["label"] for match in last_first_hour_candle] == ["10m 9 EMA touch"]
+    assert after_first_hour == []
+
+
 def test_mtf_matches_waits_when_active_candle_tests_cloud_ranges():
     matches = mtf_matches(
         105,
