@@ -4,6 +4,7 @@ from app.market_data import (
     LIVE_WATCHLIST,
     aggregate_by_minutes,
     batch_history_bars_chunked,
+    cloud_status,
     daily_volatility,
     ema_cloud_bounce_matches,
     ema_values,
@@ -97,6 +98,28 @@ def test_ema_values_returns_latest_values_by_period():
     assert values["5"] is not None
     assert values["12"] is not None
     assert values["20"] is None
+
+
+def test_cloud_status_treats_thin_10m_clouds_as_chop():
+    thin_fast_cloud = cloud_status(
+        {"5": 112.10, "12": 112.40, "34": 100, "50": 105},
+        ["5", "12"],
+        ["34", "50"],
+    )
+    thin_slow_cloud = cloud_status(
+        {"5": 112, "12": 111, "34": 100.10, "50": 100.40},
+        ["5", "12"],
+        ["34", "50"],
+    )
+    minimum_ok = cloud_status(
+        {"5": 112, "12": 111.50, "34": 100, "50": 100.50},
+        ["5", "12"],
+        ["34", "50"],
+    )
+
+    assert thin_fast_cloud == "Chop"
+    assert thin_slow_cloud == "Chop"
+    assert minimum_ok == "Bullish"
 
 
 def test_nine_ema_touch_matches_buys_bullish_stock_at_9ema_with_34_50_cloud_stop():
