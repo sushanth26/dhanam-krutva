@@ -177,7 +177,7 @@ def test_auto_long_rejects_symbols_from_auto_trade_disabled_watchlists(tmp_path,
         raise AssertionError("auto long should reject symbols from disabled watchlists")
 
 
-def test_auto_long_buys_first_then_places_stop_before_target_for_full_size(monkeypatch):
+def test_auto_long_buys_first_then_places_stop_only_for_full_size(monkeypatch):
     captured = {}
     calls = []
 
@@ -243,10 +243,9 @@ def test_auto_long_buys_first_then_places_stop_before_target_for_full_size(monke
 
     buy_place = captured["buy_place"]
     stop_place = captured["stop_place"]
-    target_place = captured["target_place"]
     buy = buy_place["new_orders"][0]
     assert response["ok"] is True
-    assert response["stage"] == "complete"
+    assert response["stage"] == "stop_placed"
     assert response["quantity"] == 7
     assert response["buy_fill"]["symbol"] == "AAOI"
     assert response["buy_fill"]["filled_quantity"] == 7
@@ -256,12 +255,12 @@ def test_auto_long_buys_first_then_places_stop_before_target_for_full_size(monke
         ("detail", response["orders"]["buy"]["client_order_id"], None),
         ("preview", 1, None),
         ("place", 1, None),
-        ("preview", 1, None),
-        ("place", 1, None),
     ]
     assert response["orders"]["buy"]["client_order_id"].startswith("DKAT")
     assert response["orders"]["target"]["client_order_id"].startswith("DKAT")
     assert response["orders"]["stop"]["client_order_id"].startswith("DKAT")
+    assert response["target_preview"] is None
+    assert response["target_place"] is None
 
     assert buy["combo_type"] == "NORMAL"
     assert buy["side"] == "BUY"
@@ -276,12 +275,6 @@ def test_auto_long_buys_first_then_places_stop_before_target_for_full_size(monke
     assert stop["order_type"] == "STOP_LOSS"
     assert stop["quantity"] == "7"
     assert stop["stop_price"] == "95.00"
-    target = target_place["new_orders"][0]
-    assert target["combo_type"] == "STOP_PROFIT"
-    assert target["side"] == "SELL"
-    assert target["order_type"] == "LIMIT"
-    assert target["quantity"] == "7"
-    assert target["limit_price"] == "105.00"
 
 
 def test_buy_entry_payload_uses_core_limit_order_during_regular_market(monkeypatch):
@@ -433,13 +426,12 @@ def test_auto_long_places_exits_when_history_reports_fill_after_detail_timeout(m
     )
 
     assert response["ok"] is True
-    assert response["stage"] == "complete"
+    assert response["stage"] == "stop_placed"
     assert response["buy_fill"]["stage"] == "buy_filled_history"
     assert response["buy_fill"]["filled_quantity"] == 7
     stop = captured["stop_place_orders"][0]
-    target = captured["target_place_orders"][0]
-    assert target["side"] == "SELL"
     assert stop["side"] == "SELL"
+    assert "target_place_orders" not in captured
 
 
 def test_auto_long_uses_filled_quantity_for_exits(monkeypatch):
@@ -487,9 +479,8 @@ def test_auto_long_uses_filled_quantity_for_exits(monkeypatch):
     assert response["ok"] is True
     assert response["buy_fill"]["filled_quantity"] == 5
     stop = captured["stop_place_orders"][0]
-    target = captured["target_place_orders"][0]
     assert stop["quantity"] == "5"
-    assert target["quantity"] == "5"
+    assert "target_place_orders" not in captured
 
 
 def test_auto_long_places_exits_when_detail_reports_full_quantity_without_filled_status(monkeypatch):
@@ -533,10 +524,10 @@ def test_auto_long_places_exits_when_detail_reports_full_quantity_without_filled
     )
 
     assert response["ok"] is True
-    assert response["stage"] == "complete"
+    assert response["stage"] == "stop_placed"
     assert response["buy_fill"]["filled_quantity"] == 7
     assert captured["stop_place_orders"][0]["side"] == "SELL"
-    assert captured["target_place_orders"][0]["side"] == "SELL"
+    assert "target_place_orders" not in captured
 
 
 def test_filled_status_accepts_common_broker_variants():
