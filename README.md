@@ -106,9 +106,9 @@ other routes are protected with HTTP Basic Auth when `APP_PASSWORD` is set.
 
 | Strategy | Entry rule | Exit rule |
 | --- | --- | --- |
-| Hourly 34/50 | Alert when price closes out of the hourly 34/50 EMA cloud after being inside/beyond it. Long above cloud, short below cloud. | Target is 1:1 from entry to SL. Long SL below 10m 34/50 cloud; short SL above the signal cloud. |
-| Daily 20/21 | Alert when price closes out of the daily 20/21 EMA cloud. Long above cloud, short below cloud. | Target is 1:1 from entry to SL. Long SL below 10m 34/50 cloud; short SL above the signal cloud. |
-| Daily 50/55 | Alert when price closes out of the daily 50/55 EMA cloud. Long above cloud, short below cloud. | Target is 1:1 from entry to SL. Long SL below 10m 34/50 cloud; short SL above the signal cloud. |
+| Hourly 34/50 | Alert when price closes out of the hourly 34/50 EMA cloud after being inside/beyond it. Long above cloud, short below cloud. | Target is 1:1 from entry to SL. Long SL is $3 below the hourly 34/50 cloud; short SL is $3 above it. |
+| Daily 20/21 | Alert when price closes out of the daily 20/21 EMA cloud. Long above cloud, short below cloud. | Target is 1:1 from entry to SL. Long SL is $3 below the daily 20/21 cloud; short SL is $3 above it. |
+| Daily 50/55 | Alert when price closes out of the daily 50/55 EMA cloud. Long above cloud, short below cloud. | Target is 1:1 from entry to SL. Long SL is $3 below the daily 50/55 cloud; short SL is $3 above it. |
 | 10m bounce/rejection 34/50 | Enter only after a 10m candle touches the 10m 34/50 cloud and closes back above it for long, or below it for short. | Target is 1:1. Long SL below 10m 34/50 cloud; short SL above 10m 34/50 cloud. |
 | 10m 9 EMA touch | From 9:30-10:30 ET, alert/trade when bullish 10m trend touches the 9 EMA. After 10:30 ET, only if one of the recent 4 prior 10m candles touched the 10m 34/50 cloud. | Target is 1:1. SL below 10m 34/50 cloud. |
 | 10m bounce/rejection 1hr 34/50 | Alert when a 10m candle touches the hourly 34/50 cloud and closes back in the trend direction. | Target is 1:1. Long SL below 10m 34/50 cloud; short SL above the touched cloud. |

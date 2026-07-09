@@ -23,6 +23,8 @@ NINE_EMA_TOUCH_CUTOFF = time(10, 30)
 NINE_EMA_RECENT_CLOUD_LOOKBACK = 4
 A_PLUS_PLUS_MAX_RISK = 100
 A_PLUS_PLUS_STOP_BUFFER = 1
+MTF_CLOUD_STOP_BUFFER = 3
+TEN_MINUTE_MIN_CLOUD_THICKNESS = 0.50
 A_PLUS_PLUS_STOP_MODE_FIXED = "fixed"
 A_PLUS_PLUS_STOP_MODE_AUTO = "auto"
 
@@ -285,8 +287,8 @@ def mtf_matches(
             "trade_action": trade_action_for_trend(trend),
             "type": "mtf_cloud_breakout",
         }
-        if trend == "Bullish":
-            match.update(bullish_ten_minute_cloud_risk_fields(price, ema_10m, risk_amount))
+        if trend in ("Bullish", "Bearish"):
+            match.update(mtf_cloud_breakout_risk_fields(price, low, high, trend, risk_amount))
         if trend == "Bullish":
             if candle_complete and previous_price is not None and previous_price <= high and price > high:
                 matches.append({**match, "status": "confirmed", "direction": "above"})
@@ -678,6 +680,36 @@ def fixed_stop_risk_plan(
     }
 
 
+def mtf_cloud_breakout_risk_fields(
+    entry: float | None,
+    cloud_low: float,
+    cloud_high: float,
+    trend: str,
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
+) -> dict[str, Any]:
+    if entry is None:
+        return {}
+    stop_buffer = MTF_CLOUD_STOP_BUFFER
+    if trend == "Bullish":
+        stop = cloud_low - stop_buffer
+    elif trend == "Bearish":
+        stop = cloud_high + stop_buffer
+    else:
+        return {}
+    risk_plan = fixed_stop_risk_plan(
+        entry=entry,
+        stop=stop,
+        max_risk=risk_amount,
+        stop_buffer=stop_buffer,
+        stop_mode="mtf-cloud-3-dollar",
+    )
+    return {
+        "stop_cloud_low": round(cloud_low, 4),
+        "stop_cloud_high": round(cloud_high, 4),
+        **({"risk_plan": risk_plan} if risk_plan else {}),
+    }
+
+
 def bullish_ten_minute_cloud_risk_fields(
     entry: float | None,
     ema_10m: dict[str, float | None],
@@ -787,6 +819,11 @@ def cloud_status(ema_set: dict[str, float | None], fast_keys: list[str], slow_ke
     fast_top = max(fast_values)
     slow_bottom = min(slow_values)
     slow_top = max(slow_values)
+
+    if (fast_top - fast_bottom) < TEN_MINUTE_MIN_CLOUD_THICKNESS:
+        return "Chop"
+    if (slow_top - slow_bottom) < TEN_MINUTE_MIN_CLOUD_THICKNESS:
+        return "Chop"
 
     if fast_bottom > slow_top:
         return "Bullish"
