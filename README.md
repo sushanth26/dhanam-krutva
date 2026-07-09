@@ -118,6 +118,10 @@ other routes are protected with HTTP Basic Auth when `APP_PASSWORD` is set.
 Alerts added to the MTF table are tracked in the Alert Log until price hits the
 Target or SL.
 
+Pre-market refresh can surface MTF alerts and enabled auto-trades use extended
+session order support outside regular hours. The 10m 9 EMA touch strategy does
+not alert or trade before 9:30 ET.
+
 ## What It Checks
 
 - SDK client initialization and Webull authentication.
