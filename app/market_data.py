@@ -289,19 +289,20 @@ def mtf_matches(
             matches.append({**match, "type": "mtf_cloud_inside", "status": "confirmed", "direction": "inside"})
             continue
 
-        match["trade_action"] = trade_action_for_trend(trend)
+        action_match = {**match, "trade_action": trade_action_for_trend(trend)}
         if trend in ("Bullish", "Bearish"):
-            match.update(mtf_cloud_breakout_risk_fields(price, low, high, trend, risk_amount))
+            action_match.update(mtf_cloud_breakout_risk_fields(price, low, high, trend, risk_amount))
         if trend == "Bullish":
             if candle_complete and previous_price is not None and previous_price <= high and price > high:
-                matches.append({**match, "status": "confirmed", "direction": "above"})
-            elif not candle_complete and previous_price is not None and previous_price <= high and candle_touches_cloud(current_low, current_high, low, high):
-                matches.append({**match, "status": "waiting", "direction": "above"})
+                matches.append({**action_match, "status": "confirmed", "direction": "above"})
+                continue
         elif trend == "Bearish":
             if candle_complete and previous_price is not None and previous_price >= low and price < low:
-                matches.append({**match, "status": "confirmed", "direction": "below"})
-            elif not candle_complete and previous_price is not None and previous_price >= low and candle_touches_cloud(current_low, current_high, low, high):
-                matches.append({**match, "status": "waiting", "direction": "below"})
+                matches.append({**action_match, "status": "confirmed", "direction": "below"})
+                continue
+
+        if candle_touches_cloud(current_low, current_high, low, high):
+            matches.append({**match, "type": "mtf_cloud_touch", "status": "confirmed", "direction": "touch"})
     return matches
 
 
@@ -326,8 +327,19 @@ def mtf_signal_matches(
     candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
     previous_candle = previous_ten_minute_candle(ten_minute_candles)
     previous_price = previous_candle.get("close") if previous_candle else None
-    candle_high = candle.get("high")
-    candle_low = candle.get("low")
+    session = candle.get("session_date")
+    day_candles = [
+        item for item in ten_minute_candles
+        if session and item.get("session_date") == session
+    ] or [candle]
+    candle_high = max(
+        (item.get("high") for item in day_candles if item.get("high") is not None),
+        default=candle.get("high"),
+    )
+    candle_low = min(
+        (item.get("low") for item in day_candles if item.get("low") is not None),
+        default=candle.get("low"),
+    )
     matches = mtf_matches(
         price,
         ten_minute_trend,

@@ -217,8 +217,8 @@ def test_mtf_matches_waits_when_active_candle_tests_cloud_ranges():
     )
 
     assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 20/21", "Daily 50/55"]
-    assert [match["status"] for match in matches] == ["confirmed", "waiting", "confirmed"]
-    assert [match["direction"] for match in matches] == ["inside", "above", "inside"]
+    assert [match["status"] for match in matches] == ["confirmed", "confirmed", "confirmed"]
+    assert [match["direction"] for match in matches] == ["inside", "touch", "inside"]
 
 
 def test_mtf_matches_alerts_when_price_is_inside_hourly_and_daily_clouds():
@@ -239,6 +239,26 @@ def test_mtf_matches_alerts_when_price_is_inside_hourly_and_daily_clouds():
     assert all(match["direction"] == "inside" for match in matches)
     assert all(match["type"] == "mtf_cloud_inside" for match in matches)
     assert all("trade_action" not in match for match in matches)
+
+
+def test_mtf_signal_matches_alerts_when_stock_touched_hourly_cloud_earlier_in_day():
+    matches = mtf_signal_matches(
+        120,
+        "Bullish",
+        [
+            {"low": 105, "high": 113, "close": 112, "source_count": 2, "session_date": "2026-07-02", "time": "2026-07-02T09:30:00"},
+            {"low": 118, "high": 122, "close": 120, "source_count": 2, "session_date": "2026-07-02", "time": "2026-07-02T09:40:00"},
+        ],
+        {"5": 122, "12": 121, "34": 100, "50": 110},
+        {"34": 100, "50": 110},
+        {"20": 80, "21": 90, "50": 130, "55": 135},
+    )
+
+    assert [match["label"] for match in matches] == ["Hourly 34/50"]
+    assert matches[0]["status"] == "confirmed"
+    assert matches[0]["direction"] == "touch"
+    assert matches[0]["type"] == "mtf_cloud_touch"
+    assert "trade_action" not in matches[0]
 
 
 def test_mtf_matches_alerts_bullish_only_after_price_closes_above_cloud():
@@ -383,7 +403,8 @@ def test_mtf_signal_matches_waits_for_incomplete_breakouts_until_candle_close():
     )
 
     statuses = {match["label"]: match["status"] for match in matches}
-    assert statuses["Hourly 34/50"] == "waiting"
+    assert statuses["Hourly 34/50"] == "confirmed"
+    assert {match["label"]: match["direction"] for match in matches}["Hourly 34/50"] == "touch"
     assert "10m bounce 34/50" not in statuses
     assert "Daily 20/21" not in statuses
     assert "Daily 50/55" not in statuses
