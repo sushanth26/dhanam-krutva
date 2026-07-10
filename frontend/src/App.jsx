@@ -267,6 +267,17 @@ function quotesWithMatchStatus(quotes, status) {
     .filter((quote) => quote.mtf_matches.length);
 }
 
+function alertableMtfQuotes(quotes) {
+  return quotes
+    .map((quote) => ({
+      ...quote,
+      mtf_matches: (quote.mtf_matches || []).filter((match) => (
+        (match.status || "confirmed") === "confirmed" || match.type === "mtf_cloud_inside"
+      )),
+    }))
+    .filter((quote) => quote.mtf_matches.length);
+}
+
 function quotesWithTradeAction(quotes, action) {
   return quotes
     .map((quote) => ({
@@ -694,7 +705,7 @@ export default function App() {
     });
     const payload = await getJson(`/api/webull/live-prices?${query.toString()}`);
     const nextQuotes = payload.quotes || [];
-    const currentMtfs = filterQuotesByStrategy(confirmedMtfQuotes(nextQuotes), strategyStateRef.current);
+    const currentMtfs = filterQuotesByStrategy(alertableMtfQuotes(nextQuotes), strategyStateRef.current);
     const retainedMerge = mergeRetainedMtfQuotesForTab(retainedMtfQuotesRef.current, watchlist.id, nextQuotes);
     retainedMtfQuotesRef.current = retainedMerge.retainedByTab;
     const updatedAt = new Date().toLocaleTimeString();

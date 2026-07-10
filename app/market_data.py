@@ -286,7 +286,7 @@ def mtf_matches(
             "type": "mtf_cloud_breakout",
         }
         if low <= price <= high:
-            matches.append({**match, "type": "mtf_cloud_inside", "status": "confirmed", "direction": "inside"})
+            matches.append({**match, "type": "mtf_cloud_inside", "status": "waiting", "direction": "inside"})
             continue
 
         action_match = {**match, "trade_action": trade_action_for_trend(trend)}

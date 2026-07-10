@@ -217,7 +217,7 @@ def test_mtf_matches_waits_when_active_candle_tests_cloud_ranges():
     )
 
     assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 20/21", "Daily 50/55"]
-    assert [match["status"] for match in matches] == ["confirmed", "confirmed", "confirmed"]
+    assert [match["status"] for match in matches] == ["waiting", "confirmed", "waiting"]
     assert [match["direction"] for match in matches] == ["inside", "touch", "inside"]
 
 
@@ -235,7 +235,7 @@ def test_mtf_matches_alerts_when_price_is_inside_hourly_and_daily_clouds():
     )
 
     assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 50/55"]
-    assert all(match["status"] == "confirmed" for match in matches)
+    assert all(match["status"] == "waiting" for match in matches)
     assert all(match["direction"] == "inside" for match in matches)
     assert all(match["type"] == "mtf_cloud_inside" for match in matches)
     assert all("trade_action" not in match for match in matches)
@@ -383,7 +383,7 @@ def test_mtf_signal_matches_marks_incomplete_10m_candle_as_waiting():
     )
 
     assert [match["label"] for match in matches][:2] == ["Hourly 34/50", "Daily 50/55"]
-    assert [match["status"] for match in matches[:2]] == ["confirmed", "confirmed"]
+    assert [match["status"] for match in matches[:2]] == ["waiting", "waiting"]
     assert [match["direction"] for match in matches[:2]] == ["inside", "inside"]
     assert all(match["label"] != "10m bounce 34/50" for match in matches)
     assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
