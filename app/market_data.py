@@ -327,19 +327,8 @@ def mtf_signal_matches(
     candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
     previous_candle = previous_ten_minute_candle(ten_minute_candles)
     previous_price = previous_candle.get("close") if previous_candle else None
-    session = candle.get("session_date")
-    day_candles = [
-        item for item in ten_minute_candles
-        if session and item.get("session_date") == session
-    ] or [candle]
-    candle_high = max(
-        (item.get("high") for item in day_candles if item.get("high") is not None),
-        default=candle.get("high"),
-    )
-    candle_low = min(
-        (item.get("low") for item in day_candles if item.get("low") is not None),
-        default=candle.get("low"),
-    )
+    candle_high = candle.get("high")
+    candle_low = candle.get("low")
     matches = mtf_matches(
         price,
         ten_minute_trend,

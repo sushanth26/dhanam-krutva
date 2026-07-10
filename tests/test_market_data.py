@@ -241,7 +241,27 @@ def test_mtf_matches_alerts_when_price_is_inside_hourly_and_daily_clouds():
     assert all("trade_action" not in match for match in matches)
 
 
-def test_mtf_signal_matches_alerts_when_stock_touched_hourly_cloud_earlier_in_day():
+def test_mtf_matches_alerts_when_current_intraday_candle_touches_hourly_cloud():
+    matches = mtf_matches(
+        120,
+        "Bullish",
+        {"5": 122, "12": 121, "34": 100, "50": 110},
+        {"34": 100, "50": 110},
+        {"20": 80, "21": 90, "50": 130, "55": 135},
+        previous_price=116,
+        current_low=105,
+        current_high=121,
+        candle_complete=True,
+    )
+
+    assert [match["label"] for match in matches] == ["Hourly 34/50"]
+    assert matches[0]["status"] == "confirmed"
+    assert matches[0]["direction"] == "touch"
+    assert matches[0]["type"] == "mtf_cloud_touch"
+    assert "trade_action" not in matches[0]
+
+
+def test_mtf_signal_matches_does_not_alert_when_only_prior_candle_touched_hourly_cloud():
     matches = mtf_signal_matches(
         120,
         "Bullish",
@@ -254,11 +274,7 @@ def test_mtf_signal_matches_alerts_when_stock_touched_hourly_cloud_earlier_in_da
         {"20": 80, "21": 90, "50": 130, "55": 135},
     )
 
-    assert [match["label"] for match in matches] == ["Hourly 34/50"]
-    assert matches[0]["status"] == "confirmed"
-    assert matches[0]["direction"] == "touch"
-    assert matches[0]["type"] == "mtf_cloud_touch"
-    assert "trade_action" not in matches[0]
+    assert matches == []
 
 
 def test_mtf_matches_alerts_bullish_only_after_price_closes_above_cloud():

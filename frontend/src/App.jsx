@@ -161,7 +161,10 @@ function saveRetainedMtfQuotes(value) {
 function mergeMtfMatches(currentMatches = [], retainedMatches = []) {
   const merged = [];
   const seen = new Set();
-  for (const match of [...currentMatches, ...retainedMatches]) {
+  for (const match of [
+    ...currentMatches,
+    ...retainedMatches.filter((item) => item.type !== "mtf_cloud_touch"),
+  ]) {
     const key = mtfMatchKey(match);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -194,10 +197,12 @@ function mergeRetainedMtfQuotesForTab(retainedByTab, tab, nextQuotes) {
     if (!currentSymbols.has(symbol)) continue;
     if (nextTab[symbol]) continue;
     const current = currentBySymbol[symbol];
+    const retainedMatches = (retained.mtf_matches || []).filter((match) => match.type !== "mtf_cloud_touch");
+    if (!retainedMatches.length) continue;
     const merged = {
       ...retained,
       ...(current || {}),
-      mtf_matches: retained.mtf_matches || [],
+      mtf_matches: retainedMatches,
       last_seen_at: new Date().toISOString(),
     };
     nextTab[symbol] = merged;
@@ -292,7 +297,7 @@ function quotesWithWaitOrWatch(quotes) {
     .map((quote) => ({
       ...quote,
       mtf_matches: (quote.mtf_matches || []).filter((match) => (
-        (match.status || "confirmed") === "waiting" || !match.trade_action
+        (match.status || "confirmed") === "waiting" || match.type === "mtf_cloud_inside"
       )),
     }))
     .filter((quote) => quote.mtf_matches.length);
