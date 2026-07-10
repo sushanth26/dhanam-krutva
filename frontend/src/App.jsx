@@ -201,6 +201,17 @@ function quotesWithTradeAction(quotes, action) {
     .filter((quote) => quote.mtf_matches.length);
 }
 
+function quotesWithWaitOrWatch(quotes) {
+  return quotes
+    .map((quote) => ({
+      ...quote,
+      mtf_matches: (quote.mtf_matches || []).filter((match) => (
+        (match.status || "confirmed") === "waiting" || !match.trade_action
+      )),
+    }))
+    .filter((quote) => quote.mtf_matches.length);
+}
+
 function loadRiskSettings() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(RISK_SETTINGS_KEY) || "{}");
@@ -471,7 +482,7 @@ export default function App() {
   const allMtfs = useMemo(() => quotesWithMatchStatus(allMtfQuotes, "confirmed"), [allMtfQuotes]);
   const longMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Long"), [allMtfs]);
   const shortMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Short"), [allMtfs]);
-  const waitingMtfs = useMemo(() => quotesWithMatchStatus(allMtfQuotes, "waiting"), [allMtfQuotes]);
+  const waitingMtfs = useMemo(() => quotesWithWaitOrWatch(allMtfQuotes), [allMtfQuotes]);
   const enabledStrategyCount = useMemo(
     () => Object.values(strategyState || {}).filter((enabled) => enabled !== false).length,
     [strategyState],

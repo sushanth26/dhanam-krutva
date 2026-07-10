@@ -283,9 +283,13 @@ def mtf_matches(
             "high": round(high, 4),
             "entry_price": round(price, 4),
             "trend": trend,
-            "trade_action": trade_action_for_trend(trend),
             "type": "mtf_cloud_breakout",
         }
+        if low <= price <= high:
+            matches.append({**match, "type": "mtf_cloud_inside", "status": "confirmed", "direction": "inside"})
+            continue
+
+        match["trade_action"] = trade_action_for_trend(trend)
         if trend in ("Bullish", "Bearish"):
             match.update(mtf_cloud_breakout_risk_fields(price, low, high, trend, risk_amount))
         if trend == "Bullish":
@@ -358,6 +362,8 @@ def mtf_signal_matches(
     )
     visible_matches = []
     for match in matches:
+        if candle_time is not None:
+            match.setdefault("candle_time", candle_time)
         if status == "waiting":
             if match.get("status") == "confirmed":
                 visible_matches.append(match)
@@ -365,8 +371,6 @@ def mtf_signal_matches(
             match["status"] = "waiting"
         else:
             match.setdefault("status", "confirmed")
-        if candle_time is not None:
-            match.setdefault("candle_time", candle_time)
         visible_matches.append(match)
     return dedupe_mtf_signal_matches(visible_matches)
 
