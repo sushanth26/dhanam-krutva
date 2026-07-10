@@ -144,6 +144,9 @@ function BuyCell({ buyState, disabled, onBuy, symbol, tradeAction, waiting }) {
   if (waiting) {
     return <td className="row-action-cell buy-action-cell" aria-label="Waiting for candle close"></td>;
   }
+  if (!tradeAction) {
+    return <td className="row-action-cell buy-action-cell" aria-label="Watch alert"></td>;
+  }
   if (tradeAction === "Short") {
     return (
       <td className="row-action-cell buy-action-cell">

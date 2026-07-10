@@ -17,6 +17,7 @@ const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
 const WATCHLISTS_KEY = "dhanam-watchlists";
 const RISK_SETTINGS_KEY = "dhanam-risk-settings";
 const ALERT_LOG_KEY = "dhanam-alert-log";
+const RETAINED_MTF_QUOTES_KEY = "dhanam-retained-mtf-quotes";
 const AUTO_TRADE_KEY = "dhanam-auto-trade";
 const AUTO_TRADE_EXECUTIONS_KEY = "dhanam-auto-trade-executions";
 const MAX_AUTO_TRADE_EXECUTIONS = 500;
@@ -135,6 +136,85 @@ function mtfRowSignature(quote) {
   return `${quote.symbol}:${labels}`;
 }
 
+function mtfMatchKey(match) {
+  return [
+    match?.label || "",
+    match?.type || "",
+    match?.direction || "",
+    matchEntryPrice(match) ?? "",
+  ].join(":");
+}
+
+function loadRetainedMtfQuotes() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(RETAINED_MTF_QUOTES_KEY) || "{}");
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveRetainedMtfQuotes(value) {
+  window.localStorage.setItem(RETAINED_MTF_QUOTES_KEY, JSON.stringify(value));
+}
+
+function mergeMtfMatches(currentMatches = [], retainedMatches = []) {
+  const merged = [];
+  const seen = new Set();
+  for (const match of [
+    ...currentMatches,
+    ...retainedMatches.filter((item) => item.type !== "mtf_cloud_touch"),
+  ]) {
+    const key = mtfMatchKey(match);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(match);
+  }
+  return merged;
+}
+
+function mergeRetainedMtfQuotesForTab(retainedByTab, tab, nextQuotes) {
+  const currentSymbols = new Set(nextQuotes.map((quote) => quote.symbol));
+  const currentBySymbol = Object.fromEntries(nextQuotes.map((quote) => [quote.symbol, quote]));
+  const previousTab = retainedByTab[tab] || {};
+  const nextTab = {};
+  const mergedQuotes = nextQuotes.map((quote) => {
+    const retained = previousTab[quote.symbol];
+    const matches = mergeMtfMatches(quote.mtf_matches || [], retained?.mtf_matches || []);
+    if (!matches.length) return quote;
+    const merged = {
+      ...(retained || {}),
+      ...quote,
+      mtf_matches: matches,
+      retained_at: retained?.retained_at || new Date().toISOString(),
+      last_seen_at: new Date().toISOString(),
+    };
+    nextTab[quote.symbol] = merged;
+    return merged;
+  });
+
+  for (const [symbol, retained] of Object.entries(previousTab)) {
+    if (!currentSymbols.has(symbol)) continue;
+    if (nextTab[symbol]) continue;
+    const current = currentBySymbol[symbol];
+    const retainedMatches = (retained.mtf_matches || []).filter((match) => match.type !== "mtf_cloud_touch");
+    if (!retainedMatches.length) continue;
+    const merged = {
+      ...retained,
+      ...(current || {}),
+      mtf_matches: retainedMatches,
+      last_seen_at: new Date().toISOString(),
+    };
+    nextTab[symbol] = merged;
+    mergedQuotes.push(merged);
+  }
+
+  return {
+    retainedByTab: { ...retainedByTab, [tab]: nextTab },
+    quotes: mergedQuotes,
+  };
+}
+
 function mtfNotificationDetails(quotes) {
   const matches = quotes
     .map((quote) => ({
@@ -192,11 +272,33 @@ function quotesWithMatchStatus(quotes, status) {
     .filter((quote) => quote.mtf_matches.length);
 }
 
+function alertableMtfQuotes(quotes) {
+  return quotes
+    .map((quote) => ({
+      ...quote,
+      mtf_matches: (quote.mtf_matches || []).filter((match) => (
+        (match.status || "confirmed") === "confirmed" || match.type === "mtf_cloud_inside"
+      )),
+    }))
+    .filter((quote) => quote.mtf_matches.length);
+}
+
 function quotesWithTradeAction(quotes, action) {
   return quotes
     .map((quote) => ({
       ...quote,
       mtf_matches: (quote.mtf_matches || []).filter((match) => match.trade_action === action),
+    }))
+    .filter((quote) => quote.mtf_matches.length);
+}
+
+function quotesWithWaitOrWatch(quotes) {
+  return quotes
+    .map((quote) => ({
+      ...quote,
+      mtf_matches: (quote.mtf_matches || []).filter((match) => (
+        (match.status || "confirmed") === "waiting" || match.type === "mtf_cloud_inside"
+      )),
     }))
     .filter((quote) => quote.mtf_matches.length);
 }
@@ -401,6 +503,7 @@ export default function App() {
   });
   const [notifications, setNotifications] = useState([]);
   const [alertLog, setAlertLog] = useState(loadAlertLog);
+  const [retainedMtfQuotesByTab, setRetainedMtfQuotesByTab] = useState(loadRetainedMtfQuotes);
   const [activePage, setActivePage] = useState(() => {
     if (window.location.hash === "#alerts") return "alerts";
     if (window.location.hash === "#mtfs") return "mtfs";
@@ -436,6 +539,7 @@ export default function App() {
   const accountsRef = useRef(accounts);
   const watchlistTabRef = useRef(watchlistTab);
   const watchlistsRef = useRef(watchlists);
+  const retainedMtfQuotesRef = useRef(retainedMtfQuotesByTab);
   const activeWatchlist = watchlists.find((item) => item.id === watchlistTab) || watchlists[0];
   const quotes = quotesByTab[watchlistTab] || [];
   const updatedText = updatedTextByTab[watchlistTab] || "";
@@ -471,7 +575,7 @@ export default function App() {
   const allMtfs = useMemo(() => quotesWithMatchStatus(allMtfQuotes, "confirmed"), [allMtfQuotes]);
   const longMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Long"), [allMtfs]);
   const shortMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Short"), [allMtfs]);
-  const waitingMtfs = useMemo(() => quotesWithMatchStatus(allMtfQuotes, "waiting"), [allMtfQuotes]);
+  const waitingMtfs = useMemo(() => quotesWithWaitOrWatch(allMtfQuotes), [allMtfQuotes]);
   const enabledStrategyCount = useMemo(
     () => Object.values(strategyState || {}).filter((enabled) => enabled !== false).length,
     [strategyState],
@@ -606,11 +710,16 @@ export default function App() {
     });
     const payload = await getJson(`/api/webull/live-prices?${query.toString()}`);
     const nextQuotes = payload.quotes || [];
+    const currentMtfs = filterQuotesByStrategy(alertableMtfQuotes(nextQuotes), strategyStateRef.current);
+    const retainedMerge = mergeRetainedMtfQuotesForTab(retainedMtfQuotesRef.current, watchlist.id, nextQuotes);
+    retainedMtfQuotesRef.current = retainedMerge.retainedByTab;
     const updatedAt = new Date().toLocaleTimeString();
-    setQuotesForTab(watchlist.id, nextQuotes);
+    setRetainedMtfQuotesByTab(retainedMerge.retainedByTab);
+    saveRetainedMtfQuotes(retainedMerge.retainedByTab);
+    setQuotesForTab(watchlist.id, retainedMerge.quotes);
     updateAlertOutcomes(nextQuotes);
     setUpdatedTextForTab(watchlist.id, `Updated ${updatedAt} from ${payload.source || "webull"}`);
-    notifyMtfUpdate(watchlist.id, filterQuotesByStrategy(confirmedMtfQuotes(nextQuotes), strategyStateRef.current));
+    notifyMtfUpdate(watchlist.id, currentMtfs);
 
     if (payload.errors?.length) {
       setLiveAlert(`Some data failed: ${payload.errors.map((item) => item.source).join(", ")}`);
@@ -1144,6 +1253,10 @@ export default function App() {
   useEffect(() => {
     accountsRef.current = accounts;
   }, [accounts]);
+
+  useEffect(() => {
+    retainedMtfQuotesRef.current = retainedMtfQuotesByTab;
+  }, [retainedMtfQuotesByTab]);
 
   useEffect(() => {
     watchlistTabRef.current = watchlistTab;
