@@ -187,26 +187,26 @@ npm --prefix frontend run build
 
 ## API Surface
 
-- `GET /health`
-- `GET /api/status`
-- `GET /api/accounts`
-- `GET /api/account/{account_id}/balance`
-- `GET /api/account/{account_id}/positions`
-- `GET /api/account/{account_id}/orders`
-- `GET /api/account/{account_id}/auto-trades`
-- `GET /api/snapshot`
-- `GET /api/webull/quote`
-- `GET /api/webull/live-prices`
-- `GET /api/webull/watchlists`
-- `POST /api/webull/watchlists`
-- `GET /api/notifications/config`
-- `POST /api/notifications/subscribe`
-- `POST /api/notifications/unsubscribe`
-- `POST /api/notifications/test`
-- `GET /api/tradingview/analyze`
-- `GET /api/strategy/dry-run`
-- `POST /api/trade/buy`
-- `POST /api/trade/auto-long`
+- `GET /health` - Public health check for Railway and local uptime checks.
+- `GET /api/status` - Returns Webull configuration, environment, region, endpoint, and data-mode status.
+- `GET /api/accounts` - Fetches the Webull account list used by the account selector.
+- `GET /api/account/{account_id}/balance` - Fetches balance data for one Webull account.
+- `GET /api/account/{account_id}/positions` - Fetches current positions for one Webull account.
+- `GET /api/account/{account_id}/orders` - Fetches recent broker order history for one account.
+- `GET /api/account/{account_id}/auto-trades` - Fetches today's auto-trade/open-order view used by the Trades tab.
+- `GET /api/snapshot` - Returns a combined account snapshot; accepts an optional `account_id`.
+- `GET /api/webull/quote` - Fetches a single live quote for a symbol.
+- `GET /api/webull/live-prices` - Fetches watchlist quotes, 10m/hourly/daily EMAs, cloud states, and long MTF alert matches.
+- `GET /api/webull/watchlists` - Loads persisted watchlists from the configured watchlist file.
+- `POST /api/webull/watchlists` - Saves/replaces persisted watchlists.
+- `GET /api/notifications/config` - Returns Web Push capability/configuration for the browser.
+- `POST /api/notifications/subscribe` - Saves a browser push subscription for closed-app notifications.
+- `POST /api/notifications/unsubscribe` - Removes a browser push subscription.
+- `POST /api/notifications/test` - Sends a test Web Push notification when VAPID keys are configured.
+- `GET /api/tradingview/analyze` - Runs TradingView analysis for a symbol, exchange, and timeframe.
+- `GET /api/strategy/dry-run` - Runs the legacy dry-run strategy endpoint for selected symbols.
+- `POST /api/trade/buy` - Places a guarded one-share buy order for an approved watchlist symbol.
+- `POST /api/trade/auto-long` - Places a guarded long bracket order with entry, stop, target, and quantity.
 
 ## Project Structure
 
