@@ -16,6 +16,7 @@ The browser talks only to this FastAPI backend. Webull credentials, token files,
     - Chop: overlapping or incomplete cloud structure.
   - Risk settings for max risk, stop mode, and cloud buffer.
   - Per-watchlist "Do not auto trade" toggle.
+  - Settings menu lists the active alert strategies: Curls and 10m 34/50 Bounce.
 
 - **MTFs tab**
   - Live long-only setup alert table.

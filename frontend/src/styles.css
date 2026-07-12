@@ -335,6 +335,67 @@ button:hover {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.active-strategies-panel {
+  background: #f8faf7;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.active-strategies-heading {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.active-strategies-heading span {
+  color: #68766c;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.active-strategies-heading strong {
+  background: #dff4e9;
+  border-radius: 999px;
+  color: #075747;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 8px;
+  text-transform: uppercase;
+}
+
+.active-strategy-list {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.active-strategy-item {
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.active-strategy-item b {
+  color: #184d36;
+  font-size: 13px;
+}
+
+.active-strategy-item small {
+  color: #68766c;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
 .account-menu-header {
   background: #f8faf7;
   display: grid;
@@ -1743,6 +1804,10 @@ h1 {
 
   .risk-settings-panel,
   .settings-menu .risk-settings-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .active-strategy-list {
     grid-template-columns: 1fr;
   }
 

@@ -1,5 +1,16 @@
 import { defaultAutoTradeStrategies } from "../lib/settings";
 
+const ACTIVE_ALERT_STRATEGIES = [
+  {
+    name: "Curls",
+    description: "MTF touch first, then price moves back above 10m 5/12.",
+  },
+  {
+    name: "10m 34/50 Bounce",
+    description: "Confirmed 10m close back above the 34/50 cloud after touching it.",
+  },
+];
+
 export function SettingsMenu({
   accountId,
   autoTrade,
@@ -15,10 +26,11 @@ export function SettingsMenu({
         <div>
           <h2>Settings</h2>
           <p className="muted">
-            Alert rules reset · {autoTrade.enabled ? "Auto Long on" : "Auto Long off"}
+            {ACTIVE_ALERT_STRATEGIES.length} live alert strategies · {autoTrade.enabled ? "Auto Long on" : "Auto Long off"}
           </p>
         </div>
       </div>
+      <ActiveStrategiesPanel />
       <RiskSettingsPanel
         disabled={disabled}
         onApply={onApplyRisk}
@@ -32,6 +44,25 @@ export function SettingsMenu({
         onChange={onAutoTradeChange}
       />
     </div>
+  );
+}
+
+function ActiveStrategiesPanel() {
+  return (
+    <section className="active-strategies-panel" aria-label="Active alert strategies">
+      <div className="active-strategies-heading">
+        <span>Alert strategies</span>
+        <strong>Active</strong>
+      </div>
+      <div className="active-strategy-list">
+        {ACTIVE_ALERT_STRATEGIES.map((strategy) => (
+          <article className="active-strategy-item" key={strategy.name}>
+            <b>{strategy.name}</b>
+            <small>{strategy.description}</small>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -110,10 +141,10 @@ function AutoTradePanel({ accountId, autoTrade, disabled, onChange }) {
           />
           <span>
             <strong>Auto Long</strong>
-            <small>Paused until new alert rules are defined.</small>
+            <small>Manual approval stays separate from alert visibility.</small>
           </span>
         </label>
-        <em>{accountId ? "No rules" : "Select account"}</em>
+        <em>{accountId ? "Ready" : "Select account"}</em>
       </div>
     </section>
   );
