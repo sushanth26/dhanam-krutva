@@ -375,6 +375,7 @@ def long_mtf_pullback_matches(
     if not previous_today:
         return []
 
+    fast_clouds_by_time = historical_fast_clouds_by_candle_time(ten_minute_candles)
     mtf_sources = []
     for check in LONG_MTF_CLOUDS:
         ema_set = ema_1h if check["source"] == "hourly" else ema_daily
@@ -384,7 +385,7 @@ def long_mtf_pullback_matches(
             continue
         cloud_low = min(first, second)
         cloud_high = max(first, second)
-        touch_candle = latest_candle_touching_cloud(previous_today, cloud_low, cloud_high)
+        touch_candle = latest_valid_mtf_touch_before_10m_reclaim(previous_today, cloud_low, cloud_high, fast_clouds_by_time)
         if not touch_candle:
             continue
         touch_time = touch_candle.get("time") or touch_candle.get("sort_time") or touch_candle.get("timestamp")
@@ -430,15 +431,56 @@ def long_mtf_pullback_matches(
     ]
 
 
-def latest_candle_touching_cloud(
+def latest_valid_mtf_touch_before_10m_reclaim(
     candles: list[dict[str, Any]],
     cloud_low: float,
     cloud_high: float,
+    fast_clouds_by_time: dict[Any, tuple[float, float]],
 ) -> dict[str, Any] | None:
     for candle in reversed(candles):
+        fast_cloud = fast_clouds_by_time.get(candle_time_key(candle))
+        if not fast_cloud:
+            continue
+        if not candle_stays_below_cloud(candle, fast_cloud[0]):
+            continue
         if candle_touches_cloud(candle.get("low"), candle.get("high"), cloud_low, cloud_high):
             return candle
     return None
+
+
+def historical_fast_clouds_by_candle_time(candles: list[dict[str, Any]]) -> dict[Any, tuple[float, float]]:
+    ema5_values = aligned_ema_series(candles, 5)
+    ema12_values = aligned_ema_series(candles, 12)
+    clouds: dict[Any, tuple[float, float]] = {}
+    for candle, ema5, ema12 in zip(candles, ema5_values, ema12_values):
+        key = candle_time_key(candle)
+        if key is None or ema5 is None or ema12 is None:
+            continue
+        clouds[key] = (min(ema5, ema12), max(ema5, ema12))
+    return clouds
+
+
+def aligned_ema_series(candles: list[dict[str, Any]], period: int) -> list[float | None]:
+    values: list[float | None] = []
+    ema: float | None = None
+    multiplier = 2 / (period + 1)
+    for candle in candles:
+        close = candle.get("close")
+        if close is None:
+            values.append(None)
+            continue
+        ema = close if ema is None else (close - ema) * multiplier + ema
+        values.append(ema)
+    return values
+
+
+def candle_time_key(candle: dict[str, Any]) -> Any:
+    return candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
+
+
+def candle_stays_below_cloud(candle: dict[str, Any], cloud_low: float) -> bool:
+    high = candle.get("high")
+    return high is not None and high < cloud_low
 
 
 def session_date_from_candle(candle: dict[str, Any]) -> str | None:
