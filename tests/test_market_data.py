@@ -380,13 +380,16 @@ def test_mtf_signal_matches_returns_all_matching_mtf_sources_for_long_alert():
         {"20": 108, "21": 112, "50": 104, "55": 106},
     )
 
-    assert [match["mtf_label"] for match in matches] == [
+    assert len(matches) == 1
+    assert matches[0]["mtf_labels"] == [
         "Hourly 34/50",
         "Daily 50/55",
     ]
-    assert all(match["trade_action"] == "Long" for match in matches)
-    assert all(match["status"] == "confirmed" for match in matches)
-    assert all(match["candle_time"] == "2026-07-02T09:40:00" for match in matches)
+    assert matches[0]["mtf_label"] == "Hourly 34/50 + Daily 50/55"
+    assert matches[0]["display_label"] == "Long: Hourly 34/50 + Daily 50/55 -> 10m 5/12"
+    assert matches[0]["trade_action"] == "Long"
+    assert matches[0]["status"] == "confirmed"
+    assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
 
 
 def test_mtf_signal_matches_allows_bearish_trend_but_still_long_only():
@@ -402,13 +405,15 @@ def test_mtf_signal_matches_allows_bearish_trend_but_still_long_only():
         {"20": 105, "21": 107, "50": 106, "55": 109},
     )
 
-    assert [match["mtf_label"] for match in matches] == [
+    assert len(matches) == 1
+    assert matches[0]["mtf_labels"] == [
         "Hourly 34/50",
         "Daily 20/21",
         "Daily 50/55",
     ]
-    assert all(match["trade_action"] == "Long" for match in matches)
-    assert all(match["trend"] == "Bearish" for match in matches)
+    assert matches[0]["mtf_label"] == "Hourly 34/50 + Daily 20/21 + Daily 50/55"
+    assert matches[0]["trade_action"] == "Long"
+    assert matches[0]["trend"] == "Bearish"
 
 
 def test_mtf_signal_matches_alerts_immediately_on_incomplete_10m_touch():
@@ -424,8 +429,9 @@ def test_mtf_signal_matches_alerts_immediately_on_incomplete_10m_touch():
         {"20": 80, "21": 90, "50": 104, "55": 106},
     )
 
-    assert [match["mtf_label"] for match in matches] == ["Hourly 34/50", "Daily 50/55"]
-    assert all(match["status"] == "confirmed" for match in matches)
+    assert len(matches) == 1
+    assert matches[0]["mtf_labels"] == ["Hourly 34/50", "Daily 50/55"]
+    assert matches[0]["status"] == "confirmed"
     assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
 
 

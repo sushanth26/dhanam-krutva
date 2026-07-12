@@ -56,7 +56,7 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
                 </td>
                 <td data-label="Trend"><span className={`trend-pill ${String(row.match.trend || "").toLowerCase()}`}>{row.match.trend || "-"}</span></td>
                 <td data-label="Entry">{formatPrice(row.match.entry_price)}</td>
-                <td data-label="MTF Touch">{formatDateTime(row.match.mtf_touch_time)}</td>
+                <td data-label="MTF Touch"><MtfTouchList match={row.match} /></td>
                 <td data-label="Alert Time">{formatDateTime(row.match.candle_time)}</td>
               </tr>
             )) : (
@@ -68,5 +68,21 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
         </table>
       </div>
     </section>
+  );
+}
+
+function MtfTouchList({ match }) {
+  const touches = Array.isArray(match.mtf_touches) && match.mtf_touches.length
+    ? match.mtf_touches
+    : [{ label: match.mtf_label, touch_time: match.mtf_touch_time }];
+  return (
+    <div className="mtf-touch-list">
+      {touches.map((touch, index) => (
+        <span key={`${touch.label || "mtf"}-${touch.touch_time || index}`}>
+          <strong>{touch.label || "-"}</strong>
+          {formatDateTime(touch.touch_time)}
+        </span>
+      ))}
+    </div>
   );
 }

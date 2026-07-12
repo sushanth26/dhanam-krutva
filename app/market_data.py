@@ -375,7 +375,7 @@ def long_mtf_pullback_matches(
     if not previous_today:
         return []
 
-    matches = []
+    mtf_sources = []
     for check in LONG_MTF_CLOUDS:
         ema_set = ema_1h if check["source"] == "hourly" else ema_daily
         first = ema_set.get(check["keys"][0])
@@ -388,32 +388,46 @@ def long_mtf_pullback_matches(
         if not touch_candle:
             continue
         touch_time = touch_candle.get("time") or touch_candle.get("sort_time") or touch_candle.get("timestamp")
-        entry_price = max(fast_cloud_low, min(candle_close, fast_cloud_high))
-        matches.append(
+        mtf_sources.append(
             {
-                "label": "Long MTF -> 10m 5/12 touch",
-                "display_label": f"Long: {check['label']} -> 10m 5/12",
-                "timeframe": "10m",
-                "mtf_label": check["label"],
-                "mtf_timeframe": check["timeframe"],
-                "mtf_touch_time": touch_time,
-                "mtf_cloud_low": round(cloud_low, 4),
-                "mtf_cloud_high": round(cloud_high, 4),
-                "cloud_low": round(fast_cloud_low, 4),
-                "cloud_high": round(fast_cloud_high, 4),
-                "candle_low": round(candle_low, 4),
-                "candle_high": round(candle_high, 4),
-                "candle_close": round(candle_close, 4),
-                "entry_price": round(entry_price, 4),
-                "candle_time": candle_time,
-                "type": "long_mtf_5_12_touch",
-                "status": "confirmed",
-                "direction": "up_to_10m_5_12",
-                "trend": ten_minute_trend,
-                "trade_action": "Long",
+                "label": check["label"],
+                "timeframe": check["timeframe"],
+                "touch_time": touch_time,
+                "cloud_low": round(cloud_low, 4),
+                "cloud_high": round(cloud_high, 4),
             }
         )
-    return matches
+    if not mtf_sources:
+        return []
+
+    entry_price = max(fast_cloud_low, min(candle_close, fast_cloud_high))
+    labels = [source["label"] for source in mtf_sources]
+    return [
+        {
+            "label": "Long MTF -> 10m 5/12 touch",
+            "display_label": f"Long: {' + '.join(labels)} -> 10m 5/12",
+            "timeframe": "10m",
+            "mtf_label": " + ".join(labels),
+            "mtf_labels": labels,
+            "mtf_touches": mtf_sources,
+            "mtf_timeframe": "multi" if len(mtf_sources) > 1 else mtf_sources[0]["timeframe"],
+            "mtf_touch_time": mtf_sources[0]["touch_time"],
+            "mtf_cloud_low": mtf_sources[0]["cloud_low"],
+            "mtf_cloud_high": mtf_sources[0]["cloud_high"],
+            "cloud_low": round(fast_cloud_low, 4),
+            "cloud_high": round(fast_cloud_high, 4),
+            "candle_low": round(candle_low, 4),
+            "candle_high": round(candle_high, 4),
+            "candle_close": round(candle_close, 4),
+            "entry_price": round(entry_price, 4),
+            "candle_time": candle_time,
+            "type": "long_mtf_5_12_touch",
+            "status": "confirmed",
+            "direction": "up_to_10m_5_12",
+            "trend": ten_minute_trend,
+            "trade_action": "Long",
+        }
+    ]
 
 
 def latest_candle_touching_cloud(

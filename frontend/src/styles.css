@@ -1406,6 +1406,23 @@ select {
   font-weight: 800;
 }
 
+.mtf-touch-list {
+  display: grid;
+  gap: 4px;
+}
+
+.mtf-touch-list span {
+  color: #4d5a55;
+  display: grid;
+  font-size: 12px;
+  gap: 2px;
+}
+
+.mtf-touch-list strong {
+  color: #19211f;
+  font-size: 12px;
+}
+
 .trend-pill {
   border-radius: 999px;
   display: inline-flex;
