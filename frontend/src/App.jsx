@@ -14,6 +14,7 @@ import { useShellData } from "./hooks/useShellData";
 import { getJson, postJson } from "./lib/api";
 import { pageFromLocationHash, hashForPage } from "./lib/appNavigation";
 import { trendBucketsForQuotes } from "./lib/appSelectors";
+import { formatMarketTime } from "./lib/dates";
 import { longAlertNotification, longAlertSignature } from "./lib/longAlertNotifications";
 import { isMarketRefreshWindow, marginTradingAccountId } from "./lib/market";
 import { showDeviceNotification } from "./lib/notifications";
@@ -148,7 +149,7 @@ export default function App() {
     });
     const payload = await getJson(`/api/webull/live-prices?${query.toString()}`);
     const nextQuotes = payload.quotes || [];
-    const updatedAt = new Date().toLocaleTimeString();
+    const updatedAt = formatMarketTime(new Date());
     setQuotesForTab(watchlist.id, nextQuotes);
     setUpdatedTextForTab(watchlist.id, `Updated ${updatedAt} from ${payload.source || "webull"}`);
     notifyLongAlerts(watchlist, nextQuotes);
