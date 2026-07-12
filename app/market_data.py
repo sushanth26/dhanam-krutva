@@ -26,6 +26,11 @@ A_PLUS_PLUS_STOP_BUFFER = 1
 MTF_CLOUD_STOP_BUFFER = 3
 A_PLUS_PLUS_STOP_MODE_FIXED = "fixed"
 A_PLUS_PLUS_STOP_MODE_AUTO = "auto"
+LONG_MTF_CLOUDS = [
+    {"label": "Hourly 34/50", "timeframe": "1h", "source": "hourly", "keys": ("34", "50")},
+    {"label": "Daily 20/21", "timeframe": "daily", "source": "daily", "keys": ("20", "21")},
+    {"label": "Daily 50/55", "timeframe": "daily", "source": "daily", "keys": ("50", "55")},
+]
 
 SYMBOL_SECTORS = {
     "BE": "Clean Energy",
@@ -318,62 +323,157 @@ def mtf_signal_matches(
     stop_mode: str = A_PLUS_PLUS_STOP_MODE_FIXED,
     fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
 ) -> list[dict[str, Any]]:
-    if ten_minute_trend == "Chop":
-        return []
-    candle = latest_ten_minute_candle(ten_minute_candles)
-    if not candle:
-        return []
-    status = "confirmed" if is_complete_ten_minute_candle(candle) else "waiting"
-    candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
-    previous_candle = previous_ten_minute_candle(ten_minute_candles)
-    previous_price = previous_candle.get("close") if previous_candle else None
-    candle_high = candle.get("high")
-    candle_low = candle.get("low")
-    matches = mtf_matches(
-        price,
+    return long_mtf_pullback_matches(
         ten_minute_trend,
+        ten_minute_candles,
         ema_10m,
         ema_1h,
         ema_daily,
-        previous_price=previous_price,
-        current_high=candle_high,
-        current_low=candle_low,
-        candle_complete=status == "confirmed",
-        risk_amount=risk_amount,
     )
-    matches.extend(
-        ema_cloud_bounce_matches(
-            ten_minute_candles,
-            ema_10m,
-            ema_1h,
-            ema_daily,
-            daily_candles=daily_candles,
-            previous_price=previous_price,
-            risk_amount=risk_amount,
-            stop_mode=stop_mode,
-            fixed_stop_buffer=fixed_stop_buffer,
+
+
+def long_mtf_pullback_matches(
+    ten_minute_trend: str,
+    ten_minute_candles: list[dict[str, Any]],
+    ema_10m: dict[str, float | None],
+    ema_1h: dict[str, float | None],
+    ema_daily: dict[str, float | None],
+) -> list[dict[str, Any]]:
+    if ten_minute_trend not in ("Bullish", "Bearish"):
+        return []
+
+    candle = latest_ten_minute_candle(ten_minute_candles)
+    if not candle:
+        return []
+    previous_candle = previous_ten_minute_candle(ten_minute_candles)
+    if not previous_candle:
+        return []
+
+    candle_low = candle.get("low")
+    candle_high = candle.get("high")
+    candle_close = candle.get("close")
+    previous_close = previous_candle.get("close")
+    ema5 = ema_10m.get("5")
+    ema12 = ema_10m.get("12")
+    if None in (candle_low, candle_high, candle_close, previous_close, ema5, ema12):
+        return []
+
+    fast_cloud_low = min(ema5, ema12)
+    fast_cloud_high = max(ema5, ema12)
+    if not candle_touches_cloud(candle_low, candle_high, fast_cloud_low, fast_cloud_high):
+        return []
+    if candle_close <= previous_close:
+        return []
+
+    candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
+    current_session = candle.get("session_date") or session_date_from_candle(candle)
+    previous_today = [
+        item
+        for item in ten_minute_candles[:-1]
+        if (item.get("session_date") or session_date_from_candle(item)) == current_session
+    ]
+    if not previous_today:
+        return []
+
+    matches = []
+    for check in LONG_MTF_CLOUDS:
+        ema_set = ema_1h if check["source"] == "hourly" else ema_daily
+        first = ema_set.get(check["keys"][0])
+        second = ema_set.get(check["keys"][1])
+        if first is None or second is None:
+            continue
+        cloud_low = min(first, second)
+        cloud_high = max(first, second)
+        touch_candle = latest_candle_touching_cloud(previous_today, cloud_low, cloud_high)
+        if not touch_candle:
+            continue
+        touch_time = touch_candle.get("time") or touch_candle.get("sort_time") or touch_candle.get("timestamp")
+        entry_price = max(fast_cloud_low, min(candle_close, fast_cloud_high))
+        matches.append(
+            {
+                "label": "Long MTF -> 10m 5/12 touch",
+                "display_label": f"Long: {check['label']} -> 10m 5/12",
+                "timeframe": "10m",
+                "mtf_label": check["label"],
+                "mtf_timeframe": check["timeframe"],
+                "mtf_touch_time": touch_time,
+                "mtf_cloud_low": round(cloud_low, 4),
+                "mtf_cloud_high": round(cloud_high, 4),
+                "cloud_low": round(fast_cloud_low, 4),
+                "cloud_high": round(fast_cloud_high, 4),
+                "candle_low": round(candle_low, 4),
+                "candle_high": round(candle_high, 4),
+                "candle_close": round(candle_close, 4),
+                "entry_price": round(entry_price, 4),
+                "candle_time": candle_time,
+                "type": "long_mtf_5_12_touch",
+                "status": "confirmed",
+                "direction": "up_to_10m_5_12",
+                "trend": ten_minute_trend,
+                "trade_action": "Long",
+            }
         )
-    )
-    matches.extend(
-        nine_ema_touch_matches(
-            ten_minute_candles,
-            ema_10m,
-            risk_amount=risk_amount,
+    return matches
+
+
+def latest_candle_touching_cloud(
+    candles: list[dict[str, Any]],
+    cloud_low: float,
+    cloud_high: float,
+) -> dict[str, Any] | None:
+    for candle in reversed(candles):
+        if candle_touches_cloud(candle.get("low"), candle.get("high"), cloud_low, cloud_high):
+            return candle
+    return None
+
+
+def session_date_from_candle(candle: dict[str, Any]) -> str | None:
+    parsed_time = parse_iso_time(candle.get("sort_time") or candle.get("time") or candle.get("timestamp"))
+    return parsed_time.date().isoformat() if parsed_time else None
+
+
+def ema_touch_matches(
+    price: float | None,
+    candle_low: float | None,
+    candle_high: float | None,
+    ema_1h: dict[str, float | None],
+    ema_daily: dict[str, float | None],
+    candle_time: Any = None,
+    ten_minute_trend: str | None = None,
+) -> list[dict[str, Any]]:
+    if candle_low is None or candle_high is None:
+        return []
+
+    checks = [
+        ("Hourly", "1h", period, ema_1h.get(period))
+        for period in ("34", "50")
+    ] + [
+        ("Daily", "daily", period, ema_daily.get(period))
+        for period in ("20", "21", "50", "55")
+    ]
+    matches = []
+    for label_prefix, timeframe, period, value in checks:
+        if value is None or not (candle_low <= value <= candle_high):
+            continue
+        matches.append(
+            {
+                "label": f"{label_prefix} {period} EMA touch",
+                "display_label": f"{label_prefix} {period} EMA touch",
+                "timeframe": timeframe,
+                "ema_period": period,
+                "ema_value": round(value, 4),
+                "candle_low": round(candle_low, 4),
+                "candle_high": round(candle_high, 4),
+                "entry_price": round(value, 4),
+                "last_price": round(price, 4) if price is not None else None,
+                "candle_time": candle_time,
+                "type": "ema_touch",
+                "status": "confirmed",
+                "direction": "touch",
+                "trend": ten_minute_trend,
+            }
         )
-    )
-    visible_matches = []
-    for match in matches:
-        if candle_time is not None:
-            match.setdefault("candle_time", candle_time)
-        if status == "waiting":
-            if match.get("status") == "confirmed":
-                visible_matches.append(match)
-                continue
-            match["status"] = "waiting"
-        else:
-            match.setdefault("status", "confirmed")
-        visible_matches.append(match)
-    return dedupe_mtf_signal_matches(visible_matches)
+    return matches
 
 
 def mtf_signal_cloud_family(match: dict[str, Any]) -> str:

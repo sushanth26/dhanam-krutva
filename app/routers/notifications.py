@@ -12,7 +12,6 @@ router = APIRouter(prefix="/api/notifications")
 
 class PushSubscriptionPayload(BaseModel):
     subscription: dict[str, Any]
-    alert_strategies: dict[str, Any] | None = None
 
 
 class PushUnsubscribePayload(BaseModel):
@@ -37,11 +36,7 @@ def subscribe(payload: PushSubscriptionPayload):
         raise HTTPException(status_code=400, detail="Invalid push subscription.")
 
     settings = get_settings()
-    subscription = {
-        **payload.subscription,
-        "alert_strategies": payload.alert_strategies or {},
-    }
-    total = PushSubscriptionStore(settings.push_subscription_file).upsert(subscription)
+    total = PushSubscriptionStore(settings.push_subscription_file).upsert(payload.subscription)
     return {"ok": True, "subscriptions": total}
 
 
