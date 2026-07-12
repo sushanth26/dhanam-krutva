@@ -10,10 +10,10 @@ export function longAlertSignature(rows) {
 export function longAlertNotification(rows) {
   const first = rows[0];
   const title = rows.length === 1
-    ? `${first.symbol}: Long MTF alert`
-    : `${rows.length} Long MTF alerts`;
+    ? `${first.symbol}: Curl alert`
+    : `${rows.length} Curl alerts`;
   const message = rows.length === 1
-    ? `${first.match.mtf_label} -> 10m 5/12 at ${formatPrice(first.match.entry_price)}`
+    ? `${first.match.mtf_label} -> above 10m 5/12 at ${formatPrice(first.match.entry_price)}`
     : rows.slice(0, 3).map((row) => `${row.symbol} ${row.match.mtf_label}`).join(" | ");
   return { title, message };
 }

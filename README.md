@@ -1,6 +1,6 @@
 # Dhanam Krutva
 
-Personal Webull dashboard and scanner for watchlists, 10-minute cloud trends, long-only MTF alerts, account visibility, order history, and browser/phone notifications.
+Personal Webull dashboard and scanner for watchlists, 10-minute cloud trends, long-only Curl alerts, account visibility, order history, and browser/phone notifications.
 
 The browser talks only to this FastAPI backend. Webull credentials, token files, push subscriptions, and guard state stay server-side.
 
@@ -18,24 +18,26 @@ The browser talks only to this FastAPI backend. Webull credentials, token files,
   - Per-watchlist "Do not auto trade" toggle.
 
 - **MTFs tab**
-  - Live long-only MTF alert table.
+  - Live long-only Curl alert table.
   - Shows alert count, unique symbols, bullish alert count, and bearish alert count.
   - Each alert includes symbol, watchlist, setup, trend, entry, prior MTF touch time, and alert candle time.
 
-- **Long-only MTF alert rule**
+- **Curls**
+  - A Curl is a good B setup where price touches an MTF cloud, then moves back above the 10m EMA 5/12 cloud.
   - The app first checks 10m cloud state using EMA 5/12 and EMA 34/50.
-  - Alerts are allowed only when the 10m state is Bullish or Bearish.
+  - Curl alerts are allowed only when the 10m state is Bullish or Bearish.
   - During the same trading day, price must have touched at least one MTF cloud:
     - Hourly 34/50
     - Daily 20/21
     - Daily 50/55
-  - A long alert fires when the latest 10m candle moves up and touches the 10m EMA 5/12 cloud.
-  - Alerts are long-only even when the 10m state is Bearish.
+  - The MTF touch only counts if that candle is still below the 10m EMA 5/12 cloud.
+  - A Curl alert fires when the latest 10m candle moves up above the 10m EMA 5/12 cloud.
+  - Curls are long-only even when the 10m state is Bearish.
   - Old alert strategy toggles and the old Alerts tab were removed.
 
 - **Notifications**
   - In-app notification drawer with unread badge.
-  - Browser/device notifications for new long MTF alerts when enabled.
+  - Browser/device notifications for new Curl alerts when enabled.
   - Optional Web Push support for closed-app phone notifications with VAPID keys.
   - Service worker and app badge support.
 
@@ -196,7 +198,7 @@ npm --prefix frontend run build
 - `GET /api/account/{account_id}/auto-trades` - Fetches today's auto-trade/open-order view used by the Trades tab.
 - `GET /api/snapshot` - Returns a combined account snapshot; accepts an optional `account_id`.
 - `GET /api/webull/quote` - Fetches a single live quote for a symbol.
-- `GET /api/webull/live-prices` - Fetches watchlist quotes, 10m/hourly/daily EMAs, cloud states, and long MTF alert matches.
+- `GET /api/webull/live-prices` - Fetches watchlist quotes, 10m/hourly/daily EMAs, cloud states, and Curl alert matches.
 - `GET /api/webull/watchlists` - Loads persisted watchlists from the configured watchlist file.
 - `POST /api/webull/watchlists` - Saves/replaces persisted watchlists.
 - `GET /api/notifications/config` - Returns Web Push capability/configuration for the browser.
@@ -213,8 +215,8 @@ npm --prefix frontend run build
 ```text
 app/
   main.py                 FastAPI app, auth middleware, static serving, push monitor
-  market_data.py          Webull live price build, EMA clouds, long MTF alert rule
-  notifications.py        Push subscription store and MTF push monitor
+  market_data.py          Webull live price build, EMA clouds, Curl alert rule
+  notifications.py        Push subscription store and Curl push monitor
   routers/                Accounts, Webull, notifications, trading, TradingView APIs
 frontend/src/
   App.jsx                 Main app coordinator

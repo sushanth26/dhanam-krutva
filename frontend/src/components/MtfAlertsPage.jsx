@@ -14,18 +14,18 @@ export function longAlertRows(watchlists, quotesByTab) {
 
 export function MtfAlertsPage({ loading, onRefresh, rows }) {
   return (
-    <section className="mtf-alerts-page" aria-label="MTF long alerts">
+    <section className="mtf-alerts-page" aria-label="Curl alerts">
       <div className="mtf-alerts-header">
         <div>
-          <h2>Long MTF Alerts</h2>
-          <p className="muted">Armed by Hourly 34/50, Daily 20/21, or Daily 50/55 touches from today, then triggered on the 10m 5/12 touch.</p>
+          <h2>Curls</h2>
+          <p className="muted">B setups armed by Hourly 34/50, Daily 20/21, or Daily 50/55 touches from today, then triggered when price moves above the 10m 5/12.</p>
         </div>
         <button type="button" className="secondary-button" onClick={() => onRefresh()} disabled={loading}>
           {loading ? "Refreshing" : "Refresh"}
         </button>
       </div>
-      <div className="mtf-alert-counts" aria-label="Long MTF alert counts">
-        <SummaryTile label="Live Long Alerts" value={rows.length} />
+      <div className="mtf-alert-counts" aria-label="Curl alert counts">
+        <SummaryTile label="Live Curls" value={rows.length} />
         <SummaryTile label="Symbols" value={new Set(rows.map((row) => row.quote.symbol)).size} />
         <SummaryTile label="Bullish" value={rows.filter((row) => row.match.trend === "Bullish").length} />
         <SummaryTile label="Bearish" value={rows.filter((row) => row.match.trend === "Bearish").length} />
@@ -61,7 +61,7 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
               </tr>
             )) : (
               <tr>
-                <td colSpan="7" className="empty-table-cell">No long MTF alerts right now</td>
+                <td colSpan="7" className="empty-table-cell">No curls right now</td>
               </tr>
             )}
           </tbody>

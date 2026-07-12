@@ -210,8 +210,8 @@ def mtf_notification_details(quotes: list[dict[str, Any]]) -> dict[str, Any]:
 
     if not matches:
         return {
-            "title": "No MTF alerts",
-            "body": "No symbols are on MTF clouds now.",
+            "title": "No Curl alerts",
+            "body": "No symbols have Curl setups now.",
             "badge_count": 0,
             "tag": "mtf-empty",
             "target_symbol": "",
@@ -224,7 +224,7 @@ def mtf_notification_details(quotes: list[dict[str, Any]]) -> dict[str, Any]:
         labels = [str(label) for label in match["labels"]]
         return {
             "title": f"{symbol}: {labels[0]}",
-            "body": " + ".join(labels[1:]) if len(labels) > 1 else "Tap to open this MTF row.",
+            "body": " + ".join(labels[1:]) if len(labels) > 1 else "Tap to open this Curl row.",
             "badge_count": 1,
             "tag": f"mtf-{symbol}",
             "target_symbol": symbol,
@@ -236,7 +236,7 @@ def mtf_notification_details(quotes: list[dict[str, Any]]) -> dict[str, Any]:
     if len(symbols) > 3:
         symbol_text += "..."
     return {
-        "title": f"{len(matches)} MTF alerts: {symbol_text}",
+        "title": f"{len(matches)} Curl alerts: {symbol_text}",
         "body": " • ".join(f"{match['symbol']} {match['labels'][0]}" for match in matches[:3]),
         "badge_count": len(matches),
         "tag": "mtf-batch",

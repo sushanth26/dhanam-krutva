@@ -348,8 +348,8 @@ def test_mtf_signal_matches_alerts_long_after_same_day_mtf_touch_and_10m_5_12_to
     )
 
     assert len(matches) == 1
-    assert matches[0]["label"] == "Long MTF -> 10m 5/12 touch"
-    assert matches[0]["display_label"] == "Long: Hourly 34/50 -> 10m 5/12"
+    assert matches[0]["label"] == "Curl"
+    assert matches[0]["display_label"] == "Curl: Hourly 34/50 -> above 10m 5/12"
     assert matches[0]["trade_action"] == "Long"
     assert matches[0]["trend"] == "Bullish"
     assert matches[0]["type"] == "long_mtf_5_12_touch"
@@ -420,7 +420,7 @@ def test_mtf_signal_matches_returns_all_matching_mtf_sources_for_long_alert():
         "Daily 50/55",
     ]
     assert matches[0]["mtf_label"] == "Hourly 34/50 + Daily 50/55"
-    assert matches[0]["display_label"] == "Long: Hourly 34/50 + Daily 50/55 -> 10m 5/12"
+    assert matches[0]["display_label"] == "Curl: Hourly 34/50 + Daily 50/55 -> above 10m 5/12"
     assert matches[0]["trade_action"] == "Long"
     assert matches[0]["status"] == "confirmed"
     assert matches[0]["candle_time"] == "2026-07-02T09:13:00"

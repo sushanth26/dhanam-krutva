@@ -405,8 +405,8 @@ def long_mtf_pullback_matches(
     labels = [source["label"] for source in mtf_sources]
     return [
         {
-            "label": "Long MTF -> 10m 5/12 touch",
-            "display_label": f"Long: {' + '.join(labels)} -> 10m 5/12",
+            "label": "Curl",
+            "display_label": f"Curl: {' + '.join(labels)} -> above 10m 5/12",
             "timeframe": "10m",
             "mtf_label": " + ".join(labels),
             "mtf_labels": labels,
