@@ -44,7 +44,7 @@ export async function loadNotificationState() {
   };
 }
 
-export async function enableNotifications(alertStrategies = {}) {
+export async function enableNotifications() {
   const support = notificationSupport();
   if (!support.notifications || !support.serviceWorker) {
     throw new Error("This browser does not support app notifications.");
@@ -59,7 +59,7 @@ export async function enableNotifications(alertStrategies = {}) {
   setWebNotificationsEnabled(true);
   const config = await getJson("/api/notifications/config");
   const registration = await registerNotificationWorker();
-  const subscription = support.push ? await ensureServerSubscription(registration, config, null, alertStrategies) : null;
+  const subscription = support.push ? await ensureServerSubscription(registration, config) : null;
 
   return {
     supported: true,
@@ -127,14 +127,14 @@ export async function setAppBadgeCount(count) {
   return false;
 }
 
-export async function syncNotificationPreferences(alertStrategies = {}) {
+export async function syncNotificationPreferences() {
   const support = notificationSupport();
   if (!webNotificationsEnabled() || !support.notifications || !support.serviceWorker || !support.push || Notification.permission !== "granted") {
     return false;
   }
   const config = await getJson("/api/notifications/config");
   const registration = await registerNotificationWorker();
-  const subscription = await ensureServerSubscription(registration, config, null, alertStrategies);
+  const subscription = await ensureServerSubscription(registration, config);
   return Boolean(subscription);
 }
 
@@ -163,7 +163,7 @@ async function removeExistingSubscription(registration) {
   return true;
 }
 
-async function ensureServerSubscription(registration, config, currentSubscription = null, alertStrategies = {}) {
+async function ensureServerSubscription(registration, config, currentSubscription = null) {
   if (!config.web_push_configured || !config.vapid_public_key) return currentSubscription;
   if (currentSubscription && !subscriptionMatchesKey(currentSubscription, config.vapid_public_key)) {
     await currentSubscription.unsubscribe();
@@ -175,7 +175,6 @@ async function ensureServerSubscription(registration, config, currentSubscriptio
   });
   await postJson("/api/notifications/subscribe", {
     subscription: subscription.toJSON(),
-    alert_strategies: alertStrategies,
   });
   return subscription;
 }

@@ -13,18 +13,6 @@ from app.market_data import WEBULL_BATCH_BAR_LIMIT, build_live_prices, symbol_ch
 from app.watchlists import WatchlistStore
 
 
-DEFAULT_ALERT_STRATEGIES = {
-    "hourly-cloud": True,
-    "daily-fast-cloud": True,
-    "daily-slow-cloud": True,
-    "ten-minute-bounce-10m": True,
-    "ten-minute-9ema-touch": True,
-    "ten-minute-bounce-hourly": True,
-    "ten-minute-bounce-daily-fast": True,
-    "ten-minute-bounce-daily-slow": True,
-}
-
-
 class PushSubscriptionStore:
     def __init__(self, path: Path):
         self.path = path
@@ -91,7 +79,7 @@ class MtfPushMonitor:
     def check_once(self) -> dict[str, Any] | None:
         quotes = confirmed_mtf_quotes(build_monitored_quotes(self.settings))
         signature = mtf_signature(quotes)
-        changed = self.last_signature is not None and signature != self.last_signature
+        changed = bool(signature) and signature != self.last_signature
         self.last_signature = signature
         if not changed:
             return None
@@ -107,13 +95,10 @@ class MtfPushMonitor:
         sent = 0
         removed = 0
         for subscription in self.store.all():
-            subscription_payload = filter_payload_by_strategies(payload, subscription.get("alert_strategies", {}))
-            if not subscription_payload:
-                continue
             try:
                 webpush(
                     subscription_info=webpush_subscription_info(subscription),
-                    data=json.dumps(subscription_payload),
+                    data=json.dumps(payload),
                     vapid_private_key=self.settings.vapid_private_key,
                     vapid_claims={"sub": self.settings.vapid_subject},
                 )
@@ -303,97 +288,14 @@ def format_price(value: Any) -> str:
 def mtf_signature(quotes: list[dict[str, Any]]) -> str:
     return ",".join(
         sorted(
-            f"{quote.get('symbol')}:{'|'.join(match.get('label', '') for match in quote.get('mtf_matches', []))}"
+            f"{quote.get('symbol')}:{'|'.join(mtf_match_signature(match) for match in quote.get('mtf_matches', []))}"
             for quote in quotes
         )
     )
 
 
-def strategy_id_for_label(label: str) -> str:
-    if label == "10m bounce 34/50":
-        return "ten-minute-bounce-10m"
-    if label == "10m 9 EMA touch":
-        return "ten-minute-9ema-touch"
-    if label == "10m bounce Hourly 34/50":
-        return "ten-minute-bounce-hourly"
-    if label == "10m bounce Daily 20/21":
-        return "ten-minute-bounce-daily-fast"
-    if label == "10m bounce Daily 50/55":
-        return "ten-minute-bounce-daily-slow"
-    if label == "Hourly 34/50":
-        return "hourly-cloud"
-    if label == "Daily 20/21":
-        return "daily-fast-cloud"
-    if label == "Daily 50/55":
-        return "daily-slow-cloud"
-    return "unknown"
-
-
-def normalize_strategy_state(strategy_state: dict[str, Any] | None) -> dict[str, bool]:
-    normalized = DEFAULT_ALERT_STRATEGIES.copy()
-    if isinstance(strategy_state, dict):
-        legacy_bounce = strategy_state.get("ten-minute-bounce", strategy_state.get("ten-minute-touch"))
-        if legacy_bounce is not None:
-            for key in (
-                "ten-minute-bounce-10m",
-                "ten-minute-bounce-hourly",
-                "ten-minute-bounce-daily-fast",
-                "ten-minute-bounce-daily-slow",
-            ):
-                if key not in strategy_state:
-                    normalized[key] = bool(legacy_bounce)
-        for key in normalized:
-            if key in strategy_state:
-                normalized[key] = bool(strategy_state[key])
-    return normalized
-
-
-def filter_payload_by_strategies(payload: dict[str, Any], strategy_state: dict[str, Any] | None) -> dict[str, Any] | None:
-    if "matches" not in payload:
-        return payload
-
-    strategies = normalize_strategy_state(strategy_state)
-    filtered_matches = []
-    for item in payload.get("matches", []):
-        labels = []
-        details = []
-        detail_by_label = {
-            str(detail.get("label") or ""): detail
-            for detail in item.get("details", [])
-            if isinstance(detail, dict)
-        }
-        for label in item.get("labels", []):
-            label_text = str(label or "")
-            if label_text and strategies.get(strategy_id_for_label(label_text), True):
-                labels.append(label_text)
-                if label_text in detail_by_label:
-                    details.append(detail_by_label[label_text])
-        if labels:
-            filtered_matches.append({"symbol": item.get("symbol"), "labels": labels, "details": details})
-
-    if not filtered_matches:
-        return None
-
-    notification = mtf_notification_details([
-        {
-            "symbol": item.get("symbol"),
-            "mtf_matches": [
-                item.get("details", [])[index]
-                if index < len(item.get("details", []))
-                else {"label": label}
-                for index, label in enumerate(item.get("labels", []))
-            ],
-        }
-        for item in filtered_matches
-    ])
-    return {
-        **payload,
-        "title": notification["title"],
-        "body": notification["body"],
-        "badgeCount": len(filtered_matches),
-        "badge_count": len(filtered_matches),
-        "tag": notification["tag"],
-        "targetSymbol": notification["target_symbol"],
-        "url": notification["url"],
-        "matches": filtered_matches,
-    }
+def mtf_match_signature(match: dict[str, Any]) -> str:
+    return "|".join(
+        str(match.get(key) or "")
+        for key in ("label", "display_label", "mtf_label", "candle_time", "entry_price")
+    )
