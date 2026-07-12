@@ -5,7 +5,6 @@ const DEFAULT_LOADING_STATE = {
   watchlists: false,
   prices: false,
   notifications: false,
-  trades: false,
 };
 
 export function useLoadingState() {

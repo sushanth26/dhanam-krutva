@@ -49,11 +49,6 @@ The browser talks only to this FastAPI backend. Webull credentials, token files,
   - Optional Web Push support for closed-app phone notifications with VAPID keys.
   - Service worker and app badge support.
 
-- **Trades tab**
-  - Broker order history view for the selected margin account.
-  - Table filters for all, buy, sell, open, and filled orders.
-  - Shows order side, status, quantity, price details, and time.
-
 - **Accounts and backend APIs**
   - Webull connection status.
   - Account list.
@@ -203,7 +198,6 @@ npm --prefix frontend run build
 - `GET /api/account/{account_id}/balance` - Fetches balance data for one Webull account.
 - `GET /api/account/{account_id}/positions` - Fetches current positions for one Webull account.
 - `GET /api/account/{account_id}/orders` - Fetches recent broker order history for one account.
-- `GET /api/account/{account_id}/auto-trades` - Fetches today's auto-trade/open-order view used by the Trades tab.
 - `GET /api/snapshot` - Returns a combined account snapshot; accepts an optional `account_id`.
 - `GET /api/webull/quote` - Fetches a single live quote for a symbol.
 - `GET /api/webull/live-prices` - Fetches watchlist quotes, 10m/hourly/daily EMAs, cloud states, and setup alert matches.

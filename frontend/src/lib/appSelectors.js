@@ -16,7 +16,3 @@ export function trendBucketsForQuotes(quotes) {
 export function unreadCount(items) {
   return items.filter((item) => !item.read).length;
 }
-
-export function autoTradeOpenOrderCount(orders) {
-  return orders.counts?.open ?? orders.buckets?.open?.length ?? 0;
-}
