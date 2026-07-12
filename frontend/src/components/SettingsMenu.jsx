@@ -1,15 +1,5 @@
+import { ALERT_STRATEGIES } from "../lib/alertStrategies";
 import { defaultAutoTradeStrategies } from "../lib/settings";
-
-const ACTIVE_ALERT_STRATEGIES = [
-  {
-    name: "Curls",
-    description: "MTF touch first, then price moves back above 10m 5/12.",
-  },
-  {
-    name: "10m 34/50 Bounce",
-    description: "Confirmed 10m close back above the 34/50 cloud after touching it.",
-  },
-];
 
 export function SettingsMenu({
   accountId,
@@ -26,11 +16,11 @@ export function SettingsMenu({
         <div>
           <h2>Settings</h2>
           <p className="muted">
-            {ACTIVE_ALERT_STRATEGIES.length} live alert strategies · {autoTrade.enabled ? "Auto Long on" : "Auto Long off"}
+            {enabledStrategyCount(autoTrade.strategies)} alert strategies on · {autoTrade.enabled ? "Auto Long on" : "Auto Long off"}
           </p>
         </div>
       </div>
-      <ActiveStrategiesPanel />
+      <ActiveStrategiesPanel autoTrade={autoTrade} disabled={disabled} onChange={onAutoTradeChange} />
       <RiskSettingsPanel
         disabled={disabled}
         onApply={onApplyRisk}
@@ -47,19 +37,34 @@ export function SettingsMenu({
   );
 }
 
-function ActiveStrategiesPanel() {
+function ActiveStrategiesPanel({ autoTrade, disabled, onChange }) {
+  function updateStrategy(key, enabled) {
+    onChange({
+      ...autoTrade,
+      strategies: { ...autoTrade.strategies, [key]: enabled },
+    });
+  }
+
   return (
     <section className="active-strategies-panel" aria-label="Active alert strategies">
       <div className="active-strategies-heading">
         <span>Alert strategies</span>
-        <strong>Active</strong>
+        <strong>{enabledStrategyCount(autoTrade.strategies)} on</strong>
       </div>
       <div className="active-strategy-list">
-        {ACTIVE_ALERT_STRATEGIES.map((strategy) => (
-          <article className="active-strategy-item" key={strategy.name}>
-            <b>{strategy.name}</b>
-            <small>{strategy.description}</small>
-          </article>
+        {ALERT_STRATEGIES.map((strategy) => (
+          <label className={`active-strategy-item ${autoTrade.strategies?.[strategy.key] !== false ? "enabled" : ""}`} key={strategy.key}>
+            <input
+              type="checkbox"
+              checked={autoTrade.strategies?.[strategy.key] !== false}
+              disabled={disabled}
+              onChange={(event) => updateStrategy(strategy.key, event.target.checked)}
+            />
+            <span>
+              <b>{strategy.name}</b>
+              <small>{strategy.description}</small>
+            </span>
+          </label>
         ))}
       </div>
     </section>
@@ -155,4 +160,8 @@ export function normalizeAutoTradeSettings(nextSettings, currentStrategies = {})
     enabled: Boolean(nextSettings.enabled),
     strategies: { ...defaultAutoTradeStrategies(), ...(nextSettings.strategies || currentStrategies || {}) },
   };
+}
+
+function enabledStrategyCount(strategies = {}) {
+  return ALERT_STRATEGIES.filter((strategy) => strategies[strategy.key] !== false).length;
 }

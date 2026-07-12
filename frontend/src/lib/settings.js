@@ -1,3 +1,5 @@
+import { defaultAlertStrategies } from "./alertStrategies";
+
 export const RISK_SETTINGS_KEY = "dhanam-risk-settings";
 export const AUTO_TRADE_KEY = "dhanam-auto-trade";
 
@@ -46,7 +48,7 @@ export function saveAutoTradeSettings(settings) {
 }
 
 export function defaultAutoTradeStrategies() {
-  return {};
+  return defaultAlertStrategies();
 }
 
 function clamp(value, min, max) {

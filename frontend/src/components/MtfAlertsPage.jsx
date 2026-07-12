@@ -1,14 +1,19 @@
+import { alertStrategyEnabled } from "../lib/alertStrategies";
 import { formatDateTime } from "../lib/dates";
 import { formatPrice } from "../lib/market";
 import { SummaryTile } from "./SummaryTile";
 
 const LIVE_LONG_SETUP_TYPES = new Set(["long_mtf_5_12_touch", "10m_34_50_bounce"]);
 
-export function longAlertRows(watchlists, quotesByTab) {
+export function longAlertRows(watchlists, quotesByTab, strategies = {}) {
   return watchlists.flatMap((watchlist) => {
     const quotes = quotesByTab[watchlist.id] || [];
     return quotes.flatMap((quote) => {
-      const matches = (quote.mtf_matches || []).filter((match) => match.trade_action === "Long" && LIVE_LONG_SETUP_TYPES.has(match.type));
+      const matches = (quote.mtf_matches || []).filter((match) => (
+        match.trade_action === "Long"
+        && LIVE_LONG_SETUP_TYPES.has(match.type)
+        && alertStrategyEnabled(match, strategies)
+      ));
       return matches.map((match) => ({ watchlist, quote, match }));
     });
   });

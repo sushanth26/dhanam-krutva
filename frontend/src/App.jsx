@@ -63,7 +63,10 @@ export default function App() {
   const updatedText = updatedTextByTab[watchlistTab] || "";
   const tradingAccountId = useMemo(() => marginTradingAccountId(accounts, selectedAccountId), [accounts, selectedAccountId]);
   const trendBuckets = useMemo(() => trendBucketsForQuotes(quotes), [quotes]);
-  const mtfAlertRows = useMemo(() => longAlertRows(watchlists, quotesByTab), [watchlists, quotesByTab]);
+  const mtfAlertRows = useMemo(
+    () => longAlertRows(watchlists, quotesByTab, autoTrade.strategies),
+    [watchlists, quotesByTab, autoTrade.strategies],
+  );
 
   async function refreshWatchlists({ showLoading = true } = {}) {
     if (showLoading) setLoadingKey("watchlists", true);
@@ -166,7 +169,7 @@ export default function App() {
   }
 
   function notifyLongAlerts(watchlist, nextQuotes) {
-    const rows = longAlertRows([watchlist], { [watchlist.id]: nextQuotes });
+    const rows = longAlertRows([watchlist], { [watchlist.id]: nextQuotes }, autoTradeRef.current.strategies);
     const signature = longAlertSignature(rows);
     if (!signature || signature === lastMtfSignature.current[watchlist.id]) {
       lastMtfSignature.current = { ...lastMtfSignature.current, [watchlist.id]: signature || null };
@@ -190,6 +193,7 @@ export default function App() {
     setAutoTrade(normalized);
     autoTradeRef.current = normalized;
     saveAutoTradeSettings(normalized);
+    lastMtfSignature.current = initialTabState(watchlistsRef.current, null);
   }
 
   function updateRiskSettings(nextSettings) {
