@@ -1,19 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { AutoTradesPage } from "./components/AutoTradesPage";
 import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { HomePage } from "./components/HomePage";
 import { MtfAlertsPage, longAlertRows } from "./components/MtfAlertsPage";
 import { SettingsMenu, normalizeAutoTradeSettings } from "./components/SettingsMenu";
 import { useAppNotifications } from "./hooks/useAppNotifications";
-import { useAutoTradeOrders } from "./hooks/useAutoTradeOrders";
 import { useLatestRef } from "./hooks/useLatestRef";
 import { useLoadingState } from "./hooks/useLoadingState";
 import { useShellData } from "./hooks/useShellData";
 import { getJson, postJson } from "./lib/api";
 import { pageFromLocationHash, hashForPage } from "./lib/appNavigation";
 import { trendBucketsForQuotes } from "./lib/appSelectors";
+import { formatMarketTime } from "./lib/dates";
 import { longAlertNotification, longAlertSignature } from "./lib/longAlertNotifications";
 import { isMarketRefreshWindow, marginTradingAccountId } from "./lib/market";
 import { showDeviceNotification } from "./lib/notifications";
@@ -63,14 +62,11 @@ export default function App() {
   const quotes = quotesByTab[watchlistTab] || [];
   const updatedText = updatedTextByTab[watchlistTab] || "";
   const tradingAccountId = useMemo(() => marginTradingAccountId(accounts, selectedAccountId), [accounts, selectedAccountId]);
-  const {
-    alert: autoTradeAlert,
-    openOrderCount: autoTradeOrderCount,
-    orders: autoTradeOrders,
-    refresh: refreshAutoTrades,
-  } = useAutoTradeOrders({ accountId: tradingAccountId, activePage, setLoadingKey });
   const trendBuckets = useMemo(() => trendBucketsForQuotes(quotes), [quotes]);
-  const mtfAlertRows = useMemo(() => longAlertRows(watchlists, quotesByTab), [watchlists, quotesByTab]);
+  const mtfAlertRows = useMemo(
+    () => longAlertRows(watchlists, quotesByTab, autoTrade.strategies),
+    [watchlists, quotesByTab, autoTrade.strategies],
+  );
 
   async function refreshWatchlists({ showLoading = true } = {}) {
     if (showLoading) setLoadingKey("watchlists", true);
@@ -148,7 +144,7 @@ export default function App() {
     });
     const payload = await getJson(`/api/webull/live-prices?${query.toString()}`);
     const nextQuotes = payload.quotes || [];
-    const updatedAt = new Date().toLocaleTimeString();
+    const updatedAt = formatMarketTime(new Date());
     setQuotesForTab(watchlist.id, nextQuotes);
     setUpdatedTextForTab(watchlist.id, `Updated ${updatedAt} from ${payload.source || "webull"}`);
     notifyLongAlerts(watchlist, nextQuotes);
@@ -173,7 +169,7 @@ export default function App() {
   }
 
   function notifyLongAlerts(watchlist, nextQuotes) {
-    const rows = longAlertRows([watchlist], { [watchlist.id]: nextQuotes });
+    const rows = longAlertRows([watchlist], { [watchlist.id]: nextQuotes }, autoTradeRef.current.strategies);
     const signature = longAlertSignature(rows);
     if (!signature || signature === lastMtfSignature.current[watchlist.id]) {
       lastMtfSignature.current = { ...lastMtfSignature.current, [watchlist.id]: signature || null };
@@ -197,6 +193,7 @@ export default function App() {
     setAutoTrade(normalized);
     autoTradeRef.current = normalized;
     saveAutoTradeSettings(normalized);
+    lastMtfSignature.current = initialTabState(watchlistsRef.current, null);
   }
 
   function updateRiskSettings(nextSettings) {
@@ -396,7 +393,6 @@ export default function App() {
         notifications={notifications}
         onMarkNotificationsRead={markNotificationsRead}
         activePage={activePage}
-        autoTradeOrderCount={autoTradeOrderCount}
         onNavigate={navigatePage}
         settingsBadge={autoTrade.enabled ? "Auto" : "Rules"}
         settingsControls={(
@@ -427,14 +423,6 @@ export default function App() {
             loading={loading.prices}
             onRefresh={refreshAllPrices}
             rows={mtfAlertRows}
-          />
-        ) : activePage === "trades" ? (
-          <AutoTradesPage
-            accountId={tradingAccountId}
-            alert={autoTradeAlert}
-            loading={loading.trades}
-            orders={autoTradeOrders}
-            onRefresh={refreshAutoTrades}
           />
         ) : (
           <HomePage

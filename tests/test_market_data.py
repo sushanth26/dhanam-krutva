@@ -300,28 +300,62 @@ def test_mtf_signal_matches_skips_chop_trend():
     assert matches == []
 
 
+def seeded_pullback_candles(
+    touch_candle: dict,
+    trigger_candle: dict,
+    start_minute: int = 0,
+) -> list[dict]:
+    candles = []
+    for index in range(12):
+        candles.append(
+            {
+                "low": 119,
+                "high": 121,
+                "close": 120,
+                "source_count": 2,
+                "session_date": "2026-07-02",
+                "time": f"2026-07-02T09:{start_minute + index:02d}:00",
+            }
+        )
+    return [
+        *candles,
+        {
+            "source_count": 2,
+            "session_date": "2026-07-02",
+            "time": f"2026-07-02T09:{start_minute + 12:02d}:00",
+            **touch_candle,
+        },
+        {
+            "source_count": 1,
+            "session_date": "2026-07-02",
+            "time": f"2026-07-02T09:{start_minute + 13:02d}:00",
+            **trigger_candle,
+        },
+    ]
+
+
 def test_mtf_signal_matches_alerts_long_after_same_day_mtf_touch_and_10m_5_12_touch():
     matches = mtf_signal_matches(
         120,
         "Bullish",
-        [
-            {"low": 105, "high": 113, "close": 112, "source_count": 2, "session_date": "2026-07-02", "time": "2026-07-02T09:30:00"},
-            {"low": 118, "high": 122, "close": 120, "source_count": 2, "session_date": "2026-07-02", "time": "2026-07-02T09:40:00"},
-        ],
+        seeded_pullback_candles(
+            {"low": 105, "high": 110, "close": 105},
+            {"low": 118, "high": 122, "close": 120},
+        ),
         {"5": 122, "12": 121, "34": 100, "50": 110},
         {"34": 100, "50": 110},
         {"20": 80, "21": 90, "50": 130, "55": 135},
     )
 
     assert len(matches) == 1
-    assert matches[0]["label"] == "Long MTF -> 10m 5/12 touch"
-    assert matches[0]["display_label"] == "Long: Hourly 34/50 -> 10m 5/12"
+    assert matches[0]["label"] == "Curl"
+    assert matches[0]["display_label"] == "Curl: Hourly 34/50 -> above 10m 5/12"
     assert matches[0]["trade_action"] == "Long"
     assert matches[0]["trend"] == "Bullish"
     assert matches[0]["type"] == "long_mtf_5_12_touch"
     assert matches[0]["mtf_label"] == "Hourly 34/50"
-    assert matches[0]["mtf_touch_time"] == "2026-07-02T09:30:00"
-    assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
+    assert matches[0]["mtf_touch_time"] == "2026-07-02T09:12:00"
+    assert matches[0]["candle_time"] == "2026-07-02T09:13:00"
     assert matches[0]["entry_price"] == 121
 
 
@@ -371,62 +405,146 @@ def test_mtf_signal_matches_returns_all_matching_mtf_sources_for_long_alert():
     matches = mtf_signal_matches(
         113,
         "Bullish",
-        [
-            {"low": 99, "high": 106, "close": 105, "time": "2026-07-02T09:30:00"},
-            {"low": 104, "high": 114, "close": 113, "time": "2026-07-02T09:40:00"},
-        ],
+        seeded_pullback_candles(
+            {"low": 99, "high": 106, "close": 105},
+            {"low": 104, "high": 114, "close": 113},
+        ),
         {"5": 116, "12": 114, "34": 100, "50": 110},
         {"34": 100, "50": 110},
         {"20": 108, "21": 112, "50": 104, "55": 106},
     )
 
-    assert [match["mtf_label"] for match in matches] == [
+    assert len(matches) == 1
+    assert matches[0]["mtf_labels"] == [
         "Hourly 34/50",
         "Daily 50/55",
     ]
-    assert all(match["trade_action"] == "Long" for match in matches)
-    assert all(match["status"] == "confirmed" for match in matches)
-    assert all(match["candle_time"] == "2026-07-02T09:40:00" for match in matches)
+    assert matches[0]["mtf_label"] == "Hourly 34/50 + Daily 50/55"
+    assert matches[0]["display_label"] == "Curl: Hourly 34/50 + Daily 50/55 -> above 10m 5/12"
+    assert matches[0]["trade_action"] == "Long"
+    assert matches[0]["status"] == "confirmed"
+    assert matches[0]["candle_time"] == "2026-07-02T09:13:00"
 
 
 def test_mtf_signal_matches_allows_bearish_trend_but_still_long_only():
     matches = mtf_signal_matches(
         101,
         "Bearish",
-        [
-            {"low": 104, "high": 109, "close": 99, "session_date": "2026-07-02", "time": "2026-07-02T09:30:00"},
-            {"open": 96, "high": 102, "low": 95, "close": 101, "session_date": "2026-07-02", "time": "2026-07-02T09:40:00"},
-        ],
+        seeded_pullback_candles(
+            {"low": 104, "high": 109, "close": 99},
+            {"open": 96, "high": 102, "low": 95, "close": 101},
+        ),
         {"5": 100, "12": 102, "34": 110, "50": 112},
         {"34": 104, "50": 108},
         {"20": 105, "21": 107, "50": 106, "55": 109},
     )
 
-    assert [match["mtf_label"] for match in matches] == [
+    assert len(matches) == 1
+    assert matches[0]["mtf_labels"] == [
         "Hourly 34/50",
         "Daily 20/21",
         "Daily 50/55",
     ]
-    assert all(match["trade_action"] == "Long" for match in matches)
-    assert all(match["trend"] == "Bearish" for match in matches)
+    assert matches[0]["mtf_label"] == "Hourly 34/50 + Daily 20/21 + Daily 50/55"
+    assert matches[0]["trade_action"] == "Long"
+    assert matches[0]["trend"] == "Bearish"
 
 
 def test_mtf_signal_matches_alerts_immediately_on_incomplete_10m_touch():
     matches = mtf_signal_matches(
         105,
         "Bullish",
-        [
-            {"low": 104, "high": 106, "close": 105, "source_count": 2, "time": "2026-07-02T09:30:00"},
-            {"low": 113, "high": 116, "close": 115, "source_count": 1, "time": "2026-07-02T09:40:00"},
-        ],
+        seeded_pullback_candles(
+            {"low": 104, "high": 106, "close": 105},
+            {"low": 113, "high": 116, "close": 115},
+        ),
         {"5": 116, "12": 114, "34": 100, "50": 110},
         {"34": 100, "50": 110},
         {"20": 80, "21": 90, "50": 104, "55": 106},
     )
 
-    assert [match["mtf_label"] for match in matches] == ["Hourly 34/50", "Daily 50/55"]
-    assert all(match["status"] == "confirmed" for match in matches)
-    assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
+    assert len(matches) == 1
+    assert matches[0]["mtf_labels"] == ["Hourly 34/50", "Daily 50/55"]
+    assert matches[0]["status"] == "confirmed"
+    assert matches[0]["candle_time"] == "2026-07-02T09:13:00"
+
+
+def test_mtf_signal_matches_ignores_mtf_touch_after_price_already_reclaimed_10m_5_12():
+    matches = mtf_signal_matches(
+        120,
+        "Bullish",
+        seeded_pullback_candles(
+            {"low": 100, "high": 121, "close": 120},
+            {"low": 118, "high": 122, "close": 120},
+        ),
+        {"5": 122, "12": 121, "34": 100, "50": 110},
+        {"34": 100, "50": 110},
+        {"20": 80, "21": 90, "50": 130, "55": 135},
+    )
+
+    assert matches == []
+
+
+def test_mtf_signal_matches_includes_confirmed_10m_34_50_bounce_as_separate_setup():
+    candles = [
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:30:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:40:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:50:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:00:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:10:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:20:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:30:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:40:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:50:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:00:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:10:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:20:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:30:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:40:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:50:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:00:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:10:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:20:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:30:00"},
+        {"low": 100.1, "high": 106, "close": 105, "source_count": 2, "time": "2026-07-02T12:40:00"},
+    ]
+
+    matches = mtf_signal_matches(
+        105,
+        "Chop",
+        candles,
+        {"5": 105, "12": 104, "34": 101, "50": 100},
+        {"34": 90, "50": 95},
+        {"20": 80, "21": 90, "50": 70, "55": 75},
+    )
+
+    assert len(matches) == 1
+    assert matches[0]["label"] == "10m 34/50 Bounce"
+    assert matches[0]["display_label"] == "10m 34/50 Bounce"
+    assert matches[0]["type"] == "10m_34_50_bounce"
+    assert matches[0]["trade_action"] == "Long"
+    assert matches[0]["trend"] == "Bullish"
+    assert matches[0]["entry_price"] == 105
+    assert matches[0]["candle_time"] == "2026-07-02T12:40:00"
+
+
+def test_mtf_signal_matches_waits_for_confirmed_10m_34_50_bounce_close():
+    candles = [
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:30:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:40:00"},
+        {"low": 100, "high": 106, "close": 105, "source_count": 1, "time": "2026-07-02T09:50:00"},
+    ]
+
+    matches = mtf_signal_matches(
+        105,
+        "Bullish",
+        candles,
+        {"5": 105, "12": 104, "34": 101, "50": 100},
+        {"34": 90, "50": 95},
+        {"20": 80, "21": 90, "50": 70, "55": 75},
+    )
+
+    assert [match for match in matches if match["type"] == "10m_34_50_bounce"] == []
 
 
 def test_mtf_signal_matches_requires_move_up_into_10m_5_12():

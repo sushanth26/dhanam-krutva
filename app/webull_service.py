@@ -73,39 +73,6 @@ class WebullService:
     def order_detail(self, account_id: str, client_order_id: str) -> dict[str, Any]:
         return self._call(lambda: self._trade_client().order_v3.get_order_detail(account_id, client_order_id))
 
-    def auto_trade_orders(self, account_id: str, page_size: int = 50, days: int = 1) -> dict[str, Any]:
-        trade_date = date.today()
-        history = self.order_history(account_id, page_size=page_size, days=days)
-        if not history.get("ok"):
-            return {**history, "orders": [], "buckets": self._empty_order_buckets(), "counts": self._empty_order_counts()}
-        time.sleep(1.1)
-        open_orders = self.open_orders(account_id, page_size=page_size)
-        if not open_orders.get("ok"):
-            return {**open_orders, "orders": [], "buckets": self._empty_order_buckets(), "counts": self._empty_order_counts()}
-        history_orders = self._normalized_order_records(history.get("data"), source="history")
-        open_order_records = self._normalized_order_records(open_orders.get("data"), source="open")
-        history_trade_date = self._history_trade_date(history_orders, trade_date)
-        selected_history_orders = [order for order in history_orders if self._is_order_on_date(order, history_trade_date)]
-        selected_open_orders = [order for order in open_order_records if self._is_order_on_date(order, trade_date)]
-        orders = self._dedupe_orders([*selected_open_orders, *selected_history_orders])
-        buckets = {
-            "buy": [order for order in orders if order.get("side") == "BUY"],
-            "sell": [order for order in orders if order.get("side") == "SELL"],
-            "open": [order for order in orders if self._is_open_order_status(order.get("status"))],
-            "filled": [order for order in orders if self._is_filled_order_status(order.get("status"))],
-        }
-        return {
-            "ok": bool(history.get("ok") or open_orders.get("ok")),
-            "account_id": account_id,
-            "trade_date": trade_date.isoformat(),
-            "history_trade_date": history_trade_date.isoformat() if history_trade_date else None,
-            "orders": orders,
-            "buckets": buckets,
-            "counts": {key: len(value) for key, value in buckets.items()},
-            "history": history,
-            "open_orders": open_orders,
-        }
-
     def history_bars(
         self,
         symbol: str,
@@ -658,14 +625,6 @@ class WebullService:
         return settings
 
     @staticmethod
-    def _empty_order_buckets() -> dict[str, list[Any]]:
-        return {"buy": [], "sell": [], "open": [], "filled": []}
-
-    @staticmethod
-    def _empty_order_counts() -> dict[str, int]:
-        return {"buy": 0, "sell": 0, "open": 0, "filled": 0}
-
-    @staticmethod
     @contextlib.contextmanager
     def _suppress_sdk_output():
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
@@ -1101,66 +1060,6 @@ class WebullService:
             return False
         order_type = str(order.get("order_type") or "")
         return order.get("stop_price") is not None or order_type in {"STOP LOSS", "STOP LOSS LIMIT", "STOP_LOSS", "STOP_LOSS_LIMIT"}
-
-    @classmethod
-    def _is_order_on_date(cls, order: dict[str, Any], target_date: date) -> bool:
-        dates = [
-            cls._parse_order_date(order.get("created_at")),
-            cls._parse_order_date(order.get("updated_at")),
-        ]
-        return any(parsed == target_date for parsed in dates if parsed is not None)
-
-    @classmethod
-    def _history_trade_date(cls, orders: list[dict[str, Any]], preferred_date: date) -> date:
-        order_dates = [
-            parsed
-            for order in orders
-            for parsed in (cls._parse_order_date(order.get("created_at")), cls._parse_order_date(order.get("updated_at")))
-            if parsed is not None
-        ]
-        if preferred_date in order_dates:
-            return preferred_date
-        return max(order_dates, default=preferred_date)
-
-    @staticmethod
-    def _parse_order_date(value: Any) -> date | None:
-        if value in (None, ""):
-            return None
-        if isinstance(value, date) and not isinstance(value, datetime):
-            return value
-        if isinstance(value, datetime):
-            return value.date()
-        if isinstance(value, (int, float)):
-            timestamp = float(value)
-            if timestamp > 10_000_000_000:
-                timestamp /= 1000
-            try:
-                return datetime.fromtimestamp(timestamp).date()
-            except (OSError, OverflowError, ValueError):
-                return None
-
-        text = str(value).strip()
-        if not text:
-            return None
-        if text.replace(".", "", 1).isdigit():
-            try:
-                timestamp = float(text)
-                if timestamp > 10_000_000_000:
-                    timestamp /= 1000
-                return datetime.fromtimestamp(timestamp).date()
-            except (OSError, OverflowError, ValueError):
-                return None
-        normalized = text.replace("Z", "+00:00")
-        try:
-            return datetime.fromisoformat(normalized).date()
-        except ValueError:
-            pass
-        for pattern in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y"):
-            try:
-                return datetime.strptime(text, pattern).date()
-            except ValueError:
-                continue
-        return None
 
     @staticmethod
     def _is_filled_order_status(status: str | None) -> bool:

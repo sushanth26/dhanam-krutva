@@ -1,3 +1,4 @@
+import { ALERT_STRATEGIES } from "../lib/alertStrategies";
 import { defaultAutoTradeStrategies } from "../lib/settings";
 
 export function SettingsMenu({
@@ -15,10 +16,11 @@ export function SettingsMenu({
         <div>
           <h2>Settings</h2>
           <p className="muted">
-            Alert rules reset · {autoTrade.enabled ? "Auto Long on" : "Auto Long off"}
+            {enabledStrategyCount(autoTrade.strategies)} alert strategies on · {autoTrade.enabled ? "Auto Long on" : "Auto Long off"}
           </p>
         </div>
       </div>
+      <ActiveStrategiesPanel autoTrade={autoTrade} disabled={disabled} onChange={onAutoTradeChange} />
       <RiskSettingsPanel
         disabled={disabled}
         onApply={onApplyRisk}
@@ -32,6 +34,40 @@ export function SettingsMenu({
         onChange={onAutoTradeChange}
       />
     </div>
+  );
+}
+
+function ActiveStrategiesPanel({ autoTrade, disabled, onChange }) {
+  function updateStrategy(key, enabled) {
+    onChange({
+      ...autoTrade,
+      strategies: { ...autoTrade.strategies, [key]: enabled },
+    });
+  }
+
+  return (
+    <section className="active-strategies-panel" aria-label="Active alert strategies">
+      <div className="active-strategies-heading">
+        <span>Alert strategies</span>
+        <strong>{enabledStrategyCount(autoTrade.strategies)} on</strong>
+      </div>
+      <div className="active-strategy-list">
+        {ALERT_STRATEGIES.map((strategy) => (
+          <label className={`active-strategy-item ${autoTrade.strategies?.[strategy.key] !== false ? "enabled" : ""}`} key={strategy.key}>
+            <input
+              type="checkbox"
+              checked={autoTrade.strategies?.[strategy.key] !== false}
+              disabled={disabled}
+              onChange={(event) => updateStrategy(strategy.key, event.target.checked)}
+            />
+            <span>
+              <b>{strategy.name}</b>
+              <small>{strategy.description}</small>
+            </span>
+          </label>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -110,10 +146,10 @@ function AutoTradePanel({ accountId, autoTrade, disabled, onChange }) {
           />
           <span>
             <strong>Auto Long</strong>
-            <small>Paused until new alert rules are defined.</small>
+            <small>Manual approval stays separate from alert visibility.</small>
           </span>
         </label>
-        <em>{accountId ? "No rules" : "Select account"}</em>
+        <em>{accountId ? "Ready" : "Select account"}</em>
       </div>
     </section>
   );
@@ -124,4 +160,8 @@ export function normalizeAutoTradeSettings(nextSettings, currentStrategies = {})
     enabled: Boolean(nextSettings.enabled),
     strategies: { ...defaultAutoTradeStrategies(), ...(nextSettings.strategies || currentStrategies || {}) },
   };
+}
+
+function enabledStrategyCount(strategies = {}) {
+  return ALERT_STRATEGIES.filter((strategy) => strategies[strategy.key] !== false).length;
 }

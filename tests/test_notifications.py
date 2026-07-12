@@ -33,7 +33,7 @@ def test_mtf_notification_payload_lists_symbols_and_clouds():
 
     payload = mtf_notification_payload(quotes)
 
-    assert payload["title"] == "2 MTF alerts: BE, LLY"
+    assert payload["title"] == "2 Setup alerts: BE, LLY"
     assert payload["body"] == "BE Hourly 34/50 • LLY Daily 20/21"
     assert payload["badgeCount"] == 2
     assert payload["badge_count"] == 2
@@ -62,7 +62,7 @@ def test_mtf_notification_payload_uses_rejection_wording_and_entry_price():
     payload = mtf_notification_payload(quotes)
 
     assert payload["title"] == "AAOI: 10m rejection 34/50 @ 104.00"
-    assert payload["body"] == "Tap to open this MTF row."
+    assert payload["body"] == "Tap to open this setup row."
     assert payload["matches"][0]["labels"] == ["10m bounce 34/50"]
     assert payload["matches"][0]["details"] == [
         {
@@ -129,4 +129,3 @@ def test_build_monitored_quotes_omits_deleted_symbols(tmp_path, monkeypatch):
     assert requested_symbols == ["BE", "PLTR"]
     assert "AAOI" not in requested_symbols
     assert [quote["symbol"] for quote in quotes] == ["BE", "PLTR"]
-

@@ -16,7 +16,6 @@ export function Header({
   notifications,
   onMarkNotificationsRead,
   activePage,
-  autoTradeOrderCount,
   onNavigate,
   settingsBadge,
   settingsControls,
@@ -91,17 +90,6 @@ export function Header({
             title="MTFs"
           >
             <span>MTFs</span>
-          </button>
-          <button
-            type="button"
-            className={`account-menu-button secondary-button ${activePage === "trades" ? "active" : ""}`}
-            disabled={pageLoading}
-            onClick={() => onNavigate("trades")}
-            aria-label="Open auto trades"
-            title="Auto Trades"
-          >
-            <span>Trades</span>
-            <b>{autoTradeOrderCount}</b>
           </button>
           <div className="settings-menu-anchor" ref={settingsAnchorRef}>
             <button

@@ -323,13 +323,16 @@ def mtf_signal_matches(
     stop_mode: str = A_PLUS_PLUS_STOP_MODE_FIXED,
     fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
 ) -> list[dict[str, Any]]:
-    return long_mtf_pullback_matches(
-        ten_minute_trend,
-        ten_minute_candles,
-        ema_10m,
-        ema_1h,
-        ema_daily,
-    )
+    return [
+        *long_mtf_pullback_matches(
+            ten_minute_trend,
+            ten_minute_candles,
+            ema_10m,
+            ema_1h,
+            ema_daily,
+        ),
+        *ten_minute_34_50_bounce_matches(ten_minute_candles),
+    ]
 
 
 def long_mtf_pullback_matches(
@@ -375,7 +378,8 @@ def long_mtf_pullback_matches(
     if not previous_today:
         return []
 
-    matches = []
+    fast_clouds_by_time = historical_fast_clouds_by_candle_time(ten_minute_candles)
+    mtf_sources = []
     for check in LONG_MTF_CLOUDS:
         ema_set = ema_1h if check["source"] == "hourly" else ema_daily
         first = ema_set.get(check["keys"][0])
@@ -384,47 +388,174 @@ def long_mtf_pullback_matches(
             continue
         cloud_low = min(first, second)
         cloud_high = max(first, second)
-        touch_candle = latest_candle_touching_cloud(previous_today, cloud_low, cloud_high)
+        touch_candle = latest_valid_mtf_touch_before_10m_reclaim(previous_today, cloud_low, cloud_high, fast_clouds_by_time)
         if not touch_candle:
             continue
         touch_time = touch_candle.get("time") or touch_candle.get("sort_time") or touch_candle.get("timestamp")
-        entry_price = max(fast_cloud_low, min(candle_close, fast_cloud_high))
-        matches.append(
+        mtf_sources.append(
             {
-                "label": "Long MTF -> 10m 5/12 touch",
-                "display_label": f"Long: {check['label']} -> 10m 5/12",
-                "timeframe": "10m",
-                "mtf_label": check["label"],
-                "mtf_timeframe": check["timeframe"],
-                "mtf_touch_time": touch_time,
-                "mtf_cloud_low": round(cloud_low, 4),
-                "mtf_cloud_high": round(cloud_high, 4),
-                "cloud_low": round(fast_cloud_low, 4),
-                "cloud_high": round(fast_cloud_high, 4),
-                "candle_low": round(candle_low, 4),
-                "candle_high": round(candle_high, 4),
-                "candle_close": round(candle_close, 4),
-                "entry_price": round(entry_price, 4),
-                "candle_time": candle_time,
-                "type": "long_mtf_5_12_touch",
-                "status": "confirmed",
-                "direction": "up_to_10m_5_12",
-                "trend": ten_minute_trend,
-                "trade_action": "Long",
+                "label": check["label"],
+                "timeframe": check["timeframe"],
+                "touch_time": touch_time,
+                "cloud_low": round(cloud_low, 4),
+                "cloud_high": round(cloud_high, 4),
             }
         )
-    return matches
+    if not mtf_sources:
+        return []
+
+    entry_price = max(fast_cloud_low, min(candle_close, fast_cloud_high))
+    labels = [source["label"] for source in mtf_sources]
+    return [
+        {
+            "label": "Curl",
+            "display_label": f"Curl: {' + '.join(labels)} -> above 10m 5/12",
+            "timeframe": "10m",
+            "mtf_label": " + ".join(labels),
+            "mtf_labels": labels,
+            "mtf_touches": mtf_sources,
+            "mtf_timeframe": "multi" if len(mtf_sources) > 1 else mtf_sources[0]["timeframe"],
+            "mtf_touch_time": mtf_sources[0]["touch_time"],
+            "mtf_cloud_low": mtf_sources[0]["cloud_low"],
+            "mtf_cloud_high": mtf_sources[0]["cloud_high"],
+            "cloud_low": round(fast_cloud_low, 4),
+            "cloud_high": round(fast_cloud_high, 4),
+            "candle_low": round(candle_low, 4),
+            "candle_high": round(candle_high, 4),
+            "candle_close": round(candle_close, 4),
+            "entry_price": round(entry_price, 4),
+            "candle_time": candle_time,
+            "type": "long_mtf_5_12_touch",
+            "status": "confirmed",
+            "direction": "up_to_10m_5_12",
+            "trend": ten_minute_trend,
+            "trade_action": "Long",
+        }
+    ]
 
 
-def latest_candle_touching_cloud(
+def latest_valid_mtf_touch_before_10m_reclaim(
     candles: list[dict[str, Any]],
     cloud_low: float,
     cloud_high: float,
+    fast_clouds_by_time: dict[Any, tuple[float, float]],
 ) -> dict[str, Any] | None:
     for candle in reversed(candles):
+        fast_cloud = fast_clouds_by_time.get(candle_time_key(candle))
+        if not fast_cloud:
+            continue
+        if not candle_stays_below_cloud(candle, fast_cloud[0]):
+            continue
         if candle_touches_cloud(candle.get("low"), candle.get("high"), cloud_low, cloud_high):
             return candle
     return None
+
+
+def ten_minute_34_50_bounce_matches(ten_minute_candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    candle = latest_confirmed_ten_minute_candle(ten_minute_candles)
+    if not candle:
+        return []
+
+    candle_low = candle.get("low")
+    candle_high = candle.get("high")
+    candle_close = candle.get("close")
+    previous_candle = previous_confirmed_ten_minute_candle(ten_minute_candles, candle)
+    previous_close = previous_candle.get("close") if previous_candle else None
+    if None in (candle_low, candle_high, candle_close):
+        return []
+    if previous_close is not None and candle_close <= previous_close:
+        return []
+
+    ema_by_time = historical_ema_values_by_candle_time(ten_minute_candles, [34, 50])
+    ema_values_at_candle = ema_by_time.get(candle_time_key(candle))
+    if not ema_values_at_candle:
+        return []
+    ema34 = ema_values_at_candle.get("34")
+    ema50 = ema_values_at_candle.get("50")
+    if ema34 is None or ema50 is None:
+        return []
+
+    cloud_low = min(ema34, ema50)
+    cloud_high = max(ema34, ema50)
+    if not candle_touches_cloud(candle_low, candle_high, cloud_low, cloud_high):
+        return []
+    if candle_close <= cloud_high:
+        return []
+
+    candle_time = candle_time_key(candle)
+    return [
+        {
+            "label": "10m 34/50 Bounce",
+            "display_label": "10m 34/50 Bounce",
+            "timeframe": "10m",
+            "mtf_label": "10m 34/50",
+            "cloud_label": "10m 34/50",
+            "cloud_low": round(cloud_low, 4),
+            "cloud_high": round(cloud_high, 4),
+            "candle_low": round(candle_low, 4),
+            "candle_high": round(candle_high, 4),
+            "candle_close": round(candle_close, 4),
+            "entry_price": round(candle_close, 4),
+            "candle_time": candle_time,
+            "type": "10m_34_50_bounce",
+            "status": "confirmed",
+            "direction": "bounce_above_10m_34_50",
+            "trend": "Bullish",
+            "trade_action": "Long",
+        }
+    ]
+
+
+def historical_fast_clouds_by_candle_time(candles: list[dict[str, Any]]) -> dict[Any, tuple[float, float]]:
+    ema5_values = aligned_ema_series(candles, 5)
+    ema12_values = aligned_ema_series(candles, 12)
+    clouds: dict[Any, tuple[float, float]] = {}
+    for candle, ema5, ema12 in zip(candles, ema5_values, ema12_values):
+        key = candle_time_key(candle)
+        if key is None or ema5 is None or ema12 is None:
+            continue
+        clouds[key] = (min(ema5, ema12), max(ema5, ema12))
+    return clouds
+
+
+def historical_ema_values_by_candle_time(candles: list[dict[str, Any]], periods: list[int]) -> dict[Any, dict[str, float]]:
+    series_by_period = {str(period): aligned_ema_series(candles, period) for period in periods}
+    values_by_time: dict[Any, dict[str, float]] = {}
+    for index, candle in enumerate(candles):
+        key = candle_time_key(candle)
+        if key is None:
+            continue
+        values = {
+            period: series[index]
+            for period, series in series_by_period.items()
+            if series[index] is not None
+        }
+        if values:
+            values_by_time[key] = values
+    return values_by_time
+
+
+def aligned_ema_series(candles: list[dict[str, Any]], period: int) -> list[float | None]:
+    values: list[float | None] = []
+    ema: float | None = None
+    multiplier = 2 / (period + 1)
+    for candle in candles:
+        close = candle.get("close")
+        if close is None:
+            values.append(None)
+            continue
+        ema = close if ema is None else (close - ema) * multiplier + ema
+        values.append(ema)
+    return values
+
+
+def candle_time_key(candle: dict[str, Any]) -> Any:
+    return candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
+
+
+def candle_stays_below_cloud(candle: dict[str, Any], cloud_low: float) -> bool:
+    high = candle.get("high")
+    return high is not None and high < cloud_low
 
 
 def session_date_from_candle(candle: dict[str, Any]) -> str | None:
@@ -947,6 +1078,22 @@ def previous_ten_minute_candle(candles: list[dict[str, Any]]) -> dict[str, Any] 
 
 def latest_confirmed_ten_minute_candle(candles: list[dict[str, Any]]) -> dict[str, Any] | None:
     for candle in reversed(candles):
+        if is_complete_ten_minute_candle(candle):
+            return candle
+    return None
+
+
+def previous_confirmed_ten_minute_candle(
+    candles: list[dict[str, Any]],
+    current_candle: dict[str, Any],
+) -> dict[str, Any] | None:
+    current_key = candle_time_key(current_candle)
+    seen_current = False
+    for candle in reversed(candles):
+        if not seen_current:
+            if candle is current_candle or candle_time_key(candle) == current_key:
+                seen_current = True
+            continue
         if is_complete_ten_minute_candle(candle):
             return candle
     return None
