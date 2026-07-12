@@ -485,6 +485,68 @@ def test_mtf_signal_matches_ignores_mtf_touch_after_price_already_reclaimed_10m_
     assert matches == []
 
 
+def test_mtf_signal_matches_includes_confirmed_10m_34_50_bounce_as_separate_setup():
+    candles = [
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:30:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:40:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:50:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:00:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:10:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:20:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:30:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:40:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:50:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:00:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:10:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:20:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:30:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:40:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:50:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:00:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:10:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:20:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:30:00"},
+        {"low": 100.1, "high": 106, "close": 105, "source_count": 2, "time": "2026-07-02T12:40:00"},
+    ]
+
+    matches = mtf_signal_matches(
+        105,
+        "Chop",
+        candles,
+        {"5": 105, "12": 104, "34": 101, "50": 100},
+        {"34": 90, "50": 95},
+        {"20": 80, "21": 90, "50": 70, "55": 75},
+    )
+
+    assert len(matches) == 1
+    assert matches[0]["label"] == "10m 34/50 Bounce"
+    assert matches[0]["display_label"] == "10m 34/50 Bounce"
+    assert matches[0]["type"] == "10m_34_50_bounce"
+    assert matches[0]["trade_action"] == "Long"
+    assert matches[0]["trend"] == "Bullish"
+    assert matches[0]["entry_price"] == 105
+    assert matches[0]["candle_time"] == "2026-07-02T12:40:00"
+
+
+def test_mtf_signal_matches_waits_for_confirmed_10m_34_50_bounce_close():
+    candles = [
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:30:00"},
+        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:40:00"},
+        {"low": 100, "high": 106, "close": 105, "source_count": 1, "time": "2026-07-02T09:50:00"},
+    ]
+
+    matches = mtf_signal_matches(
+        105,
+        "Bullish",
+        candles,
+        {"5": 105, "12": 104, "34": 101, "50": 100},
+        {"34": 90, "50": 95},
+        {"20": 80, "21": 90, "50": 70, "55": 75},
+    )
+
+    assert [match for match in matches if match["type"] == "10m_34_50_bounce"] == []
+
+
 def test_mtf_signal_matches_requires_move_up_into_10m_5_12():
     matches = mtf_signal_matches(
         105,

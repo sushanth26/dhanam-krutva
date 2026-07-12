@@ -2,11 +2,13 @@ import { formatDateTime } from "../lib/dates";
 import { formatPrice } from "../lib/market";
 import { SummaryTile } from "./SummaryTile";
 
+const LIVE_LONG_SETUP_TYPES = new Set(["long_mtf_5_12_touch", "10m_34_50_bounce"]);
+
 export function longAlertRows(watchlists, quotesByTab) {
   return watchlists.flatMap((watchlist) => {
     const quotes = quotesByTab[watchlist.id] || [];
     return quotes.flatMap((quote) => {
-      const matches = (quote.mtf_matches || []).filter((match) => match.trade_action === "Long" && match.type === "long_mtf_5_12_touch");
+      const matches = (quote.mtf_matches || []).filter((match) => match.trade_action === "Long" && LIVE_LONG_SETUP_TYPES.has(match.type));
       return matches.map((match) => ({ watchlist, quote, match }));
     });
   });
@@ -14,21 +16,21 @@ export function longAlertRows(watchlists, quotesByTab) {
 
 export function MtfAlertsPage({ loading, onRefresh, rows }) {
   return (
-    <section className="mtf-alerts-page" aria-label="Curl alerts">
+    <section className="mtf-alerts-page" aria-label="Setup alerts">
       <div className="mtf-alerts-header">
         <div>
-          <h2>Curls</h2>
-          <p className="muted">B setups armed by Hourly 34/50, Daily 20/21, or Daily 50/55 touches from today, then triggered when price moves above the 10m 5/12.</p>
+          <h2>Setups</h2>
+          <p className="muted">Live long setups for Curls and confirmed 10m 34/50 Bounces.</p>
         </div>
         <button type="button" className="secondary-button" onClick={() => onRefresh()} disabled={loading}>
           {loading ? "Refreshing" : "Refresh"}
         </button>
       </div>
-      <div className="mtf-alert-counts" aria-label="Curl alert counts">
-        <SummaryTile label="Live Curls" value={rows.length} />
+      <div className="mtf-alert-counts" aria-label="Setup alert counts">
+        <SummaryTile label="Live Setups" value={rows.length} />
+        <SummaryTile label="Curls" value={rows.filter((row) => row.match.type === "long_mtf_5_12_touch").length} />
+        <SummaryTile label="34/50 Bounce" value={rows.filter((row) => row.match.type === "10m_34_50_bounce").length} />
         <SummaryTile label="Symbols" value={new Set(rows.map((row) => row.quote.symbol)).size} />
-        <SummaryTile label="Bullish" value={rows.filter((row) => row.match.trend === "Bullish").length} />
-        <SummaryTile label="Bearish" value={rows.filter((row) => row.match.trend === "Bearish").length} />
       </div>
       <div className="mtf-alert-table-wrap">
         <table className="mtf-alert-table">
@@ -39,7 +41,7 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
               <th>Setup</th>
               <th>Trend</th>
               <th>Entry</th>
-              <th>MTF Touch</th>
+              <th>Trigger</th>
               <th>Alert Time</th>
             </tr>
           </thead>
@@ -51,17 +53,17 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
                 <td data-label="Setup">
                   <div className="mtf-alert-setup">
                     <strong>{row.match.display_label || row.match.label}</strong>
-                    <span>{formatPrice(row.match.cloud_low)}-{formatPrice(row.match.cloud_high)} 10m 5/12</span>
+                    <span>{formatPrice(row.match.cloud_low)}-{formatPrice(row.match.cloud_high)} {row.match.cloud_label || "10m 5/12"}</span>
                   </div>
                 </td>
                 <td data-label="Trend"><span className={`trend-pill ${String(row.match.trend || "").toLowerCase()}`}>{row.match.trend || "-"}</span></td>
                 <td data-label="Entry">{formatPrice(row.match.entry_price)}</td>
-                <td data-label="MTF Touch"><MtfTouchList match={row.match} /></td>
+                <td data-label="Trigger"><SetupTriggerList match={row.match} /></td>
                 <td data-label="Alert Time">{formatDateTime(row.match.candle_time)}</td>
               </tr>
             )) : (
               <tr>
-                <td colSpan="7" className="empty-table-cell">No curls right now</td>
+                <td colSpan="7" className="empty-table-cell">No setups right now</td>
               </tr>
             )}
           </tbody>
@@ -71,7 +73,18 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
   );
 }
 
-function MtfTouchList({ match }) {
+function SetupTriggerList({ match }) {
+  if (match.type === "10m_34_50_bounce") {
+    return (
+      <div className="mtf-touch-list">
+        <span>
+          <strong>10m 34/50</strong>
+          Confirmed close
+        </span>
+      </div>
+    );
+  }
+
   const touches = Array.isArray(match.mtf_touches) && match.mtf_touches.length
     ? match.mtf_touches
     : [{ label: match.mtf_label, touch_time: match.mtf_touch_time }];

@@ -1,6 +1,6 @@
 # Dhanam Krutva
 
-Personal Webull dashboard and scanner for watchlists, 10-minute cloud trends, long-only Curl alerts, account visibility, order history, and browser/phone notifications.
+Personal Webull dashboard and scanner for watchlists, 10-minute cloud trends, long-only setup alerts, account visibility, order history, and browser/phone notifications.
 
 The browser talks only to this FastAPI backend. Webull credentials, token files, push subscriptions, and guard state stay server-side.
 
@@ -18,9 +18,9 @@ The browser talks only to this FastAPI backend. Webull credentials, token files,
   - Per-watchlist "Do not auto trade" toggle.
 
 - **MTFs tab**
-  - Live long-only Curl alert table.
-  - Shows alert count, unique symbols, bullish alert count, and bearish alert count.
-  - Each alert includes symbol, watchlist, setup, trend, entry, prior MTF touch time, and alert candle time.
+  - Live long-only setup alert table.
+  - Shows live setup count, Curl count, 10m 34/50 Bounce count, and unique symbols.
+  - Each alert includes symbol, watchlist, setup, trend, entry, trigger, and alert candle time.
 
 - **Curls**
   - A Curl is a good B setup where price touches an MTF cloud, then moves back above the 10m EMA 5/12 cloud.
@@ -33,11 +33,19 @@ The browser talks only to this FastAPI backend. Webull credentials, token files,
   - The MTF touch only counts if that candle is still below the 10m EMA 5/12 cloud.
   - A Curl alert fires when the latest 10m candle moves up above the 10m EMA 5/12 cloud.
   - Curls are long-only even when the 10m state is Bearish.
+
+- **10m 34/50 Bounce**
+  - A separate long-only setup from Curls.
+  - No MTF touch is required.
+  - Price must touch/pull into the 10m EMA 34/50 cloud.
+  - The 10m candle must be confirmed/closed.
+  - The confirmed 10m candle must close back above the top of the 10m EMA 34/50 cloud.
+  - The confirmed 10m candle must close above the prior confirmed 10m candle.
   - Old alert strategy toggles and the old Alerts tab were removed.
 
 - **Notifications**
   - In-app notification drawer with unread badge.
-  - Browser/device notifications for new Curl alerts when enabled.
+  - Browser/device notifications for new setup alerts when enabled.
   - Optional Web Push support for closed-app phone notifications with VAPID keys.
   - Service worker and app badge support.
 
@@ -198,7 +206,7 @@ npm --prefix frontend run build
 - `GET /api/account/{account_id}/auto-trades` - Fetches today's auto-trade/open-order view used by the Trades tab.
 - `GET /api/snapshot` - Returns a combined account snapshot; accepts an optional `account_id`.
 - `GET /api/webull/quote` - Fetches a single live quote for a symbol.
-- `GET /api/webull/live-prices` - Fetches watchlist quotes, 10m/hourly/daily EMAs, cloud states, and Curl alert matches.
+- `GET /api/webull/live-prices` - Fetches watchlist quotes, 10m/hourly/daily EMAs, cloud states, and setup alert matches.
 - `GET /api/webull/watchlists` - Loads persisted watchlists from the configured watchlist file.
 - `POST /api/webull/watchlists` - Saves/replaces persisted watchlists.
 - `GET /api/notifications/config` - Returns Web Push capability/configuration for the browser.
@@ -215,8 +223,8 @@ npm --prefix frontend run build
 ```text
 app/
   main.py                 FastAPI app, auth middleware, static serving, push monitor
-  market_data.py          Webull live price build, EMA clouds, Curl alert rule
-  notifications.py        Push subscription store and Curl push monitor
+  market_data.py          Webull live price build, EMA clouds, setup alert rules
+  notifications.py        Push subscription store and setup push monitor
   routers/                Accounts, Webull, notifications, trading, TradingView APIs
 frontend/src/
   App.jsx                 Main app coordinator
