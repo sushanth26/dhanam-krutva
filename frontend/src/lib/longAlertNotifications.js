@@ -14,7 +14,7 @@ export function longAlertNotification(rows) {
     : `${rows.length} Setup alerts`;
   const message = rows.length === 1
     ? setupMessage(first.match)
-    : rows.slice(0, 3).map((row) => `${rowSymbol(row)} ${setupName(row.match)}`).join(" | ");
+    : rows.slice(0, 3).map((row) => `${rowSymbol(row)} ${setupName(row.match)} at ${formatPrice(row.match.entry_price)}`).join(" | ");
   return { title, message };
 }
 
@@ -35,7 +35,8 @@ function setupMessage(match) {
     return `${cleanSetupLabel(match.display_label || match.label || "10m 34/50 Bounce")} at ${formatPrice(match.entry_price)}`;
   }
   if (match.type === "mtf_cloud_price_touch") {
-    return `Price touching ${touchLabel(match)} at ${formatPrice(match.entry_price)}`;
+    const action = match.direction === "reject_down" ? "rejected down from" : "bounced up from";
+    return `Price ${action} ${touchLabel(match)} at ${formatPrice(match.entry_price)}`;
   }
   const triggerLabel = curlTriggerLabel(match);
   return `${triggerLabel} -> above 10m 5/12 at ${formatPrice(match.entry_price)}`;

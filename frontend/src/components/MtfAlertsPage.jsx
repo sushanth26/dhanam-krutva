@@ -1,7 +1,8 @@
+import { useMemo, useState } from "react";
+
 import { alertStrategyEnabled } from "../lib/alertStrategies";
 import { formatDateTime } from "../lib/dates";
 import { formatPrice } from "../lib/market";
-import { SummaryTile } from "./SummaryTile";
 
 const LIVE_LONG_SETUP_TYPES = new Set(["long_mtf_5_12_touch", "10m_34_50_bounce"]);
 const TOUCH_ALERT_TYPES = new Set(["mtf_cloud_price_touch"]);
@@ -22,7 +23,11 @@ export function longAlertRows(watchlists, quotesByTab, strategies = {}) {
   });
 }
 
-export function MtfAlertsPage({ loading, onRefresh, rows }) {
+export function MtfAlertsPage({ loading, onDeleteAlert, onRefresh, rows }) {
+  const [searchText, setSearchText] = useState("");
+  const sortedRows = useMemo(() => [...rows].sort(compareAlertRows), [rows]);
+  const visibleRows = useMemo(() => filterRows(sortedRows, searchText), [sortedRows, searchText]);
+
   return (
     <section className="mtf-alerts-page" aria-label="Setup alerts">
       <div className="mtf-alerts-header">
@@ -34,45 +39,59 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
           {loading ? "Refreshing" : "Refresh"}
         </button>
       </div>
-      <div className="mtf-alert-counts" aria-label="Setup alert counts">
-        <SummaryTile label="Live Setups" value={rows.length} />
-        <SummaryTile label="Curls" value={rows.filter((row) => row.match.type === "long_mtf_5_12_touch").length} />
-        <SummaryTile label="34/50 Bounce" value={rows.filter((row) => row.match.type === "10m_34_50_bounce").length} />
-        <SummaryTile label="Cloud Touch" value={rows.filter((row) => row.match.type === "mtf_cloud_price_touch").length} />
-        <SummaryTile label="Symbols" value={new Set(rows.map((row) => row.quote.symbol)).size} />
-      </div>
+      <label className="mtf-alert-search">
+        <span>Search alerts</span>
+        <input
+          type="search"
+          value={searchText}
+          onChange={(event) => setSearchText(event.target.value)}
+          placeholder="Symbol, setup, trend"
+        />
+      </label>
       <div className="mtf-alert-table-wrap">
         <table className="mtf-alert-table">
           <thead>
             <tr>
               <th>Symbol</th>
-              <th>List</th>
               <th>Setup</th>
               <th>Trend</th>
               <th>Entry</th>
-              <th>Trigger</th>
               <th>Alert Time</th>
+              <th aria-label="Actions"></th>
             </tr>
           </thead>
           <tbody>
-            {rows.length ? rows.map((row, index) => (
-              <tr key={`${row.watchlist.id}-${row.quote.symbol}-${row.match.label}-${row.match.mtf_label || ""}-${row.match.candle_time || index}`}>
+            {visibleRows.length ? visibleRows.map((row, index) => (
+              <tr
+                key={`${row.watchlist.id}-${row.quote.symbol}-${row.match.label}-${row.match.mtf_label || ""}-${row.match.candle_time || index}`}
+                className={`mtf-alert-row ${setupClass(row.match)}`}
+              >
                 <td data-label="Symbol"><strong>{row.quote.symbol}</strong></td>
-                <td data-label="List">{row.watchlist.name}</td>
                 <td data-label="Setup">
                   <div className="mtf-alert-setup">
                     <strong>{row.match.display_label || row.match.label}</strong>
                     <span>{formatPrice(row.match.cloud_low)}-{formatPrice(row.match.cloud_high)} {row.match.cloud_label || "10m 5/12"}</span>
+                    {row.match.setup_quality_note ? <span>{row.match.setup_quality_note}</span> : null}
                   </div>
                 </td>
                 <td data-label="Trend"><span className={`trend-pill ${String(row.match.trend || "").toLowerCase()}`}>{row.match.trend || "-"}</span></td>
                 <td data-label="Entry">{formatPrice(row.match.entry_price)}</td>
-                <td data-label="Trigger"><SetupTriggerList match={row.match} /></td>
                 <td data-label="Alert Time">{formatDateTime(row.match.candle_time)}</td>
+                <td data-label="Actions" className="mtf-alert-actions">
+                  <button
+                    type="button"
+                    className="row-delete-button"
+                    onClick={() => onDeleteAlert(row.id)}
+                    aria-label={`Delete ${row.quote.symbol} alert`}
+                    title="Delete alert"
+                  >
+                    x
+                  </button>
+                </td>
               </tr>
             )) : (
               <tr>
-                <td colSpan="7" className="empty-table-cell">No setups right now</td>
+                <td colSpan="6" className="empty-table-cell">{rows.length ? "No alerts match this search" : "No stored alerts yet"}</td>
               </tr>
             )}
           </tbody>
@@ -82,40 +101,40 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
   );
 }
 
-function SetupTriggerList({ match }) {
-  if (match.type === "10m_34_50_bounce") {
-    return (
-      <div className="mtf-touch-list">
-        <span>
-          <strong>10m 34/50</strong>
-          Confirmed close
-        </span>
-      </div>
-    );
-  }
+function compareAlertRows(left, right) {
+  return alertTimestamp(right) - alertTimestamp(left);
+}
 
-  if (match.type === "mtf_cloud_price_touch") {
-    return (
-      <div className="mtf-touch-list">
-        <span>
-          <strong>{match.cloud_label || match.label}</strong>
-          Live price touch
-        </span>
-      </div>
-    );
-  }
+function alertTimestamp(row) {
+  const value = row.match?.candle_time || row.created_at;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
-  const touches = Array.isArray(match.mtf_touches) && match.mtf_touches.length
-    ? match.mtf_touches
-    : [{ label: match.mtf_label, touch_time: match.mtf_touch_time }];
-  return (
-    <div className="mtf-touch-list">
-      {touches.map((touch, index) => (
-        <span key={`${touch.label || "mtf"}-${touch.touch_time || index}`}>
-          <strong>{touch.label || "-"}</strong>
-          {formatDateTime(touch.touch_time)}
-        </span>
-      ))}
-    </div>
-  );
+function filterRows(rows, query) {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return rows;
+  return rows.filter((row) => searchableText(row).includes(normalizedQuery));
+}
+
+function searchableText(row) {
+  return [
+    row.quote?.symbol,
+    row.watchlist?.name,
+    row.match?.display_label,
+    row.match?.label,
+    row.match?.trend,
+    row.match?.setup_quality,
+    row.match?.setup_quality_note,
+    row.match?.mtf_label,
+    row.match?.cloud_label,
+    row.match?.type,
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function setupClass(match) {
+  if (match.type === "long_mtf_5_12_touch") return "curl";
+  if (match.type === "10m_34_50_bounce") return match.setup_quality === "bad" ? "bounce-bad" : "bounce-good";
+  if (match.type === "mtf_cloud_price_touch") return "cloud-touch";
+  return "other";
 }

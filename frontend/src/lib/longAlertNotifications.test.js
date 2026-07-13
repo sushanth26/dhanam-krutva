@@ -32,7 +32,7 @@ test("long alert notifications read symbols from quote rows", () => {
   assert.equal(longAlertSignature(rows).includes("undefined"), false);
   assert.deepEqual(longAlertNotification(rows), {
     title: "2 Setup alerts",
-    message: "BE Curl | AAOI Daily 50/55",
+    message: "BE Curl at 12.35 | AAOI Daily 50/55 at 55.00",
   });
 });
 
@@ -52,5 +52,25 @@ test("single curl notification falls back without undefined text", () => {
   assert.deepEqual(notification, {
     title: "BE: Curl alert",
     message: "Daily 50/55 -> above 10m 5/12 at 12.00",
+  });
+});
+
+test("mtf touch notification describes immediate reaction", () => {
+  const notification = longAlertNotification([
+    {
+      quote: { symbol: "MRVL" },
+      match: {
+        type: "mtf_cloud_price_touch",
+        label: "Hourly 34/50",
+        cloud_label: "Hourly 34/50",
+        direction: "reject_down",
+        entry_price: 107,
+      },
+    },
+  ]);
+
+  assert.deepEqual(notification, {
+    title: "MRVL: Hourly 34/50 Touch alert",
+    message: "Price rejected down from Hourly 34/50 at 107.00",
   });
 });

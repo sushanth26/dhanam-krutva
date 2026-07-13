@@ -10,7 +10,7 @@ import { useLatestRef } from "./hooks/useLatestRef";
 import { useLoadingState } from "./hooks/useLoadingState";
 import { useShellData } from "./hooks/useShellData";
 import { fetchAlertStrategies, saveAlertStrategiesRemote } from "./lib/alertStrategies";
-import { getJson, postJson } from "./lib/api";
+import { deleteJson, getJson, postJson } from "./lib/api";
 import { pageFromLocationHash, hashForPage } from "./lib/appNavigation";
 import { trendBucketsForQuotes } from "./lib/appSelectors";
 import { formatMarketTime } from "./lib/dates";
@@ -26,6 +26,7 @@ const WATCHLIST_SYNC_INTERVAL_MS = 2 * 60 * 1000;
 export default function App() {
   const [watchlists, setWatchlists] = useState(loadWatchlists);
   const [quotesByTab, setQuotesByTab] = useState(() => initialTabState(loadWatchlists(), []));
+  const [mtfAlertHistory, setMtfAlertHistory] = useState([]);
   const [updatedTextByTab, setUpdatedTextByTab] = useState(() => initialTabState(loadWatchlists(), "Webull polling stopped"));
   const [liveAlert, setLiveAlert] = useState("");
   const [activePage, setActivePage] = useState(() => pageFromLocationHash(window.location.hash));
@@ -64,10 +65,7 @@ export default function App() {
   const updatedText = updatedTextByTab[watchlistTab] || "";
   const tradingAccountId = useMemo(() => marginTradingAccountId(accounts, selectedAccountId), [accounts, selectedAccountId]);
   const trendBuckets = useMemo(() => trendBucketsForQuotes(quotes), [quotes]);
-  const mtfAlertRows = useMemo(
-    () => longAlertRows(watchlists, quotesByTab, autoTrade.strategies),
-    [watchlists, quotesByTab, autoTrade.strategies],
-  );
+  const mtfAlertRows = useMemo(() => mtfAlertHistory, [mtfAlertHistory]);
 
   async function refreshWatchlists({ showLoading = true } = {}) {
     if (showLoading) setLoadingKey("watchlists", true);
@@ -177,6 +175,7 @@ export default function App() {
       return;
     }
     lastMtfSignature.current = { ...lastMtfSignature.current, [watchlist.id]: signature };
+    saveMtfAlertRows(rows).catch(() => {});
     const { title, message } = longAlertNotification(rows);
     addNotification({ title, message, kind: "mtf" });
     if (notificationStateRef.current.appEnabled && notificationStateRef.current.permission === "granted") {
@@ -186,6 +185,27 @@ export default function App() {
         tag: `long-mtf-${watchlist.id}`,
         url: "/#mtfs",
       }).catch(() => {});
+    }
+  }
+
+  async function saveMtfAlertRows(rows) {
+    const alerts = rows.map((row) => ({
+      ...row,
+      id: longAlertSignature([row]),
+      symbol: row.quote?.symbol,
+      created_at: new Date().toISOString(),
+    }));
+    const payload = await postJson("/api/webull/mtf-alerts", { alerts });
+    setMtfAlertHistory(normalizeStoredAlertRows(payload.alerts || []));
+  }
+
+  async function deleteMtfAlert(id) {
+    if (!id) return;
+    try {
+      const payload = await deleteJson(`/api/webull/mtf-alerts/${encodeURIComponent(id)}`);
+      setMtfAlertHistory(normalizeStoredAlertRows(payload.alerts || []));
+    } catch (error) {
+      setLiveAlert(error.message);
     }
   }
 
@@ -356,6 +376,7 @@ export default function App() {
 
   useEffect(() => {
     refreshShell();
+    loadMtfAlertHistory();
     refreshAppMarketData();
     passiveMarketTimer.current = setInterval(() => {
       if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false });
@@ -366,6 +387,15 @@ export default function App() {
       if (watchlistSyncTimer.current) clearInterval(watchlistSyncTimer.current);
     };
   }, []);
+
+  async function loadMtfAlertHistory() {
+    try {
+      const payload = await getJson("/api/webull/mtf-alerts");
+      setMtfAlertHistory(normalizeStoredAlertRows(payload.alerts || []));
+    } catch {
+      setMtfAlertHistory([]);
+    }
+  }
 
   useEffect(() => {
     fetchAlertStrategies()
@@ -434,6 +464,7 @@ export default function App() {
         {activePage === "mtfs" ? (
           <MtfAlertsPage
             loading={loading.prices}
+            onDeleteAlert={deleteMtfAlert}
             onRefresh={refreshAllPrices}
             rows={mtfAlertRows}
           />
@@ -462,4 +493,16 @@ export default function App() {
       </main>
     </>
   );
+}
+
+function normalizeStoredAlertRows(alerts) {
+  return alerts
+    .map((row) => ({
+      ...row,
+      watchlist: row.watchlist || { id: "stored", name: row.list || "Stored alerts" },
+      quote: row.quote || { symbol: row.symbol },
+      match: row.match || {},
+    }))
+    .filter((row) => row.quote?.symbol && row.match?.type)
+    .sort((left, right) => String(right.match.candle_time || right.created_at || "").localeCompare(String(left.match.candle_time || left.created_at || "")));
 }

@@ -22,6 +22,7 @@ REGULAR_MARKET_OPEN = time(9, 30)
 NINE_EMA_TOUCH_CUTOFF = time(10, 30)
 NINE_EMA_RECENT_CLOUD_LOOKBACK = 4
 CURL_MTF_TOUCH_LOOKBACK = timedelta(hours=1)
+BOUNCE_OVERHEAD_CLOUD_BUFFER = 0.015
 A_PLUS_PLUS_MAX_RISK = 100
 A_PLUS_PLUS_STOP_BUFFER = 1
 MTF_CLOUD_STOP_BUFFER = 3
@@ -335,9 +336,19 @@ def mtf_signal_matches(
             ema_10m,
             ema_1h,
             ema_daily,
+            risk_amount=risk_amount,
+            fixed_stop_buffer=fixed_stop_buffer,
         ),
-        *ten_minute_34_50_bounce_matches(ten_minute_candles),
-        *mtf_cloud_touch_matches(live_price, ema_1h, ema_daily, candle_time),
+        *ten_minute_34_50_bounce_matches(ten_minute_candles, ema_1h, ema_daily, risk_amount=risk_amount, fixed_stop_buffer=fixed_stop_buffer),
+        *mtf_cloud_touch_matches(
+            live_price,
+            ema_1h,
+            ema_daily,
+            latest_candle=candle,
+            candle_time=candle_time,
+            risk_amount=risk_amount,
+            fixed_stop_buffer=fixed_stop_buffer,
+        ),
     ]
 
 
@@ -345,12 +356,20 @@ def mtf_cloud_touch_matches(
     price: float | None,
     ema_1h: dict[str, float | None],
     ema_daily: dict[str, float | None],
+    latest_candle: dict[str, Any] | None = None,
     candle_time: Any = None,
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
+    fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
 ) -> list[dict[str, Any]]:
-    if price is None:
+    if price is None or not latest_candle:
         return []
 
     matches = []
+    candle_low = latest_candle.get("low")
+    candle_high = latest_candle.get("high")
+    if candle_low is None or candle_high is None:
+        return []
+
     for check in LONG_MTF_CLOUDS:
         ema_set = ema_1h if check["source"] == "hourly" else ema_daily
         first = ema_set.get(check["keys"][0])
@@ -359,25 +378,52 @@ def mtf_cloud_touch_matches(
             continue
         cloud_low = min(first, second)
         cloud_high = max(first, second)
-        if not (cloud_low <= price <= cloud_high):
+        if not candle_touches_cloud(candle_low, candle_high, cloud_low, cloud_high):
             continue
+        direction = mtf_touch_reaction_direction(price, cloud_low, cloud_high)
+        if not direction:
+            continue
+        is_long = direction == "bounce_up"
+        stop = cloud_low - fixed_stop_buffer if is_long else cloud_high + fixed_stop_buffer
+        risk_plan = fixed_stop_risk_plan(
+            entry=price,
+            stop=stop,
+            max_risk=risk_amount,
+            stop_buffer=fixed_stop_buffer,
+            stop_mode="mtf-cloud-touch",
+        )
+        action_word = "bounced up from" if is_long else "rejected down from"
         matches.append(
             {
                 "label": check["label"],
-                "display_label": f"{check['label']} touch",
+                "display_label": f"{check['label']} {action_word}",
                 "cloud_label": check["label"],
                 "timeframe": check["timeframe"],
                 "cloud_low": round(cloud_low, 4),
                 "cloud_high": round(cloud_high, 4),
+                "candle_low": round(candle_low, 4),
+                "candle_high": round(candle_high, 4),
                 "entry_price": round(price, 4),
                 "last_price": round(price, 4),
+                "stop_cloud_low": round(cloud_low, 4),
+                "stop_cloud_high": round(cloud_high, 4),
+                **({"risk_plan": risk_plan} if risk_plan else {}),
                 "candle_time": candle_time,
                 "type": "mtf_cloud_price_touch",
                 "status": "confirmed",
-                "direction": "touch",
+                "direction": direction,
+                "trade_action": "Long" if is_long else "Short",
             }
         )
     return matches
+
+
+def mtf_touch_reaction_direction(price: float, cloud_low: float, cloud_high: float) -> str | None:
+    if price > cloud_high:
+        return "bounce_up"
+    if price < cloud_low:
+        return "reject_down"
+    return None
 
 
 def long_mtf_pullback_matches(
@@ -386,6 +432,8 @@ def long_mtf_pullback_matches(
     ema_10m: dict[str, float | None],
     ema_1h: dict[str, float | None],
     ema_daily: dict[str, float | None],
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
+    fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
 ) -> list[dict[str, Any]]:
     if ten_minute_trend not in ("Bullish", "Bearish"):
         return []
@@ -461,6 +509,15 @@ def long_mtf_pullback_matches(
 
     entry_price = max(fast_cloud_low, min(candle_close, fast_cloud_high))
     labels = [source["label"] for source in mtf_sources]
+    stop_cloud_low = min(source["cloud_low"] for source in mtf_sources)
+    stop_cloud_high = max(source["cloud_high"] for source in mtf_sources)
+    risk_plan = fixed_stop_risk_plan(
+        entry=entry_price,
+        stop=stop_cloud_low - fixed_stop_buffer,
+        max_risk=risk_amount,
+        stop_buffer=fixed_stop_buffer,
+        stop_mode="curl-mtf-cloud",
+    )
     return [
         {
             "label": "Curl",
@@ -473,6 +530,8 @@ def long_mtf_pullback_matches(
             "mtf_touch_time": mtf_sources[0]["touch_time"],
             "mtf_cloud_low": mtf_sources[0]["cloud_low"],
             "mtf_cloud_high": mtf_sources[0]["cloud_high"],
+            "stop_cloud_low": round(stop_cloud_low, 4),
+            "stop_cloud_high": round(stop_cloud_high, 4),
             "cloud_low": round(fast_cloud_low, 4),
             "cloud_high": round(fast_cloud_high, 4),
             "candle_low": round(candle_low, 4),
@@ -485,6 +544,7 @@ def long_mtf_pullback_matches(
             "direction": "up_to_10m_5_12",
             "trend": ten_minute_trend,
             "trade_action": "Long",
+            **({"risk_plan": risk_plan} if risk_plan else {}),
         }
     ]
 
@@ -517,7 +577,13 @@ def is_recent_curl_touch(touch_time: Any, reclaim_time: Any) -> bool:
     return timedelta(0) <= parsed_reclaim_time - parsed_touch_time <= CURL_MTF_TOUCH_LOOKBACK
 
 
-def ten_minute_34_50_bounce_matches(ten_minute_candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def ten_minute_34_50_bounce_matches(
+    ten_minute_candles: list[dict[str, Any]],
+    ema_1h: dict[str, float | None] | None = None,
+    ema_daily: dict[str, float | None] | None = None,
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
+    fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
+) -> list[dict[str, Any]]:
     candle = latest_confirmed_ten_minute_candle(ten_minute_candles)
     if not candle:
         return []
@@ -549,13 +615,33 @@ def ten_minute_34_50_bounce_matches(ten_minute_candles: list[dict[str, Any]]) ->
         return []
 
     candle_time = candle_time_key(candle)
+    overhead_clouds = nearby_overhead_mtf_clouds(candle_close, ema_1h or {}, ema_daily or {})
+    setup_quality = "bad" if overhead_clouds else "good"
+    setup_quality_label = "Bad" if setup_quality == "bad" else "Good"
+    setup_quality_note = (
+        f"Overhead cloud nearby: {', '.join(cloud['label'] for cloud in overhead_clouds)}"
+        if overhead_clouds
+        else "Clear room above 10m 34/50"
+    )
+    risk_plan = fixed_stop_risk_plan(
+        entry=candle_close,
+        stop=cloud_low - fixed_stop_buffer,
+        max_risk=risk_amount,
+        stop_buffer=fixed_stop_buffer,
+        stop_mode="10m-34-50-cloud",
+    )
     return [
         {
             "label": "10m 34/50 Bounce",
-            "display_label": "10m 34/50 Bounce",
+            "display_label": f"{setup_quality_label} 34/50 Bounce",
             "timeframe": "10m",
             "mtf_label": "10m 34/50",
             "cloud_label": "10m 34/50",
+            "setup_quality": setup_quality,
+            "setup_quality_note": setup_quality_note,
+            "overhead_clouds": overhead_clouds,
+            "stop_cloud_low": round(cloud_low, 4),
+            "stop_cloud_high": round(cloud_high, 4),
             "cloud_low": round(cloud_low, 4),
             "cloud_high": round(cloud_high, 4),
             "candle_low": round(candle_low, 4),
@@ -568,8 +654,43 @@ def ten_minute_34_50_bounce_matches(ten_minute_candles: list[dict[str, Any]]) ->
             "direction": "bounce_above_10m_34_50",
             "trend": "Bullish",
             "trade_action": "Long",
+            **({"risk_plan": risk_plan} if risk_plan else {}),
         }
     ]
+
+
+def nearby_overhead_mtf_clouds(
+    entry_price: float,
+    ema_1h: dict[str, float | None],
+    ema_daily: dict[str, float | None],
+) -> list[dict[str, Any]]:
+    if entry_price <= 0:
+        return []
+
+    overhead_clouds = []
+    for check in LONG_MTF_CLOUDS:
+        ema_set = ema_1h if check["source"] == "hourly" else ema_daily
+        first = ema_set.get(check["keys"][0])
+        second = ema_set.get(check["keys"][1])
+        if first is None or second is None:
+            continue
+        cloud_low = min(first, second)
+        cloud_high = max(first, second)
+        if cloud_high < entry_price:
+            continue
+        distance = max(cloud_low - entry_price, 0)
+        distance_ratio = distance / entry_price
+        if distance_ratio > BOUNCE_OVERHEAD_CLOUD_BUFFER:
+            continue
+        overhead_clouds.append(
+            {
+                "label": check["label"],
+                "cloud_low": round(cloud_low, 4),
+                "cloud_high": round(cloud_high, 4),
+                "distance_pct": round(distance_ratio * 100, 2),
+            }
+        )
+    return overhead_clouds
 
 
 def historical_fast_clouds_by_candle_time(candles: list[dict[str, Any]]) -> dict[Any, tuple[float, float]]:

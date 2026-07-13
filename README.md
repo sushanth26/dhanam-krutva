@@ -107,6 +107,7 @@ Optional local/server persistence:
 ```text
 WEBULL_TOKEN_DIR=.webull-token
 WATCHLIST_FILE=.watchlists.json
+ALERT_HISTORY_FILE=.mtf-alert-history.sqlite3
 WEBULL_GUARD_ENABLED=true
 WEBULL_GUARD_FILE=.webull-guard.json
 ```
@@ -161,6 +162,7 @@ WEBULL_ENV=prod
 WEBULL_REGION=us
 WEBULL_TOKEN_DIR=/data/.webull-token
 WATCHLIST_FILE=/data/watchlists.json
+ALERT_HISTORY_FILE=/data/mtf-alert-history.sqlite3
 WEBULL_GUARD_ENABLED=true
 WEBULL_GUARD_FILE=/data/webull-guard.json
 APP_USERNAME=sushanth
