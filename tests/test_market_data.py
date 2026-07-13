@@ -513,12 +513,12 @@ def test_mtf_signal_matches_allows_bearish_trend_but_still_long_only():
         101,
         "Bearish",
         seeded_pullback_candles(
-            {"low": 104, "high": 109, "close": 99},
+            {"low": 94, "high": 99, "close": 93},
             {"open": 96, "high": 103, "low": 95, "close": 103},
         ),
         {"5": 100, "12": 102, "34": 110, "50": 112},
-        {"34": 104, "50": 108},
-        {"20": 105, "21": 107, "50": 106, "55": 109},
+        {"34": 94, "50": 98},
+        {"20": 95, "21": 97, "50": 96, "55": 99},
     )
 
     assert len(matches) == 1
@@ -530,6 +530,22 @@ def test_mtf_signal_matches_allows_bearish_trend_but_still_long_only():
     assert matches[0]["mtf_label"] == "Hourly 34/50 + Daily 20/21 + Daily 50/55"
     assert matches[0]["trade_action"] == "Long"
     assert matches[0]["trend"] == "Bearish"
+
+
+def test_mtf_signal_matches_requires_curl_mtf_cloud_below_10m_5_12_cloud():
+    matches = mtf_signal_matches(
+        123,
+        "Bullish",
+        seeded_pullback_candles(
+            {"low": 121, "high": 123, "close": 121},
+            {"low": 118, "high": 124, "close": 123},
+        ),
+        {"5": 122, "12": 121, "34": 100, "50": 110},
+        {"34": 121, "50": 123},
+        {"20": 80, "21": 90, "50": 130, "55": 135},
+    )
+
+    assert [match for match in matches if match["type"] == "long_mtf_5_12_touch"] == []
 
 
 def test_mtf_signal_matches_alerts_immediately_on_incomplete_10m_touch():

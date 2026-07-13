@@ -435,6 +435,8 @@ def long_mtf_pullback_matches(
             continue
         cloud_low = min(first, second)
         cloud_high = max(first, second)
+        if cloud_high >= fast_cloud_low:
+            continue
         touch_candle = latest_valid_mtf_touch_before_10m_reclaim(
             previous_today,
             cloud_low,
