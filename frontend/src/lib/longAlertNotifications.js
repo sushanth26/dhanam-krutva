@@ -35,7 +35,8 @@ function setupMessage(match) {
     return `${cleanSetupLabel(match.display_label || match.label || "10m 34/50 Bounce")} at ${formatPrice(match.entry_price)}`;
   }
   if (match.type === "mtf_cloud_price_touch") {
-    return `Price touching ${touchLabel(match)} at ${formatPrice(match.entry_price)}`;
+    const action = match.direction === "reject_down" ? "rejected down from" : "bounced up from";
+    return `Price ${action} ${touchLabel(match)} at ${formatPrice(match.entry_price)}`;
   }
   const triggerLabel = curlTriggerLabel(match);
   return `${triggerLabel} -> above 10m 5/12 at ${formatPrice(match.entry_price)}`;

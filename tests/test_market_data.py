@@ -301,29 +301,46 @@ def test_mtf_signal_matches_skips_chop_trend():
     assert matches == []
 
 
-def test_mtf_cloud_touch_matches_alerts_on_live_price_inside_each_cloud():
+def test_mtf_cloud_touch_matches_alerts_when_latest_candle_touches_and_moves_up():
     matches = mtf_cloud_touch_matches(
-        112,
+        116,
         {"34": 111, "50": 115},
         {"20": 108, "21": 114, "50": 130, "55": 140},
+        latest_candle={"low": 112, "high": 116, "close": 116},
         candle_time="2026-07-02T09:40:00",
     )
 
     assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 20/21"]
     assert all(match["status"] == "confirmed" for match in matches)
-    assert all(match["direction"] == "touch" for match in matches)
+    assert all(match["direction"] == "bounce_up" for match in matches)
     assert all(match["type"] == "mtf_cloud_price_touch" for match in matches)
+    assert all(match["trade_action"] == "Long" for match in matches)
     assert all(match["candle_time"] == "2026-07-02T09:40:00" for match in matches)
-    assert matches[0]["entry_price"] == 112
+    assert matches[0]["entry_price"] == 116
     assert matches[0]["cloud_low"] == 111
     assert matches[0]["cloud_high"] == 115
 
 
-def test_mtf_cloud_touch_matches_ignores_price_outside_all_clouds():
+def test_mtf_cloud_touch_matches_alerts_when_latest_candle_touches_and_moves_down():
     matches = mtf_cloud_touch_matches(
-        50,
+        107,
         {"34": 111, "50": 115},
         {"20": 108, "21": 110, "50": 130, "55": 140},
+        latest_candle={"low": 107, "high": 112, "close": 107},
+        candle_time="2026-07-02T09:40:00",
+    )
+
+    assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 20/21"]
+    assert all(match["direction"] == "reject_down" for match in matches)
+    assert all(match["trade_action"] == "Short" for match in matches)
+
+
+def test_mtf_cloud_touch_matches_ignores_price_still_inside_cloud():
+    matches = mtf_cloud_touch_matches(
+        112,
+        {"34": 111, "50": 115},
+        {"20": 108, "21": 114, "50": 130, "55": 140},
+        latest_candle={"low": 112, "high": 116, "close": 112},
     )
 
     assert matches == []
@@ -334,6 +351,7 @@ def test_mtf_cloud_touch_matches_requires_a_live_price():
         None,
         {"34": 111, "50": 115},
         {"20": 108, "21": 110, "50": 130, "55": 140},
+        latest_candle={"low": 111, "high": 116, "close": 116},
     )
 
     assert matches == []
@@ -341,20 +359,21 @@ def test_mtf_cloud_touch_matches_requires_a_live_price():
 
 def test_mtf_signal_matches_adds_cloud_touch_when_live_price_given():
     matches = mtf_signal_matches(
-        112,
+        116,
         "Chop",
         [
             {"low": 100, "high": 106, "close": 105, "source_count": 2, "session_date": "2026-07-02", "time": "2026-07-02T09:30:00"},
-            {"low": 109.5, "high": 112.5, "close": 112, "source_count": 1, "session_date": "2026-07-02", "time": "2026-07-02T09:40:00"},
+            {"low": 109.5, "high": 116.5, "close": 116, "source_count": 1, "session_date": "2026-07-02", "time": "2026-07-02T09:40:00"},
         ],
         {"5": 106, "9": 108, "12": 109, "34": 107, "50": 110},
         {"20": 108, "21": 110, "34": 111, "50": 115, "55": 116},
         {"20": 95, "21": 96, "50": 118, "55": 120},
-        live_price=112,
+        live_price=116,
     )
 
     assert [match["label"] for match in matches] == ["Hourly 34/50"]
     assert matches[0]["type"] == "mtf_cloud_price_touch"
+    assert matches[0]["direction"] == "bounce_up"
     assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
 
 

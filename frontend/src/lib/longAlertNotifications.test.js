@@ -54,3 +54,23 @@ test("single curl notification falls back without undefined text", () => {
     message: "Daily 50/55 -> above 10m 5/12 at 12.00",
   });
 });
+
+test("mtf touch notification describes immediate reaction", () => {
+  const notification = longAlertNotification([
+    {
+      quote: { symbol: "MRVL" },
+      match: {
+        type: "mtf_cloud_price_touch",
+        label: "Hourly 34/50",
+        cloud_label: "Hourly 34/50",
+        direction: "reject_down",
+        entry_price: 107,
+      },
+    },
+  ]);
+
+  assert.deepEqual(notification, {
+    title: "MRVL: Hourly 34/50 Touch alert",
+    message: "Price rejected down from Hourly 34/50 at 107.00",
+  });
+});
