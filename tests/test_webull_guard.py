@@ -20,6 +20,7 @@ def settings(tmp_path: Path) -> Settings:
         push_subscription_file=tmp_path / "push.json",
         watchlist_file=tmp_path / "watchlists.json",
         alert_strategy_file=tmp_path / "alert-strategies.json",
+        alert_history_file=tmp_path / "mtf-alert-history.sqlite3",
         webull_guard_enabled=True,
         webull_guard_file=tmp_path / "webull-guard.json",
         webull_verify_cooldown_seconds=3600,
