@@ -3,7 +3,6 @@ import { useMemo, useState } from "react";
 import { alertStrategyEnabled } from "../lib/alertStrategies";
 import { formatDateTime } from "../lib/dates";
 import { formatPrice } from "../lib/market";
-import { SummaryTile } from "./SummaryTile";
 
 const LIVE_LONG_SETUP_TYPES = new Set(["long_mtf_5_12_touch", "10m_34_50_bounce"]);
 const TOUCH_ALERT_TYPES = new Set(["mtf_cloud_price_touch"]);
@@ -24,7 +23,7 @@ export function longAlertRows(watchlists, quotesByTab, strategies = {}) {
   });
 }
 
-export function MtfAlertsPage({ loading, onRefresh, rows }) {
+export function MtfAlertsPage({ loading, onDeleteAlert, onRefresh, rows }) {
   const [searchText, setSearchText] = useState("");
   const sortedRows = useMemo(() => [...rows].sort(compareAlertRows), [rows]);
   const visibleRows = useMemo(() => filterRows(sortedRows, searchText), [sortedRows, searchText]);
@@ -49,13 +48,6 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
           placeholder="Symbol, setup, trend"
         />
       </label>
-      <div className="mtf-alert-counts" aria-label="Setup alert counts">
-        <SummaryTile label="Alerts" value={visibleRows.length} />
-        <SummaryTile label="Curls" value={visibleRows.filter((row) => row.match.type === "long_mtf_5_12_touch").length} />
-        <SummaryTile label="34/50 Bounce" value={visibleRows.filter((row) => row.match.type === "10m_34_50_bounce").length} />
-        <SummaryTile label="Cloud Touch" value={visibleRows.filter((row) => row.match.type === "mtf_cloud_price_touch").length} />
-        <SummaryTile label="Symbols" value={new Set(visibleRows.map((row) => row.quote.symbol)).size} />
-      </div>
       <div className="mtf-alert-table-wrap">
         <table className="mtf-alert-table">
           <thead>
@@ -65,6 +57,7 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
               <th>Trend</th>
               <th>Entry</th>
               <th>Alert Time</th>
+              <th aria-label="Actions"></th>
             </tr>
           </thead>
           <tbody>
@@ -84,10 +77,21 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
                 <td data-label="Trend"><span className={`trend-pill ${String(row.match.trend || "").toLowerCase()}`}>{row.match.trend || "-"}</span></td>
                 <td data-label="Entry">{formatPrice(row.match.entry_price)}</td>
                 <td data-label="Alert Time">{formatDateTime(row.match.candle_time)}</td>
+                <td data-label="Actions" className="mtf-alert-actions">
+                  <button
+                    type="button"
+                    className="row-delete-button"
+                    onClick={() => onDeleteAlert(row.id)}
+                    aria-label={`Delete ${row.quote.symbol} alert`}
+                    title="Delete alert"
+                  >
+                    x
+                  </button>
+                </td>
               </tr>
             )) : (
               <tr>
-                <td colSpan="5" className="empty-table-cell">{rows.length ? "No alerts match this search" : "No stored alerts yet"}</td>
+                <td colSpan="6" className="empty-table-cell">{rows.length ? "No alerts match this search" : "No stored alerts yet"}</td>
               </tr>
             )}
           </tbody>

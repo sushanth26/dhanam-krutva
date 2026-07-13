@@ -10,7 +10,7 @@ import { useLatestRef } from "./hooks/useLatestRef";
 import { useLoadingState } from "./hooks/useLoadingState";
 import { useShellData } from "./hooks/useShellData";
 import { fetchAlertStrategies, saveAlertStrategiesRemote } from "./lib/alertStrategies";
-import { getJson, postJson } from "./lib/api";
+import { deleteJson, getJson, postJson } from "./lib/api";
 import { pageFromLocationHash, hashForPage } from "./lib/appNavigation";
 import { trendBucketsForQuotes } from "./lib/appSelectors";
 import { formatMarketTime } from "./lib/dates";
@@ -197,6 +197,16 @@ export default function App() {
     }));
     const payload = await postJson("/api/webull/mtf-alerts", { alerts });
     setMtfAlertHistory(normalizeStoredAlertRows(payload.alerts || []));
+  }
+
+  async function deleteMtfAlert(id) {
+    if (!id) return;
+    try {
+      const payload = await deleteJson(`/api/webull/mtf-alerts/${encodeURIComponent(id)}`);
+      setMtfAlertHistory(normalizeStoredAlertRows(payload.alerts || []));
+    } catch (error) {
+      setLiveAlert(error.message);
+    }
   }
 
   function updateAutoTradeSettings(nextSettings) {
@@ -454,6 +464,7 @@ export default function App() {
         {activePage === "mtfs" ? (
           <MtfAlertsPage
             loading={loading.prices}
+            onDeleteAlert={deleteMtfAlert}
             onRefresh={refreshAllPrices}
             rows={mtfAlertRows}
           />

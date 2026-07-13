@@ -72,3 +72,15 @@ def get_mtf_alerts():
 def save_mtf_alerts(payload: AlertHistoryPayload):
     settings = get_settings()
     return {"alerts": AlertHistoryStore(settings.alert_history_file).upsert_many(payload.alerts)}
+
+
+@router.delete("/mtf-alerts/{alert_id}")
+def delete_mtf_alert(alert_id: str):
+    settings = get_settings()
+    return {"alerts": AlertHistoryStore(settings.alert_history_file).delete(alert_id)}
+
+
+@router.delete("/mtf-alerts")
+def delete_all_mtf_alerts():
+    settings = get_settings()
+    return {"alerts": AlertHistoryStore(settings.alert_history_file).delete_all()}

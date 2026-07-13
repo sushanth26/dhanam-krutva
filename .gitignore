@@ -9,3 +9,4 @@ webull_trade_sdk.log*
 .webull-guard*.json
 .web-push-subscriptions.json
 .alert-strategies.json
+.mtf-alert-history.*

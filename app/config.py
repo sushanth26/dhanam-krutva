@@ -116,8 +116,8 @@ def default_alert_strategy_file() -> str:
 
 def default_alert_history_file() -> str:
     if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
-        return "/data/mtf-alert-history.json"
-    return ".mtf-alert-history.json"
+        return "/data/mtf-alert-history.sqlite3"
+    return ".mtf-alert-history.sqlite3"
 
 
 def default_webull_guard_file() -> str:
