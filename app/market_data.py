@@ -22,6 +22,7 @@ REGULAR_MARKET_OPEN = time(9, 30)
 NINE_EMA_TOUCH_CUTOFF = time(10, 30)
 NINE_EMA_RECENT_CLOUD_LOOKBACK = 4
 CURL_MTF_TOUCH_LOOKBACK = timedelta(hours=1)
+BOUNCE_OVERHEAD_CLOUD_BUFFER = 0.015
 A_PLUS_PLUS_MAX_RISK = 100
 A_PLUS_PLUS_STOP_BUFFER = 1
 MTF_CLOUD_STOP_BUFFER = 3
@@ -336,7 +337,7 @@ def mtf_signal_matches(
             ema_1h,
             ema_daily,
         ),
-        *ten_minute_34_50_bounce_matches(ten_minute_candles),
+        *ten_minute_34_50_bounce_matches(ten_minute_candles, ema_1h, ema_daily),
         *mtf_cloud_touch_matches(live_price, ema_1h, ema_daily, candle_time),
     ]
 
@@ -517,7 +518,11 @@ def is_recent_curl_touch(touch_time: Any, reclaim_time: Any) -> bool:
     return timedelta(0) <= parsed_reclaim_time - parsed_touch_time <= CURL_MTF_TOUCH_LOOKBACK
 
 
-def ten_minute_34_50_bounce_matches(ten_minute_candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def ten_minute_34_50_bounce_matches(
+    ten_minute_candles: list[dict[str, Any]],
+    ema_1h: dict[str, float | None] | None = None,
+    ema_daily: dict[str, float | None] | None = None,
+) -> list[dict[str, Any]]:
     candle = latest_confirmed_ten_minute_candle(ten_minute_candles)
     if not candle:
         return []
@@ -549,13 +554,24 @@ def ten_minute_34_50_bounce_matches(ten_minute_candles: list[dict[str, Any]]) ->
         return []
 
     candle_time = candle_time_key(candle)
+    overhead_clouds = nearby_overhead_mtf_clouds(candle_close, ema_1h or {}, ema_daily or {})
+    setup_quality = "ok" if overhead_clouds else "best"
+    setup_quality_label = "OK" if setup_quality == "ok" else "Best"
+    setup_quality_note = (
+        f"Overhead cloud nearby: {', '.join(cloud['label'] for cloud in overhead_clouds)}"
+        if overhead_clouds
+        else "Clear room above 10m 34/50"
+    )
     return [
         {
             "label": "10m 34/50 Bounce",
-            "display_label": "10m 34/50 Bounce",
+            "display_label": f"10m 34/50 Bounce ({setup_quality_label})",
             "timeframe": "10m",
             "mtf_label": "10m 34/50",
             "cloud_label": "10m 34/50",
+            "setup_quality": setup_quality,
+            "setup_quality_note": setup_quality_note,
+            "overhead_clouds": overhead_clouds,
             "cloud_low": round(cloud_low, 4),
             "cloud_high": round(cloud_high, 4),
             "candle_low": round(candle_low, 4),
@@ -570,6 +586,40 @@ def ten_minute_34_50_bounce_matches(ten_minute_candles: list[dict[str, Any]]) ->
             "trade_action": "Long",
         }
     ]
+
+
+def nearby_overhead_mtf_clouds(
+    entry_price: float,
+    ema_1h: dict[str, float | None],
+    ema_daily: dict[str, float | None],
+) -> list[dict[str, Any]]:
+    if entry_price <= 0:
+        return []
+
+    overhead_clouds = []
+    for check in LONG_MTF_CLOUDS:
+        ema_set = ema_1h if check["source"] == "hourly" else ema_daily
+        first = ema_set.get(check["keys"][0])
+        second = ema_set.get(check["keys"][1])
+        if first is None or second is None:
+            continue
+        cloud_low = min(first, second)
+        cloud_high = max(first, second)
+        if cloud_high < entry_price:
+            continue
+        distance = max(cloud_low - entry_price, 0)
+        distance_ratio = distance / entry_price
+        if distance_ratio > BOUNCE_OVERHEAD_CLOUD_BUFFER:
+            continue
+        overhead_clouds.append(
+            {
+                "label": check["label"],
+                "cloud_low": round(cloud_low, 4),
+                "cloud_high": round(cloud_high, 4),
+                "distance_pct": round(distance_ratio * 100, 2),
+            }
+        )
+    return overhead_clouds
 
 
 def historical_fast_clouds_by_candle_time(candles: list[dict[str, Any]]) -> dict[Any, tuple[float, float]]:

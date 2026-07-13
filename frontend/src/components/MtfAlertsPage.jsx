@@ -63,6 +63,7 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
                   <div className="mtf-alert-setup">
                     <strong>{row.match.display_label || row.match.label}</strong>
                     <span>{formatPrice(row.match.cloud_low)}-{formatPrice(row.match.cloud_high)} {row.match.cloud_label || "10m 5/12"}</span>
+                    {row.match.setup_quality_note ? <span>{row.match.setup_quality_note}</span> : null}
                   </div>
                 </td>
                 <td data-label="Trend"><span className={`trend-pill ${String(row.match.trend || "").toLowerCase()}`}>{row.match.trend || "-"}</span></td>
