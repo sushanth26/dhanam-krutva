@@ -410,6 +410,8 @@ def long_mtf_pullback_matches(
     fast_cloud_high = max(ema5, ema12)
     if not candle_touches_cloud(candle_low, candle_high, fast_cloud_low, fast_cloud_high):
         return []
+    if candle_close <= fast_cloud_high or previous_close > fast_cloud_high:
+        return []
     if candle_close <= previous_close:
         return []
 
