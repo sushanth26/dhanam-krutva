@@ -14,7 +14,7 @@ export function longAlertNotification(rows) {
     : `${rows.length} Setup alerts`;
   const message = rows.length === 1
     ? setupMessage(first.match)
-    : rows.slice(0, 3).map((row) => `${rowSymbol(row)} ${setupName(row.match)} ${riskText(row.match)}`.trim()).join(" | ");
+    : rows.slice(0, 3).map((row) => `${rowSymbol(row)} ${setupName(row.match)} at ${formatPrice(row.match.entry_price)}`).join(" | ");
   return { title, message };
 }
 
@@ -32,13 +32,13 @@ function setupName(match) {
 
 function setupMessage(match) {
   if (match.type === "10m_34_50_bounce" || match.type === "10m_cloud_bounce") {
-    return `${cleanSetupLabel(match.display_label || match.label || "10m 34/50 Bounce")} ${riskText(match)}`.trim();
+    return `${cleanSetupLabel(match.display_label || match.label || "10m 34/50 Bounce")} at ${formatPrice(match.entry_price)}`;
   }
   if (match.type === "mtf_cloud_price_touch") {
-    return `Price touching ${touchLabel(match)} ${riskText(match)}`.trim();
+    return `Price touching ${touchLabel(match)} at ${formatPrice(match.entry_price)}`;
   }
   const triggerLabel = curlTriggerLabel(match);
-  return `${triggerLabel} -> above 10m 5/12 ${riskText(match)}`.trim();
+  return `${triggerLabel} -> above 10m 5/12 at ${formatPrice(match.entry_price)}`;
 }
 
 function curlTriggerLabel(match) {
@@ -58,12 +58,4 @@ function cleanSetupLabel(label) {
 
 function touchLabel(match) {
   return match.cloud_label || match.mtf_label || match.display_label || match.label || "MTF cloud";
-}
-
-function riskText(match) {
-  const entry = formatPrice(match.entry_price);
-  const stop = formatPrice(match.risk_plan?.stop);
-  const quantity = Number(match.risk_plan?.shares);
-  const quantityText = Number.isFinite(quantity) && quantity > 0 ? String(Math.floor(quantity)) : "-";
-  return `Entry ${entry} | SL ${stop} | Qty ${quantityText}`;
 }
