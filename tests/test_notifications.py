@@ -10,6 +10,7 @@ from app.notifications import (
     monitored_symbols,
     mtf_notification_payload,
     mtf_signature,
+    save_push_alert_history,
 )
 from app.watchlists import WatchlistStore
 
@@ -42,6 +43,31 @@ def test_apply_enabled_strategies_drops_matches_for_disabled_strategy_and_emptie
 
     assert [quote["symbol"] for quote in filtered] == ["MU"]
     assert [match["type"] for match in filtered[0]["mtf_matches"]] == ["long_mtf_5_12_touch"]
+
+
+def test_save_push_alert_history_persists_background_alerts(tmp_path):
+    settings = SimpleNamespace(alert_history_file=tmp_path / "alerts.sqlite3")
+    quotes = [
+        {
+            "symbol": "MU",
+            "price": 92.5,
+            "mtf_matches": [
+                {
+                    "type": "mtf_cloud_price_touch",
+                    "display_label": "Hourly 34/50 Touch",
+                    "candle_time": "2026-07-13T14:10:00",
+                    "cloud_label": "Hourly 34/50",
+                }
+            ],
+        }
+    ]
+
+    alerts = save_push_alert_history(settings, quotes)
+
+    assert len(alerts) == 1
+    assert alerts[0]["symbol"] == "MU"
+    assert alerts[0]["watchlist"]["id"] == "push-monitor"
+    assert alerts[0]["match"]["type"] == "mtf_cloud_price_touch"
 
 
 def test_mtf_notification_payload_lists_symbols_and_clouds():
