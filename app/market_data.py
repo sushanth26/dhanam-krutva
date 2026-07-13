@@ -1,4 +1,4 @@
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -21,6 +21,7 @@ MARKET_TIMEZONE = ZoneInfo("America/New_York")
 REGULAR_MARKET_OPEN = time(9, 30)
 NINE_EMA_TOUCH_CUTOFF = time(10, 30)
 NINE_EMA_RECENT_CLOUD_LOOKBACK = 4
+CURL_MTF_TOUCH_LOOKBACK = timedelta(hours=1)
 A_PLUS_PLUS_MAX_RISK = 100
 A_PLUS_PLUS_STOP_BUFFER = 1
 MTF_CLOUD_STOP_BUFFER = 3
@@ -432,7 +433,13 @@ def long_mtf_pullback_matches(
             continue
         cloud_low = min(first, second)
         cloud_high = max(first, second)
-        touch_candle = latest_valid_mtf_touch_before_10m_reclaim(previous_today, cloud_low, cloud_high, fast_clouds_by_time)
+        touch_candle = latest_valid_mtf_touch_before_10m_reclaim(
+            previous_today,
+            cloud_low,
+            cloud_high,
+            fast_clouds_by_time,
+            candle_time,
+        )
         if not touch_candle:
             continue
         touch_time = touch_candle.get("time") or touch_candle.get("sort_time") or touch_candle.get("timestamp")
@@ -483,8 +490,11 @@ def latest_valid_mtf_touch_before_10m_reclaim(
     cloud_low: float,
     cloud_high: float,
     fast_clouds_by_time: dict[Any, tuple[float, float]],
+    reclaim_time: Any = None,
 ) -> dict[str, Any] | None:
     for candle in reversed(candles):
+        if not is_recent_curl_touch(candle_time_key(candle), reclaim_time):
+            continue
         fast_cloud = fast_clouds_by_time.get(candle_time_key(candle))
         if not fast_cloud:
             continue
@@ -493,6 +503,14 @@ def latest_valid_mtf_touch_before_10m_reclaim(
         if candle_touches_cloud(candle.get("low"), candle.get("high"), cloud_low, cloud_high):
             return candle
     return None
+
+
+def is_recent_curl_touch(touch_time: Any, reclaim_time: Any) -> bool:
+    parsed_touch_time = parse_iso_time(touch_time)
+    parsed_reclaim_time = parse_iso_time(reclaim_time)
+    if not parsed_touch_time or not parsed_reclaim_time:
+        return False
+    return timedelta(0) <= parsed_reclaim_time - parsed_touch_time <= CURL_MTF_TOUCH_LOOKBACK
 
 
 def ten_minute_34_50_bounce_matches(ten_minute_candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
