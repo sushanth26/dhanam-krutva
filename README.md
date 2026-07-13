@@ -213,6 +213,8 @@ npm --prefix frontend run build
 - `POST /api/notifications/subscribe` - Saves a browser push subscription for closed-app notifications.
 - `POST /api/notifications/unsubscribe` - Removes a browser push subscription.
 - `POST /api/notifications/test` - Sends a test Web Push notification when VAPID keys are configured.
+- `GET /api/notifications/strategies` - Returns the on/off state for each alert strategy (Curls, 10m 34/50 Bounce, MTF Cloud Touch).
+- `POST /api/notifications/strategies` - Saves alert strategy on/off state; disabled strategies are filtered out of both the Setups table and push notifications.
 - `GET /api/tradingview/analyze` - Runs TradingView analysis for a symbol, exchange, and timeframe.
 - `GET /api/strategy/dry-run` - Runs the legacy dry-run strategy endpoint for selected symbols.
 - `POST /api/trade/buy` - Places a guarded one-share buy order for an approved watchlist symbol.
@@ -234,6 +236,70 @@ frontend/src/
 tests/
   test_market_data.py
   test_notifications.py
+```
+
+## Architecture
+
+```mermaid
+flowchart TD
+    UI["Browser: App.jsx\n(Scanner / MTFs / Settings)"]
+    SW["Service Worker (sw.js)"]
+
+    subgraph Backend["FastAPI backend (app/)"]
+        direction TB
+        Auth["HTTP Basic Auth middleware"]
+        Routers["Routers: accounts, webull, strategy,\nnotifications, trade, tradingview"]
+        MarketData["market_data.py\nEMA clouds + alert matches"]
+        AlertStrategies["alert_strategies.py\nstrategy on/off store"]
+        WebullSvc["webull_service.py"]
+        PushMonitor["MtfPushMonitor\nbackground poller"]
+        LocalState[("Local JSON state\nwatchlists / push subs /\nstrategies / guard / token cache")]
+    end
+
+    WebullAPI[("Webull OpenAPI\nuat / prod")]
+    WebPush[("Browser push service")]
+
+    UI -- "fetch /api/* (Basic Auth)" --> Auth
+    Auth --> Routers
+    Routers --> MarketData
+    MarketData --> WebullSvc
+    Routers --> AlertStrategies
+    WebullSvc -- "REST calls" --> WebullAPI
+    Routers -.-> LocalState
+    AlertStrategies -.-> LocalState
+    WebullSvc -.-> LocalState
+
+    PushMonitor -- "poll every\nMTF_PUSH_POLL_SECONDS" --> MarketData
+    PushMonitor --> AlertStrategies
+    PushMonitor -- "web-push (VAPID)" --> WebPush
+    WebPush --> SW
+    SW --> UI
+```
+
+**Alert flow** — how a live price becomes a Setups row or a phone notification:
+
+```mermaid
+flowchart TD
+    A["Webull 10m / 1H / 1D bars"] --> B["market_data.py: compute EMA clouds"]
+    B --> C["mtf_signal_matches()"]
+    C --> D["Curl\n(long_mtf_pullback_matches)"]
+    C --> E["10m 34/50 Bounce\n(ten_minute_34_50_bounce_matches)"]
+    C --> F["MTF Cloud Touch\n(mtf_cloud_touch_matches)"]
+    D --> G["quote.mtf_matches"]
+    E --> G
+    F --> G
+
+    G --> H["GET /api/webull/live-prices"]
+    H --> I["Frontend: longAlertRows()"]
+    I --> J{"Strategy enabled\nin Settings?"}
+    J -- yes --> K["Setups table row +\nin-app / device notification"]
+    J -- no --> L["hidden"]
+
+    G --> M["MtfPushMonitor.check_once()"]
+    M --> N["apply_enabled_strategies()"]
+    N --> O{"Signature changed\nsince last poll?"}
+    O -- yes --> P["Send Web Push (VAPID)"]
+    O -- no --> Q["skip - already notified\nfor this candle"]
 ```
 
 ## Safety Notes
