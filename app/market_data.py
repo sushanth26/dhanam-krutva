@@ -555,8 +555,8 @@ def ten_minute_34_50_bounce_matches(
 
     candle_time = candle_time_key(candle)
     overhead_clouds = nearby_overhead_mtf_clouds(candle_close, ema_1h or {}, ema_daily or {})
-    setup_quality = "ok" if overhead_clouds else "best"
-    setup_quality_label = "OK" if setup_quality == "ok" else "Best"
+    setup_quality = "bad" if overhead_clouds else "good"
+    setup_quality_label = "Bad" if setup_quality == "bad" else "Good"
     setup_quality_note = (
         f"Overhead cloud nearby: {', '.join(cloud['label'] for cloud in overhead_clouds)}"
         if overhead_clouds
@@ -565,7 +565,7 @@ def ten_minute_34_50_bounce_matches(
     return [
         {
             "label": "10m 34/50 Bounce",
-            "display_label": f"10m 34/50 Bounce ({setup_quality_label})",
+            "display_label": f"{setup_quality_label} 34/50 Bounce",
             "timeframe": "10m",
             "mtf_label": "10m 34/50",
             "cloud_label": "10m 34/50",

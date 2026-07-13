@@ -634,9 +634,9 @@ def test_mtf_signal_matches_includes_confirmed_10m_34_50_bounce_as_separate_setu
 
     assert len(matches) == 1
     assert matches[0]["label"] == "10m 34/50 Bounce"
-    assert matches[0]["display_label"] == "10m 34/50 Bounce (Best)"
+    assert matches[0]["display_label"] == "Good 34/50 Bounce"
     assert matches[0]["type"] == "10m_34_50_bounce"
-    assert matches[0]["setup_quality"] == "best"
+    assert matches[0]["setup_quality"] == "good"
     assert matches[0]["setup_quality_note"] == "Clear room above 10m 34/50"
     assert matches[0]["overhead_clouds"] == []
     assert matches[0]["trade_action"] == "Long"
@@ -645,7 +645,7 @@ def test_mtf_signal_matches_includes_confirmed_10m_34_50_bounce_as_separate_setu
     assert matches[0]["candle_time"] == "2026-07-02T12:40:00"
 
 
-def test_mtf_signal_matches_marks_10m_34_50_bounce_ok_when_mtf_cloud_is_overhead():
+def test_mtf_signal_matches_marks_10m_34_50_bounce_bad_when_mtf_cloud_is_overhead():
     candles = [
         {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:30:00"},
         {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:40:00"},
@@ -679,8 +679,8 @@ def test_mtf_signal_matches_marks_10m_34_50_bounce_ok_when_mtf_cloud_is_overhead
     )
 
     assert len(matches) == 1
-    assert matches[0]["display_label"] == "10m 34/50 Bounce (OK)"
-    assert matches[0]["setup_quality"] == "ok"
+    assert matches[0]["display_label"] == "Bad 34/50 Bounce"
+    assert matches[0]["setup_quality"] == "bad"
     assert matches[0]["setup_quality_note"] == "Overhead cloud nearby: Hourly 34/50"
     assert matches[0]["overhead_clouds"] == [
         {"label": "Hourly 34/50", "cloud_low": 106, "cloud_high": 107, "distance_pct": 0.95}
