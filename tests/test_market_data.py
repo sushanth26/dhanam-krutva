@@ -306,7 +306,7 @@ def test_mtf_cloud_touch_matches_alerts_when_latest_candle_touches_and_moves_up(
         116,
         {"34": 111, "50": 115},
         {"20": 108, "21": 114, "50": 130, "55": 140},
-        latest_candle={"low": 112, "high": 116, "close": 116},
+        latest_candle={"low": 112, "high": 116, "close": 116, "source_count": 2},
         candle_time="2026-07-02T09:40:00",
     )
 
@@ -326,7 +326,7 @@ def test_mtf_cloud_touch_matches_alerts_when_latest_candle_touches_and_moves_dow
         107,
         {"34": 111, "50": 115},
         {"20": 108, "21": 110, "50": 130, "55": 140},
-        latest_candle={"low": 107, "high": 112, "close": 107},
+        latest_candle={"low": 107, "high": 112, "close": 107, "source_count": 2},
         candle_time="2026-07-02T09:40:00",
     )
 
@@ -340,24 +340,44 @@ def test_mtf_cloud_touch_matches_ignores_price_still_inside_cloud():
         112,
         {"34": 111, "50": 115},
         {"20": 108, "21": 114, "50": 130, "55": 140},
-        latest_candle={"low": 112, "high": 116, "close": 112},
+        latest_candle={"low": 112, "high": 116, "close": 112, "source_count": 2},
     )
 
     assert matches == []
 
 
-def test_mtf_cloud_touch_matches_requires_a_live_price():
+def test_mtf_cloud_touch_matches_ignores_incomplete_10m_candle():
     matches = mtf_cloud_touch_matches(
-        None,
+        116,
         {"34": 111, "50": 115},
         {"20": 108, "21": 110, "50": 130, "55": 140},
-        latest_candle={"low": 111, "high": 116, "close": 116},
+        latest_candle={"low": 111, "high": 116, "close": 116, "source_count": 1},
     )
 
     assert matches == []
 
 
 def test_mtf_signal_matches_adds_cloud_touch_when_live_price_given():
+    matches = mtf_signal_matches(
+        116,
+        "Chop",
+        [
+            {"low": 100, "high": 106, "close": 105, "source_count": 2, "session_date": "2026-07-02", "time": "2026-07-02T09:30:00"},
+            {"low": 109.5, "high": 116.5, "close": 116, "source_count": 2, "session_date": "2026-07-02", "time": "2026-07-02T09:40:00"},
+        ],
+        {"5": 106, "9": 108, "12": 109, "34": 107, "50": 110},
+        {"20": 108, "21": 110, "34": 111, "50": 115, "55": 116},
+        {"20": 95, "21": 96, "50": 118, "55": 120},
+        live_price=116,
+    )
+
+    assert [match["label"] for match in matches] == ["Hourly 34/50"]
+    assert matches[0]["type"] == "mtf_cloud_price_touch"
+    assert matches[0]["direction"] == "bounce_up"
+    assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
+
+
+def test_mtf_signal_matches_waits_for_confirmed_mtf_touch_candle_close():
     matches = mtf_signal_matches(
         116,
         "Chop",
@@ -371,10 +391,7 @@ def test_mtf_signal_matches_adds_cloud_touch_when_live_price_given():
         live_price=116,
     )
 
-    assert [match["label"] for match in matches] == ["Hourly 34/50"]
-    assert matches[0]["type"] == "mtf_cloud_price_touch"
-    assert matches[0]["direction"] == "bounce_up"
-    assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
+    assert [match for match in matches if match["type"] == "mtf_cloud_price_touch"] == []
 
 
 def seeded_pullback_candles(
@@ -701,13 +718,17 @@ def test_mtf_signal_matches_marks_10m_34_50_bounce_bad_when_mtf_cloud_is_overhea
         {"20": 80, "21": 90, "50": 70, "55": 75},
     )
 
-    assert len(matches) == 1
-    assert matches[0]["display_label"] == "Bad 34/50 Bounce"
-    assert matches[0]["setup_quality"] == "bad"
-    assert matches[0]["setup_quality_note"] == "Overhead cloud nearby: Hourly 34/50"
-    assert matches[0]["overhead_clouds"] == [
+    bounce_matches = [match for match in matches if match["type"] == "10m_34_50_bounce"]
+    mtf_touch_matches = [match for match in matches if match["type"] == "mtf_cloud_price_touch"]
+
+    assert len(bounce_matches) == 1
+    assert bounce_matches[0]["display_label"] == "Bad 34/50 Bounce"
+    assert bounce_matches[0]["setup_quality"] == "bad"
+    assert bounce_matches[0]["setup_quality_note"] == "Overhead cloud nearby: Hourly 34/50"
+    assert bounce_matches[0]["overhead_clouds"] == [
         {"label": "Hourly 34/50", "cloud_low": 106, "cloud_high": 107, "distance_pct": 0.95}
     ]
+    assert [match["direction"] for match in mtf_touch_matches] == ["reject_down"]
 
 
 def test_mtf_signal_matches_waits_for_confirmed_10m_34_50_bounce_close():
