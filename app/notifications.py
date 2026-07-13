@@ -1,12 +1,13 @@
 import asyncio
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pywebpush import WebPushException, webpush
 
+from app.alert_history import AlertHistoryStore
 from app.alert_strategies import AlertStrategySettingsStore, filter_enabled_matches
 from app.config import Settings
 from app.dependencies import service
@@ -88,6 +89,7 @@ class MtfPushMonitor:
             return None
 
         notification = mtf_notification_payload(quotes)
+        save_push_alert_history(self.settings, quotes)
         self.send(notification)
         return notification
 
@@ -181,6 +183,28 @@ def mtf_notification_payload(quotes: list[dict[str, Any]]) -> dict[str, Any]:
             for quote in quotes
         ],
     }
+
+
+def save_push_alert_history(settings: Settings, quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    created_at = datetime.now(UTC).isoformat()
+    alerts = []
+    for quote in quotes:
+        symbol = str(quote.get("symbol") or "").upper()
+        quote_payload = {key: value for key, value in quote.items() if key != "mtf_matches"}
+        quote_payload["symbol"] = symbol
+        for match in quote.get("mtf_matches", []):
+            alerts.append(
+                {
+                    "watchlist": {"id": "push-monitor", "name": "Background monitor"},
+                    "quote": quote_payload,
+                    "match": match,
+                    "symbol": symbol,
+                    "created_at": created_at,
+                }
+            )
+    if not alerts:
+        return []
+    return AlertHistoryStore(settings.alert_history_file).upsert_many(alerts)
 
 
 def apply_enabled_strategies(quotes: list[dict[str, Any]], strategies: dict[str, bool]) -> list[dict[str, Any]]:

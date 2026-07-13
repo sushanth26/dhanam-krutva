@@ -180,7 +180,7 @@ MTF_PUSH_POLL_SECONDS=60
 MTF_PUSH_TIMEZONE=America/Chicago
 ```
 
-After deploy, open the app on the device, sign in, and tap **Enable Notifications** once. Keep the same VAPID keys and keep `PUSH_SUBSCRIPTION_FILE` on the `/data` volume so subscriptions survive deploys.
+After deploy, open the app on the device, sign in, and tap **Enable Notifications** once. Keep the same VAPID keys and keep `PUSH_SUBSCRIPTION_FILE` plus `ALERT_HISTORY_FILE` on the `/data` volume so subscriptions and alert history survive deploys and stay shared between the browser and installed app.
 
 Railway uses `nixpacks.toml` to install Python dependencies, install/build the React frontend into `app/static`, and run:
 
