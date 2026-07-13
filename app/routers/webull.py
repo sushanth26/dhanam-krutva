@@ -6,6 +6,7 @@ from webull.data.common.category import Category
 
 from app.config import get_settings
 from app.dependencies import service
+from app.alert_history import AlertHistoryStore
 from app.market_data import LIVE_WATCHLIST, build_live_prices
 from app.watchlists import WatchlistStore
 from app.webull_service import WebullConfigurationError
@@ -16,6 +17,10 @@ router = APIRouter(prefix="/api/webull")
 
 class WatchlistsPayload(BaseModel):
     watchlists: list[dict[str, Any]]
+
+
+class AlertHistoryPayload(BaseModel):
+    alerts: list[dict[str, Any]]
 
 
 @router.get("/quote")
@@ -55,3 +60,15 @@ def get_watchlists():
 def save_watchlists(payload: WatchlistsPayload):
     settings = get_settings()
     return {"watchlists": WatchlistStore(settings.watchlist_file).replace(payload.watchlists)}
+
+
+@router.get("/mtf-alerts")
+def get_mtf_alerts():
+    settings = get_settings()
+    return {"alerts": AlertHistoryStore(settings.alert_history_file).all()}
+
+
+@router.post("/mtf-alerts")
+def save_mtf_alerts(payload: AlertHistoryPayload):
+    settings = get_settings()
+    return {"alerts": AlertHistoryStore(settings.alert_history_file).upsert_many(payload.alerts)}

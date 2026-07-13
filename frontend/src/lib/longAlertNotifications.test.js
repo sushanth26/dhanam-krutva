@@ -13,6 +13,7 @@ test("long alert notifications read symbols from quote rows", () => {
         display_label: "Curl: Daily 50/55 -> above 10m 5/12",
         mtf_label: "Daily 50/55",
         entry_price: 12.345,
+        risk_plan: { stop: 10, shares: 42 },
         candle_time: "2026-07-13T19:30:00Z",
       },
     },
@@ -24,6 +25,7 @@ test("long alert notifications read symbols from quote rows", () => {
         display_label: "Daily 50/55 Touch",
         cloud_label: "Daily 50/55",
         entry_price: 55,
+        risk_plan: { stop: 50, shares: 20 },
         candle_time: "2026-07-13T19:40:00Z",
       },
     },
@@ -32,7 +34,7 @@ test("long alert notifications read symbols from quote rows", () => {
   assert.equal(longAlertSignature(rows).includes("undefined"), false);
   assert.deepEqual(longAlertNotification(rows), {
     title: "2 Setup alerts",
-    message: "BE Curl | AAOI Daily 50/55",
+    message: "BE Curl Entry 12.35 | SL 10.00 | Qty 42 | AAOI Daily 50/55 Entry 55.00 | SL 50.00 | Qty 20",
   });
 });
 
@@ -45,12 +47,13 @@ test("single curl notification falls back without undefined text", () => {
         label: "Curl",
         display_label: "Curl: Daily 50/55 -> above 10m 5/12",
         entry_price: 12,
+        risk_plan: { stop: 9.5, shares: 40 },
       },
     },
   ]);
 
   assert.deepEqual(notification, {
     title: "BE: Curl alert",
-    message: "Daily 50/55 -> above 10m 5/12 at 12.00",
+    message: "Daily 50/55 -> above 10m 5/12 Entry 12.00 | SL 9.50 | Qty 40",
   });
 });

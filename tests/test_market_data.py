@@ -421,6 +421,8 @@ def test_mtf_signal_matches_alerts_long_after_same_day_mtf_touch_and_10m_5_12_to
     assert matches[0]["mtf_touch_time"] == "2026-07-02T11:00:00"
     assert matches[0]["candle_time"] == "2026-07-02T11:10:00"
     assert matches[0]["entry_price"] == 122
+    assert matches[0]["risk_plan"]["stop"] == 99
+    assert matches[0]["risk_plan"]["shares"] == 4
 
 
 def test_mtf_signal_matches_ignores_curl_when_mtf_touch_is_older_than_one_hour():
@@ -639,6 +641,8 @@ def test_mtf_signal_matches_includes_confirmed_10m_34_50_bounce_as_separate_setu
     assert matches[0]["setup_quality"] == "good"
     assert matches[0]["setup_quality_note"] == "Clear room above 10m 34/50"
     assert matches[0]["overhead_clouds"] == []
+    assert matches[0]["risk_plan"]["stop"] == 99.1961
+    assert matches[0]["risk_plan"]["shares"] == 17
     assert matches[0]["trade_action"] == "Long"
     assert matches[0]["trend"] == "Bullish"
     assert matches[0]["entry_price"] == 105

@@ -46,11 +46,11 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
           <thead>
             <tr>
               <th>Symbol</th>
-              <th>List</th>
               <th>Setup</th>
               <th>Trend</th>
               <th>Entry</th>
-              <th>Trigger</th>
+              <th>SL</th>
+              <th>Quantity</th>
               <th>Alert Time</th>
             </tr>
           </thead>
@@ -58,7 +58,6 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
             {rows.length ? rows.map((row, index) => (
               <tr key={`${row.watchlist.id}-${row.quote.symbol}-${row.match.label}-${row.match.mtf_label || ""}-${row.match.candle_time || index}`}>
                 <td data-label="Symbol"><strong>{row.quote.symbol}</strong></td>
-                <td data-label="List">{row.watchlist.name}</td>
                 <td data-label="Setup">
                   <div className="mtf-alert-setup">
                     <strong>{row.match.display_label || row.match.label}</strong>
@@ -68,12 +67,13 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
                 </td>
                 <td data-label="Trend"><span className={`trend-pill ${String(row.match.trend || "").toLowerCase()}`}>{row.match.trend || "-"}</span></td>
                 <td data-label="Entry">{formatPrice(row.match.entry_price)}</td>
-                <td data-label="Trigger"><SetupTriggerList match={row.match} /></td>
+                <td data-label="SL">{formatPrice(row.match.risk_plan?.stop)}</td>
+                <td data-label="Quantity">{formatQuantity(row.match.risk_plan?.shares)}</td>
                 <td data-label="Alert Time">{formatDateTime(row.match.candle_time)}</td>
               </tr>
             )) : (
               <tr>
-                <td colSpan="7" className="empty-table-cell">No setups right now</td>
+                <td colSpan="7" className="empty-table-cell">No stored alerts yet</td>
               </tr>
             )}
           </tbody>
@@ -83,40 +83,8 @@ export function MtfAlertsPage({ loading, onRefresh, rows }) {
   );
 }
 
-function SetupTriggerList({ match }) {
-  if (match.type === "10m_34_50_bounce") {
-    return (
-      <div className="mtf-touch-list">
-        <span>
-          <strong>10m 34/50</strong>
-          Confirmed close
-        </span>
-      </div>
-    );
-  }
-
-  if (match.type === "mtf_cloud_price_touch") {
-    return (
-      <div className="mtf-touch-list">
-        <span>
-          <strong>{match.cloud_label || match.label}</strong>
-          Live price touch
-        </span>
-      </div>
-    );
-  }
-
-  const touches = Array.isArray(match.mtf_touches) && match.mtf_touches.length
-    ? match.mtf_touches
-    : [{ label: match.mtf_label, touch_time: match.mtf_touch_time }];
-  return (
-    <div className="mtf-touch-list">
-      {touches.map((touch, index) => (
-        <span key={`${touch.label || "mtf"}-${touch.touch_time || index}`}>
-          <strong>{touch.label || "-"}</strong>
-          {formatDateTime(touch.touch_time)}
-        </span>
-      ))}
-    </div>
-  );
+function formatQuantity(value) {
+  const quantity = Number(value);
+  if (!Number.isFinite(quantity) || quantity <= 0) return "-";
+  return String(Math.floor(quantity));
 }
