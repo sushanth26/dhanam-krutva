@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.alert_strategies import AlertStrategySettingsStore
 from app.config import get_settings
 from app.notifications import MtfPushMonitor, PushSubscriptionStore
 
@@ -16,6 +17,10 @@ class PushSubscriptionPayload(BaseModel):
 
 class PushUnsubscribePayload(BaseModel):
     endpoint: str
+
+
+class AlertStrategiesPayload(BaseModel):
+    strategies: dict[str, bool]
 
 
 @router.get("/config")
@@ -45,6 +50,18 @@ def unsubscribe(payload: PushUnsubscribePayload):
     settings = get_settings()
     total = PushSubscriptionStore(settings.push_subscription_file).remove(payload.endpoint)
     return {"ok": True, "subscriptions": total}
+
+
+@router.get("/strategies")
+def get_alert_strategies():
+    settings = get_settings()
+    return {"strategies": AlertStrategySettingsStore(settings.alert_strategy_file).get()}
+
+
+@router.post("/strategies")
+def save_alert_strategies(payload: AlertStrategiesPayload):
+    settings = get_settings()
+    return {"strategies": AlertStrategySettingsStore(settings.alert_strategy_file).save(payload.strategies)}
 
 
 @router.post("/test")

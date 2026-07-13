@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pywebpush import WebPushException, webpush
 
+from app.alert_strategies import AlertStrategySettingsStore, filter_enabled_matches
 from app.config import Settings
 from app.dependencies import service
 from app.market_data import WEBULL_BATCH_BAR_LIMIT, build_live_prices, symbol_chunks
@@ -77,7 +78,9 @@ class MtfPushMonitor:
             await asyncio.sleep(self.settings.mtf_push_poll_seconds)
 
     def check_once(self) -> dict[str, Any] | None:
+        strategies = AlertStrategySettingsStore(self.settings.alert_strategy_file).get()
         quotes = confirmed_mtf_quotes(build_monitored_quotes(self.settings))
+        quotes = apply_enabled_strategies(quotes, strategies)
         signature = mtf_signature(quotes)
         changed = bool(signature) and signature != self.last_signature
         self.last_signature = signature
@@ -178,6 +181,15 @@ def mtf_notification_payload(quotes: list[dict[str, Any]]) -> dict[str, Any]:
             for quote in quotes
         ],
     }
+
+
+def apply_enabled_strategies(quotes: list[dict[str, Any]], strategies: dict[str, bool]) -> list[dict[str, Any]]:
+    output = []
+    for quote in quotes:
+        matches = filter_enabled_matches(quote.get("mtf_matches", []), strategies)
+        if matches:
+            output.append({**quote, "mtf_matches": matches})
+    return output
 
 
 def confirmed_mtf_quotes(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:

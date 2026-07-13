@@ -135,6 +135,7 @@ def build_live_prices(
                     risk_amount=risk_amount,
                     stop_mode=stop_mode,
                     fixed_stop_buffer=fixed_stop_buffer,
+                    live_price=price,
                 ),
             }
         )
@@ -322,7 +323,10 @@ def mtf_signal_matches(
     risk_amount: float = A_PLUS_PLUS_MAX_RISK,
     stop_mode: str = A_PLUS_PLUS_STOP_MODE_FIXED,
     fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
+    live_price: float | None = None,
 ) -> list[dict[str, Any]]:
+    candle = latest_ten_minute_candle(ten_minute_candles)
+    candle_time = candle_time_key(candle) if candle else None
     return [
         *long_mtf_pullback_matches(
             ten_minute_trend,
@@ -332,7 +336,47 @@ def mtf_signal_matches(
             ema_daily,
         ),
         *ten_minute_34_50_bounce_matches(ten_minute_candles),
+        *mtf_cloud_touch_matches(live_price, ema_1h, ema_daily, candle_time),
     ]
+
+
+def mtf_cloud_touch_matches(
+    price: float | None,
+    ema_1h: dict[str, float | None],
+    ema_daily: dict[str, float | None],
+    candle_time: Any = None,
+) -> list[dict[str, Any]]:
+    if price is None:
+        return []
+
+    matches = []
+    for check in LONG_MTF_CLOUDS:
+        ema_set = ema_1h if check["source"] == "hourly" else ema_daily
+        first = ema_set.get(check["keys"][0])
+        second = ema_set.get(check["keys"][1])
+        if first is None or second is None:
+            continue
+        cloud_low = min(first, second)
+        cloud_high = max(first, second)
+        if not (cloud_low <= price <= cloud_high):
+            continue
+        matches.append(
+            {
+                "label": check["label"],
+                "display_label": f"{check['label']} touch",
+                "cloud_label": check["label"],
+                "timeframe": check["timeframe"],
+                "cloud_low": round(cloud_low, 4),
+                "cloud_high": round(cloud_high, 4),
+                "entry_price": round(price, 4),
+                "last_price": round(price, 4),
+                "candle_time": candle_time,
+                "type": "mtf_cloud_price_touch",
+                "status": "confirmed",
+                "direction": "touch",
+            }
+        )
+    return matches
 
 
 def long_mtf_pullback_matches(

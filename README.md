@@ -16,11 +16,11 @@ The browser talks only to this FastAPI backend. Webull credentials, token files,
     - Chop: overlapping or incomplete cloud structure.
   - Risk settings for max risk, stop mode, and cloud buffer.
   - Per-watchlist "Do not auto trade" toggle.
-  - Settings menu toggles active alert strategies: Curls and 10m 34/50 Bounce.
+  - Settings menu toggles active alert strategies: Curls, 10m 34/50 Bounce, and MTF Cloud Touch. Toggling a strategy also stops it from sending phone push notifications, not just from showing in the table.
 
 - **MTFs tab**
-  - Live long-only setup alert table.
-  - Shows live setup count, Curl count, 10m 34/50 Bounce count, and unique symbols.
+  - Live setup and touch alert table.
+  - Shows live setup count, Curl count, 10m 34/50 Bounce count, Cloud Touch count, and unique symbols.
   - Each alert includes symbol, watchlist, setup, trend, entry, trigger, and alert candle time.
 
 - **Curls**
@@ -43,6 +43,11 @@ The browser talks only to this FastAPI backend. Webull credentials, token files,
   - The confirmed 10m candle must close back above the top of the 10m EMA 34/50 cloud.
   - The confirmed 10m candle must close above the prior confirmed 10m candle.
   - Old alert strategy toggles and the old Alerts tab were removed.
+
+- **MTF Cloud Touch**
+  - A non-directional, informational alert (no entry/exit/trade action) — fires whenever the live price sits inside the Hourly 34/50, Daily 20/21, or Daily 50/55 cloud.
+  - Unlike Curls and 10m 34/50 Bounce, no 10m reclaim/close confirmation is required — a live price touch alone triggers it.
+  - Fires once per 10-minute candle per cloud while price stays inside it; goes quiet again once price leaves the cloud (or the candle rolls over and price is no longer touching).
 
 - **Notifications**
   - In-app notification drawer with unread badge.

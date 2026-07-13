@@ -20,12 +20,16 @@ export function longAlertNotification(rows) {
 
 function setupName(match) {
   if (match.type === "10m_34_50_bounce") return "10m 34/50 Bounce";
+  if (match.type === "mtf_cloud_price_touch") return `${match.cloud_label || match.label} Touch`;
   return "Curl";
 }
 
 function setupMessage(match) {
   if (match.type === "10m_34_50_bounce") {
     return `Confirmed above 10m 34/50 at ${formatPrice(match.entry_price)}`;
+  }
+  if (match.type === "mtf_cloud_price_touch") {
+    return `Price touching ${match.cloud_label || match.label} at ${formatPrice(match.entry_price)}`;
   }
   return `${match.mtf_label} -> above 10m 5/12 at ${formatPrice(match.entry_price)}`;
 }
