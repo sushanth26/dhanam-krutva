@@ -1,3 +1,5 @@
+import { getJson, postJson } from "./api";
+
 export const ALERT_STRATEGIES = [
   {
     key: "curls",
@@ -10,6 +12,12 @@ export const ALERT_STRATEGIES = [
     name: "10m 34/50 Bounce",
     matchTypes: ["10m_34_50_bounce"],
     description: "Confirmed 10m close back above the 34/50 cloud after touching it.",
+  },
+  {
+    key: "mtfCloudTouch",
+    name: "MTF Cloud Touch",
+    matchTypes: ["mtf_cloud_price_touch"],
+    description: "Live price sits inside the Hourly 34/50, Daily 20/21, or Daily 50/55 cloud. Fires once per 10m candle.",
   },
 ];
 
@@ -29,4 +37,14 @@ export function strategyKeyForMatch(match) {
 export function alertStrategyEnabled(match, strategies = defaultAlertStrategies()) {
   const key = strategyKeyForMatch(match);
   return Boolean(key && strategies[key] !== false);
+}
+
+export async function fetchAlertStrategies() {
+  const body = await getJson("/api/notifications/strategies");
+  return { ...defaultAlertStrategies(), ...(body.strategies || {}) };
+}
+
+export async function saveAlertStrategiesRemote(strategies) {
+  const body = await postJson("/api/notifications/strategies", { strategies });
+  return { ...defaultAlertStrategies(), ...(body.strategies || {}) };
 }

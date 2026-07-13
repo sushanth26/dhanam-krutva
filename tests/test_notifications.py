@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import app.notifications as notifications
 from app.notifications import (
     PushSubscriptionStore,
+    apply_enabled_strategies,
     build_monitored_quotes,
     confirmed_mtf_quotes,
     describe_mtf_matches,
@@ -23,6 +24,24 @@ def test_push_subscription_store_upserts_and_removes_by_endpoint(tmp_path):
     assert store.all() == [updated]
     assert store.remove("https://push.example/1") == 0
     assert store.all() == []
+
+
+def test_apply_enabled_strategies_drops_matches_for_disabled_strategy_and_empties_quote():
+    quotes = [
+        {
+            "symbol": "MU",
+            "mtf_matches": [
+                {"type": "mtf_cloud_price_touch", "label": "Hourly 34/50"},
+                {"type": "long_mtf_5_12_touch", "label": "Curl"},
+            ],
+        },
+        {"symbol": "BE", "mtf_matches": [{"type": "mtf_cloud_price_touch", "label": "Daily 20/21"}]},
+    ]
+
+    filtered = apply_enabled_strategies(quotes, {"mtfCloudTouch": False, "curls": True})
+
+    assert [quote["symbol"] for quote in filtered] == ["MU"]
+    assert [match["type"] for match in filtered[0]["mtf_matches"]] == ["long_mtf_5_12_touch"]
 
 
 def test_mtf_notification_payload_lists_symbols_and_clouds():

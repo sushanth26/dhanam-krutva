@@ -9,6 +9,7 @@ import { useAppNotifications } from "./hooks/useAppNotifications";
 import { useLatestRef } from "./hooks/useLatestRef";
 import { useLoadingState } from "./hooks/useLoadingState";
 import { useShellData } from "./hooks/useShellData";
+import { fetchAlertStrategies, saveAlertStrategiesRemote } from "./lib/alertStrategies";
 import { getJson, postJson } from "./lib/api";
 import { pageFromLocationHash, hashForPage } from "./lib/appNavigation";
 import { trendBucketsForQuotes } from "./lib/appSelectors";
@@ -194,6 +195,7 @@ export default function App() {
     autoTradeRef.current = normalized;
     saveAutoTradeSettings(normalized);
     lastMtfSignature.current = initialTabState(watchlistsRef.current, null);
+    saveAlertStrategiesRemote(normalized.strategies).catch(() => {});
   }
 
   function updateRiskSettings(nextSettings) {
@@ -363,6 +365,17 @@ export default function App() {
       if (passiveMarketTimer.current) clearInterval(passiveMarketTimer.current);
       if (watchlistSyncTimer.current) clearInterval(watchlistSyncTimer.current);
     };
+  }, []);
+
+  useEffect(() => {
+    fetchAlertStrategies()
+      .then((strategies) => {
+        const next = { ...autoTradeRef.current, strategies: { ...autoTradeRef.current.strategies, ...strategies } };
+        autoTradeRef.current = next;
+        setAutoTrade(next);
+        saveAutoTradeSettings(next);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
