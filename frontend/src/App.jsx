@@ -15,13 +15,14 @@ import { pageFromLocationHash, hashForPage } from "./lib/appNavigation";
 import { trendBucketsForQuotes } from "./lib/appSelectors";
 import { formatMarketTime } from "./lib/dates";
 import { longAlertNotification, longAlertSignature } from "./lib/longAlertNotifications";
-import { isMarketRefreshWindow, marginTradingAccountId } from "./lib/market";
+import { isMarketRefreshWindow, marketDateKey, marginTradingAccountId } from "./lib/market";
 import { showDeviceNotification } from "./lib/notifications";
 import { loadAutoTradeSettings, loadRiskSettings, normalizeRiskSettings, saveAutoTradeSettings, saveRiskSettings } from "./lib/settings";
 import { initialTabState, loadWatchlists, normalizeSymbols, normalizeWatchlists, OG_WATCHLIST_ID, saveWatchlists, shouldPromoteLocalWatchlists, slugify, uniqueId } from "./lib/watchlists";
 
 const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
 const WATCHLIST_SYNC_INTERVAL_MS = 2 * 60 * 1000;
+const LIVE_DATA_UNLOCK_KEY = "dhanam-live-data-unlock-date";
 
 export default function App() {
   const [watchlists, setWatchlists] = useState(loadWatchlists);
@@ -93,8 +94,12 @@ export default function App() {
   }
 
   async function loadLivePrices({ manual = false, showLoading = true } = {}) {
+    if (!manual && !isLiveDataApprovedToday()) {
+      setUpdatedTextForTab(watchlistTabRef.current, "Auto-refresh waits for your first manual pull today");
+      return;
+    }
     if (!manual && !isMarketRefreshWindow()) {
-      setUpdatedTextForTab(watchlistTabRef.current, "Auto-refresh paused until premarket open");
+      setUpdatedTextForTab(watchlistTabRef.current, "Auto-refresh paused outside market hours");
       return;
     }
 
@@ -103,7 +108,8 @@ export default function App() {
     try {
       const activeTab = watchlistTabRef.current;
       const selectedWatchlist = watchlistsRef.current.find((item) => item.id === activeTab);
-      await refreshWatchlistPrices(selectedWatchlist);
+      await refreshWatchlistPrices(selectedWatchlist, { manual });
+      if (manual) unlockLiveDataForToday();
     } catch (error) {
       setLiveAlert(error.message);
     } finally {
@@ -111,14 +117,21 @@ export default function App() {
     }
   }
 
-  async function refreshAllPrices({ showLoading = true } = {}) {
+  async function refreshAllPrices({ showLoading = true, manual = true } = {}) {
+    if (!manual && !isLiveDataApprovedToday()) {
+      setLiveAlert("Auto-refresh waits for your first manual pull today.");
+      return;
+    }
+    if (!manual && !isMarketRefreshWindow()) return;
+
     setLiveAlert("");
     if (showLoading) setLoadingKey("prices", true);
     try {
       const lists = watchlistsRef.current;
       for (const watchlist of lists) {
-        await refreshWatchlistPrices(watchlist);
+        await refreshWatchlistPrices(watchlist, { manual });
       }
+      if (manual) unlockLiveDataForToday();
     } catch (error) {
       setLiveAlert(error.message);
     } finally {
@@ -126,7 +139,7 @@ export default function App() {
     }
   }
 
-  async function refreshWatchlistPrices(watchlist) {
+  async function refreshWatchlistPrices(watchlist, { manual = false } = {}) {
     if (!watchlist) return;
     const selectedSymbols = watchlist.symbols || [];
     if (!selectedSymbols.length) {
@@ -141,6 +154,7 @@ export default function App() {
       stop_mode: settings.stopMode,
       fixed_stop_buffer: String(settings.fixedStopBuffer),
     });
+    if (manual) query.set("manual", "true");
     const payload = await getJson(`/api/webull/live-prices?${query.toString()}`);
     const nextQuotes = payload.quotes || [];
     const updatedAt = formatMarketTime(new Date());
@@ -351,39 +365,49 @@ export default function App() {
     setWatchlistTab((current) => next.some((item) => item.id === current) ? current : OG_WATCHLIST_ID);
   }
 
-  async function refreshAppMarketData({ showLoading = true } = {}) {
-    await refreshWatchlists({ showLoading });
-    await refreshAllPrices({ showLoading });
+  function isLiveDataApprovedToday(date = new Date()) {
+    return window.localStorage.getItem(LIVE_DATA_UNLOCK_KEY) === marketDateKey(date);
   }
 
-  function pauseBackgroundRefresh() {
-    if (passiveMarketTimer.current) clearInterval(passiveMarketTimer.current);
-    if (watchlistSyncTimer.current) clearInterval(watchlistSyncTimer.current);
-    passiveMarketTimer.current = null;
-    watchlistSyncTimer.current = null;
+  function canKeepPassiveRefreshArmed(date = new Date()) {
+    const day = date.getDay();
+    if (day === 0 || day === 6) return false;
+    const minutes = date.getHours() * 60 + date.getMinutes();
+    return isLiveDataApprovedToday(date) && minutes < 19 * 60;
+  }
 
-    return () => {
-      if (!watchlistSyncTimer.current) {
-        watchlistSyncTimer.current = setInterval(() => refreshWatchlists({ showLoading: false }), WATCHLIST_SYNC_INTERVAL_MS);
+  function unlockLiveDataForToday() {
+    window.localStorage.setItem(LIVE_DATA_UNLOCK_KEY, marketDateKey());
+    startPassiveMarketRefresh();
+  }
+
+  function startPassiveMarketRefresh() {
+    if (passiveMarketTimer.current) return;
+    passiveMarketTimer.current = setInterval(() => {
+      if (!canKeepPassiveRefreshArmed()) {
+        stopPassiveMarketRefresh();
+        return;
       }
-      if (!passiveMarketTimer.current) {
-        passiveMarketTimer.current = setInterval(() => {
-          if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false });
-        }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
+      if (isMarketRefreshWindow()) {
+        refreshAllPrices({ showLoading: false, manual: false });
       }
-    };
+    }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
+  }
+
+  function stopPassiveMarketRefresh() {
+    if (!passiveMarketTimer.current) return;
+    clearInterval(passiveMarketTimer.current);
+    passiveMarketTimer.current = null;
   }
 
   useEffect(() => {
-    refreshShell();
+    refreshShell({ includeAccounts: false });
     loadMtfAlertHistory();
-    refreshAppMarketData();
-    passiveMarketTimer.current = setInterval(() => {
-      if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false });
-    }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
+    refreshWatchlists();
+    if (canKeepPassiveRefreshArmed()) startPassiveMarketRefresh();
     watchlistSyncTimer.current = setInterval(() => refreshWatchlists({ showLoading: false }), WATCHLIST_SYNC_INTERVAL_MS);
     return () => {
-      if (passiveMarketTimer.current) clearInterval(passiveMarketTimer.current);
+      stopPassiveMarketRefresh();
       if (watchlistSyncTimer.current) clearInterval(watchlistSyncTimer.current);
     };
   }, []);
@@ -413,7 +437,6 @@ export default function App() {
     function handleServiceWorkerMessage(event) {
       if (event.data?.type !== "MTF_PUSH_UPDATE") return;
       navigatePage("mtfs");
-      refreshAppMarketData({ showLoading: false });
     }
 
     navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
@@ -428,7 +451,7 @@ export default function App() {
         selectedAccountId={selectedAccountId}
         loading={loading}
         pageLoading={pageLoading}
-        onRefresh={refreshShell}
+        onRefresh={() => refreshShell({ includeAccounts: true })}
         onSelectAccount={selectAccount}
         notificationState={notificationState}
         onEnableNotifications={enableAppNotifications}

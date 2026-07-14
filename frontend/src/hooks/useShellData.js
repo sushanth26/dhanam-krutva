@@ -9,7 +9,7 @@ export function useShellData({ setLoadingKey }) {
   const [selectedAccountId, setSelectedAccountId] = useState(null);
   const [alert, setAlert] = useState("");
 
-  async function refreshShell() {
+  async function refreshShell({ includeAccounts = true } = {}) {
     setLoadingKey("shell", true);
     try {
       const nextStatus = await getJson("/api/status");
@@ -19,6 +19,8 @@ export function useShellData({ setLoadingKey }) {
       } else {
         setAlert("");
       }
+
+      if (!includeAccounts) return;
 
       const accountResponse = await getJson("/api/accounts");
       if (!accountResponse.ok) {

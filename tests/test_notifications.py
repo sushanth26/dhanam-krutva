@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import app.notifications as notifications
 from app.notifications import (
+    MtfPushMonitor,
     PushSubscriptionStore,
     apply_enabled_strategies,
     build_monitored_quotes,
@@ -25,6 +26,19 @@ def test_push_subscription_store_upserts_and_removes_by_endpoint(tmp_path):
     assert store.all() == [updated]
     assert store.remove("https://push.example/1") == 0
     assert store.all() == []
+
+
+def test_mtf_push_monitor_does_not_start_when_disabled(tmp_path):
+    settings = SimpleNamespace(
+        push_configured=True,
+        mtf_push_enabled=False,
+        push_subscription_file=tmp_path / "subscriptions.json",
+    )
+    monitor = MtfPushMonitor(settings)
+
+    monitor.start()
+
+    assert monitor.task is None
 
 
 def test_apply_enabled_strategies_drops_matches_for_disabled_strategy_and_empties_quote():

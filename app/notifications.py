@@ -11,6 +11,7 @@ from app.alert_history import AlertHistoryStore
 from app.alert_strategies import AlertStrategySettingsStore, filter_enabled_matches
 from app.config import Settings
 from app.dependencies import service
+from app.live_data_gate import POST_MARKET_CLOSE_MINUTES, is_live_data_unlocked_today
 from app.market_data import WEBULL_BATCH_BAR_LIMIT, build_live_prices, symbol_chunks
 from app.watchlists import WatchlistStore
 
@@ -55,7 +56,7 @@ class MtfPushMonitor:
         self.last_signature: str | None = None
 
     def start(self) -> None:
-        if self.task or not self.settings.push_configured:
+        if self.task or not self.settings.mtf_push_enabled or not self.settings.push_configured:
             return
         self.task = asyncio.create_task(self._run())
 
@@ -72,7 +73,11 @@ class MtfPushMonitor:
     async def _run(self) -> None:
         while True:
             try:
-                if self.store.all() and is_market_refresh_window(self.settings.mtf_push_timezone):
+                if (
+                    self.store.all()
+                    and is_live_data_unlocked_today(self.settings)
+                    and is_market_refresh_window(self.settings.mtf_push_timezone)
+                ):
                     await asyncio.to_thread(self.check_once)
             except Exception:
                 pass
@@ -115,15 +120,16 @@ class MtfPushMonitor:
         return {"sent": sent, "removed": removed}
 
 
-def is_market_refresh_window(timezone_name: str) -> bool:
-    try:
-        now = datetime.now(ZoneInfo(timezone_name))
-    except ZoneInfoNotFoundError:
-        now = datetime.now()
+def is_market_refresh_window(timezone_name: str, now: datetime | None = None) -> bool:
+    if now is None:
+        try:
+            now = datetime.now(ZoneInfo(timezone_name))
+        except ZoneInfoNotFoundError:
+            now = datetime.now()
     if now.weekday() >= 5:
         return False
     minutes = now.hour * 60 + now.minute
-    return 3 * 60 <= minutes < 15 * 60
+    return 3 * 60 <= minutes < POST_MARKET_CLOSE_MINUTES
 
 
 def webpush_subscription_info(subscription: dict[str, Any]) -> dict[str, Any]:
