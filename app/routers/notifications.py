@@ -1,11 +1,11 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.alert_strategies import AlertStrategySettingsStore
 from app.config import get_settings
-from app.notifications import MtfPushMonitor, PushSubscriptionStore
+from app.notifications import MtfPushMonitor, PushSubscriptionStore, is_market_refresh_window
 
 
 router = APIRouter(prefix="/api/notifications")
@@ -24,13 +24,18 @@ class AlertStrategiesPayload(BaseModel):
 
 
 @router.get("/config")
-def notification_config():
+def notification_config(request: Request):
     settings = get_settings()
+    monitor = getattr(request.app.state, "mtf_push_monitor", None)
+    subscriptions = PushSubscriptionStore(settings.push_subscription_file).all()
     return {
         "web_push_configured": settings.push_configured,
         "mtf_push_enabled": settings.mtf_push_enabled,
         "vapid_public_key": settings.vapid_public_key,
         "poll_seconds": settings.mtf_push_poll_seconds,
+        "subscriptions": len(subscriptions),
+        "monitor_running": bool(monitor and monitor.task and not monitor.task.done()),
+        "market_window": is_market_refresh_window(settings.mtf_push_timezone),
     }
 
 

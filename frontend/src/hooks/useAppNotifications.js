@@ -6,6 +6,7 @@ import {
   enableNotifications,
   loadNotificationState,
   setAppBadgeCount,
+  sendTestPushNotification,
   syncNotificationPreferences,
 } from "../lib/notifications";
 
@@ -80,6 +81,29 @@ export function useAppNotifications({ setLiveAlert, setLoadingKey }) {
     }
   }
 
+  async function testPushNotifications() {
+    setLoadingKey("notifications", true);
+    try {
+      const result = await sendTestPushNotification();
+      addNotification({
+        title: "Test push sent",
+        message: `${result.sent || 0} sent, ${result.removed || 0} removed.`,
+        kind: "system",
+      });
+      return result;
+    } catch (error) {
+      setLiveAlert(error.message);
+      addNotification({
+        title: "Test push failed",
+        message: error.message,
+        kind: "system",
+      });
+      return null;
+    } finally {
+      setLoadingKey("notifications", false);
+    }
+  }
+
   useEffect(() => {
     loadNotificationState()
       .then(setNotificationState)
@@ -105,5 +129,6 @@ export function useAppNotifications({ setLiveAlert, setLoadingKey }) {
     markNotificationsRead,
     notifications,
     notificationState,
+    testPushNotifications,
   };
 }

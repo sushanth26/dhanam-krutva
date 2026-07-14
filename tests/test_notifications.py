@@ -208,8 +208,20 @@ def test_scanner_entry_quotes_keep_only_entry_reads():
     assert entries[0]["mtf_matches"][0]["display_label"] == "Entry: in 5/12"
 
 
-def test_setup_alert_quotes_keep_direct_bullish_and_bearish_alerts():
+def test_setup_alert_quotes_keep_all_confirmed_registered_direct_alerts():
     quotes = [
+        {
+            "symbol": "CURL",
+            "mtf_matches": [
+                {
+                    "type": "long_mtf_5_12_touch",
+                    "status": "confirmed",
+                    "trade_action": "Long",
+                    "label": "Curl",
+                    "display_label": "Curl: Daily 50/55 -> above 10m 5/12",
+                }
+            ],
+        },
         {
             "symbol": "BE",
             "mtf_matches": [
@@ -251,9 +263,16 @@ def test_setup_alert_quotes_keep_direct_bullish_and_bearish_alerts():
 
     alerts = setup_alert_quotes(quotes)
 
-    assert [quote["symbol"] for quote in alerts] == ["BE", "AAOI"]
+    assert [quote["symbol"] for quote in alerts] == ["CURL", "BE", "AAOI", "MU"]
+    assert [match["type"] for quote in alerts for match in quote["mtf_matches"]] == [
+        "long_mtf_5_12_touch",
+        "mtf_cloud_price_touch",
+        "10m_34_50_bounce",
+        "10m_34_50_bounce",
+    ]
     assert alerts[0]["mtf_matches"][0]["trade_action"] == "Long"
-    assert alerts[1]["mtf_matches"][0]["trade_action"] == "Short"
+    assert alerts[2]["mtf_matches"][0]["trade_action"] == "Short"
+    assert alerts[3]["mtf_matches"][0]["setup_quality"] == "bad"
 
 
 def test_setup_alert_quotes_dedupes_scanner_entry_source_match():

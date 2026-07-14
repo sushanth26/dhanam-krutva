@@ -52,6 +52,7 @@ export default function App() {
     markNotificationsRead,
     notifications,
     notificationState,
+    testPushNotifications,
   } = useAppNotifications({ setLiveAlert, setLoadingKey });
   const passiveMarketTimer = useRef(null);
   const accountKeepaliveTimer = useRef(null);
@@ -483,6 +484,7 @@ export default function App() {
         onDisableNotifications={disableAppNotifications}
         notifications={notifications}
         onMarkNotificationsRead={markNotificationsRead}
+        onTestPushNotifications={testPushNotifications}
         activePage={activePage}
         onNavigate={navigatePage}
         settingsBadge={autoTrade.enabled ? "Auto" : "Rules"}
