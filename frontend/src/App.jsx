@@ -401,7 +401,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    refreshShell({ includeAccounts: false });
+    refreshShell({ includeAccounts: true });
     loadMtfAlertHistory();
     refreshWatchlists();
     if (canKeepPassiveRefreshArmed()) startPassiveMarketRefresh();
