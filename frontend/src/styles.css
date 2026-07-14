@@ -1607,7 +1607,7 @@ select {
 
 .live-price-table .mtf-col,
 .live-price-table .mtf-cell {
-  width: 170px;
+  width: 118px;
 }
 
 .live-price-table td {
@@ -1661,6 +1661,73 @@ select {
 .fast-ema-chip small {
   font-size: 10px;
   font-weight: 800;
+}
+
+.scanner-decision {
+  align-items: start;
+  border: 1px solid #cfd8cc;
+  border-radius: 7px;
+  display: inline-grid;
+  gap: 2px;
+  line-height: 1.05;
+  min-height: 34px;
+  min-width: 86px;
+  padding: 5px 7px;
+}
+
+.scanner-decision b,
+.scanner-decision small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scanner-decision b {
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.scanner-decision small {
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.scanner-decision.long {
+  background: #075747;
+  border-color: #054639;
+}
+
+.scanner-decision.long b,
+.scanner-decision.long small {
+  color: #ffffff;
+}
+
+.scanner-decision.wait {
+  background: #fff3de;
+  border-color: #efc77e;
+}
+
+.scanner-decision.wait b {
+  color: #6d4510;
+}
+
+.scanner-decision.wait small {
+  color: #7b5a28;
+}
+
+.scanner-decision.skip {
+  background: #eef2f5;
+  border-color: #cfd8cc;
+}
+
+.scanner-decision.skip b {
+  color: #3d4852;
+}
+
+.scanner-decision.skip small {
+  color: #68766c;
 }
 
 .mtf-mini-map {
@@ -2089,7 +2156,7 @@ h1 {
 
 .live-price-table .mtf-col,
 .live-price-table .mtf-cell {
-  width: 126px;
+  width: 104px;
 }
 
 .live-price-table .price-col,
@@ -2126,6 +2193,20 @@ h1 {
 .fast-ema-chip b,
 .fast-ema-chip small {
   max-width: 54px;
+}
+
+.scanner-decision {
+  min-width: 78px;
+  padding: 4px 6px;
+}
+
+.scanner-decision b {
+  font-size: 10px;
+}
+
+.scanner-decision small {
+  font-size: 9px;
+  max-width: 70px;
 }
 
   .cloud-tag {
@@ -2354,7 +2435,7 @@ h1 {
 
   .live-price-table .mtf-col,
   .live-price-table .mtf-cell {
-    width: 170px;
+    width: 118px;
   }
 
   .live-price-table .price-col,
@@ -2390,6 +2471,20 @@ h1 {
   .fast-ema-chip b,
   .fast-ema-chip small {
     max-width: 62px;
+  }
+
+  .scanner-decision {
+    min-width: 86px;
+    padding: 5px 7px;
+  }
+
+  .scanner-decision b {
+    font-size: 11px;
+  }
+
+  .scanner-decision small {
+    font-size: 10px;
+    max-width: 82px;
   }
 
   .cloud-tag {

@@ -1,5 +1,8 @@
 import { cloudStatus, formatPrice } from "../lib/market";
 
+const LIVE_LONG_SETUP_TYPES = new Set(["long_mtf_5_12_touch", "10m_34_50_bounce"]);
+const TOUCH_ALERT_TYPES = new Set(["mtf_cloud_price_touch"]);
+
 export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
   const sortedQuotes = [...quotes].sort(compareTenMinuteFastCloud);
   return (
@@ -14,7 +17,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
             <tr>
               <th>Symbol</th>
               <th className="fast-ema-col">10m 5/12</th>
-              <th className="mtf-col">Clouds</th>
+              <th className="mtf-col">Read</th>
               <th className="price-col">Last</th>
               {onRemoveSymbol ? <th className="action-col" aria-label="Actions"></th> : null}
             </tr>
@@ -37,7 +40,7 @@ function PriceRow({ quote, onRemoveSymbol }) {
   return (
     <BaseRow quote={quote} trend={tenMinuteStatus} action={onRemoveSymbol ? <RemoveCell onRemove={() => onRemoveSymbol(quote.symbol)} symbol={quote.symbol} /> : null}>
       <td className="fast-ema-cell"><FastEmaDistance quote={quote} /></td>
-      <td className="mtf-cell"><MtfCloudMiniMap quote={quote} trend={tenMinuteStatus} /></td>
+      <td className="mtf-cell"><ScannerDecision quote={quote} trend={tenMinuteStatus} /></td>
     </BaseRow>
   );
 }
@@ -79,24 +82,110 @@ function FastEmaDistance({ quote }) {
   );
 }
 
-function MtfCloudMiniMap({ quote, trend }) {
+function ScannerDecision({ quote, trend }) {
+  const decision = scannerDecision(quote, trend);
   const clouds = scannerCloudsForQuote(quote);
-  if (!clouds.length) return <span className="mtf-empty">-</span>;
+  const detail = [
+    decision.detail,
+    clouds.length ? clouds.map(cloudTitle).join("\n") : "",
+  ].filter(Boolean).join("\n\n");
 
   return (
-    <div className="mtf-mini-map" title={clouds.map(cloudTitle).join("\n")} aria-label={clouds.map(cloudTitle).join(", ")}>
-      {clouds.map((cloud) => (
-        <span
-          className={`mtf-mini-chip ${cloud.kind} ${cloud.status || ""}`}
-          key={`${cloud.label}-${cloud.low}-${cloud.high}`}
-          style={cloud.kind === "radar" ? mtfRadarStyle(cloud, trend) : undefined}
-        >
-          <b>{shortMtfLabel(cloud.label)} {directionSymbol(cloud.direction)}</b>
-          <small>{cloud.rangeRatio == null ? `${formatPrice(cloud.low)}-${formatPrice(cloud.high)}` : `${formatRangeRatio(cloud.rangeRatio)}R`}</small>
-        </span>
-      ))}
-    </div>
+    <span className={`scanner-decision ${decision.kind}`} title={detail} aria-label={detail || `${decision.label}: ${decision.reason}`}>
+      <b>{decision.label}</b>
+      <small>{decision.reason}</small>
+    </span>
   );
+}
+
+function scannerDecision(quote, trend) {
+  const matches = quote.mtf_matches || [];
+  const longMatches = matches.filter((match) => match.trade_action === "Long" && LIVE_LONG_SETUP_TYPES.has(match.type));
+  const goodLongMatch = longMatches.find((match) => match.setup_quality !== "bad");
+  const badBounce = longMatches.find((match) => match.type === "10m_34_50_bounce" && match.setup_quality === "bad");
+  const touchMatch = matches.find((match) => TOUCH_ALERT_TYPES.has(match.type));
+  const fastDistance = fastEmaDistance(quote);
+  const overhead = nearestOverheadCloud(quote);
+
+  if (trend !== "Bullish") {
+    return {
+      kind: "skip",
+      label: "Skip",
+      reason: `${trend || "No"} trend`,
+      detail: "Long-only read waits for the 10m trend to turn bullish first.",
+    };
+  }
+
+  if (badBounce && !goodLongMatch) {
+    return {
+      kind: "skip",
+      label: "Skip",
+      reason: "weak bounce",
+      detail: badBounce.setup_quality_note || "The 10m 34/50 bounce is marked low quality.",
+    };
+  }
+
+  if (goodLongMatch && overhead) {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: `${shortMtfLabel(overhead.label)} above`,
+      detail: `${displayMatchName(goodLongMatch)} is present, but nearby overhead cloud can cap the move.`,
+    };
+  }
+
+  if (goodLongMatch) {
+    return {
+      kind: "long",
+      label: "Long",
+      reason: displayMatchName(goodLongMatch),
+      detail: "Bullish 10m trend with an active long setup.",
+    };
+  }
+
+  if (touchMatch) {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: "cloud touch",
+      detail: "Price is at an MTF cloud, but there is no confirmed long trigger yet.",
+    };
+  }
+
+  if (fastDistance && fastDistance.distancePct <= 0.35) {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: "near 5/12",
+      detail: "Bullish trend and price is near the 10m 5/12, but the setup trigger has not fired.",
+    };
+  }
+
+  return {
+    kind: "wait",
+    label: "Wait",
+    reason: "no trigger",
+    detail: "Bullish trend, but no curl or quality 10m bounce trigger is active.",
+  };
+}
+
+function nearestOverheadCloud(quote) {
+  const price = Number(quote.price);
+  if (!Number.isFinite(price) || price <= 0) return null;
+  return scannerCloudsForQuote(quote)
+    .filter((cloud) => cloud.direction === "above")
+    .map((cloud) => ({
+      ...cloud,
+      distancePct: Number.isFinite(Number(cloud.distancePct)) ? Number(cloud.distancePct) : (Number(cloud.low) - price) / price * 100,
+    }))
+    .filter((cloud) => Number.isFinite(cloud.distancePct) && cloud.distancePct <= 0.75)
+    .sort((left, right) => left.distancePct - right.distancePct)[0] || null;
+}
+
+function displayMatchName(match) {
+  if (match.type === "long_mtf_5_12_touch") return "curl";
+  if (match.type === "10m_34_50_bounce") return "10m bounce";
+  return String(match.display_label || match.label || "setup").toLowerCase();
 }
 
 function scannerCloudsForQuote(quote) {
