@@ -1490,6 +1490,10 @@ select {
   background: #eef7ff;
 }
 
+.mtf-alert-legend-item.playable b {
+  background: #e6f5ed;
+}
+
 .mtf-alert-legend-item.bounce-good b {
   background: #edf8f1;
 }
@@ -1632,6 +1636,10 @@ select {
 
 .mtf-alert-row.curl td {
   background: #eef7ff;
+}
+
+.mtf-alert-row.playable td {
+  background: #e6f5ed;
 }
 
 .mtf-alert-row.bounce-good td {
@@ -2669,6 +2677,11 @@ h1 {
   }
 
   .live-price-table .row-action-cell {
+    display: none;
+  }
+
+  .live-price-table tr:not(.decision-playable) .qty-cell,
+  .live-price-table tr:not(.decision-playable) .trade-level-cell {
     display: none;
   }
 

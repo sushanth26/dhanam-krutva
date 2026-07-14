@@ -8,6 +8,7 @@ from app.alert_strategies import (
 
 def test_default_alert_strategies_are_all_enabled():
     assert default_alert_strategies() == {
+        "playableTrades": True,
         "scannerEntry": True,
         "curls": True,
         "tenMinute3450Bounce": True,
@@ -26,7 +27,7 @@ def test_alert_strategy_settings_store_persists_only_known_keys(tmp_path):
 
     saved = store.save({"scannerEntry": False, "mtfCloudTouch": False, "unknownKey": False})
 
-    assert saved == {"scannerEntry": False, "curls": True, "tenMinute3450Bounce": True, "mtfCloudTouch": False}
+    assert saved == {"playableTrades": True, "scannerEntry": False, "curls": True, "tenMinute3450Bounce": True, "mtfCloudTouch": False}
     assert store.get() == saved
 
 
@@ -39,6 +40,8 @@ def test_match_enabled_respects_disabled_strategy():
     assert match_enabled({"type": "mtf_cloud_price_touch"}, {"mtfCloudTouch": True}) is True
     assert match_enabled({"type": "scanner_entry"}, {"scannerEntry": False}) is False
     assert match_enabled({"type": "scanner_entry"}, {"scannerEntry": True}) is True
+    assert match_enabled({"type": "playable_trade"}, {"playableTrades": False}) is False
+    assert match_enabled({"type": "playable_trade"}, {"playableTrades": True}) is True
 
 
 def test_filter_enabled_matches_drops_disabled_strategy_matches():

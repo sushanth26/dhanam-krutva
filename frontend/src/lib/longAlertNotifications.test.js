@@ -93,3 +93,24 @@ test("scanner entry notification is explicit", () => {
     message: "Entry at 12.50: curl with price inside the 10m 5/12 EMA cloud.",
   });
 });
+
+test("playable trade notification includes execution levels", () => {
+  const notification = longAlertNotification([
+    {
+      quote: { symbol: "AAOI" },
+      match: {
+        type: "playable_trade",
+        trade_action: "Long",
+        entry_price: 119.42,
+        stop_price: 115.5,
+        target_price: 127.51,
+        reward_risk: 2.77,
+      },
+    },
+  ]);
+
+  assert.deepEqual(notification, {
+    title: "AAOI: Playable alert",
+    message: "Playable Long at 119.42, SL 115.50, TP 127.51, 2.77R",
+  });
+});
