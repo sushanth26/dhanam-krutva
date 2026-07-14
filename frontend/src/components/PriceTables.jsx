@@ -104,8 +104,9 @@ function scannerDecision(quote, trend) {
   const goodLongMatch = longMatches.find((match) => match.setup_quality !== "bad");
   const badBounce = longMatches.find((match) => match.type === "10m_34_50_bounce" && match.setup_quality === "bad");
   const touchMatch = matches.find((match) => TOUCH_ALERT_TYPES.has(match.type));
-  const fastDistance = fastEmaDistance(quote);
-  const overhead = nearestOverheadCloud(quote);
+  const nineEma = nineEmaDistance(quote);
+  const resistance = nearestMtfResistance(quote);
+  const support = nearestMtfSupport(quote);
 
   if (trend !== "Bullish") {
     return {
@@ -113,6 +114,24 @@ function scannerDecision(quote, trend) {
       label: "Skip",
       reason: `${trend || "No"} trend`,
       detail: "Long-only read waits for the 10m trend to turn bullish first.",
+    };
+  }
+
+  if (resistance?.direction === "inside") {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: `clear ${shortMtfLabel(resistance.label)}`,
+      detail: "Price is inside an MTF cloud. Treat it as resistance until price clears above it.",
+    };
+  }
+
+  if (resistance) {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: `break ${shortMtfLabel(resistance.label)}`,
+      detail: "Nearest MTF cloud is still overhead resistance. A clean move above it makes the read more bullish.",
     };
   }
 
@@ -125,21 +144,43 @@ function scannerDecision(quote, trend) {
     };
   }
 
-  if (goodLongMatch && overhead) {
+  if (!nineEma) {
     return {
       kind: "wait",
       label: "Wait",
-      reason: `${shortMtfLabel(overhead.label)} above`,
-      detail: `${displayMatchName(goodLongMatch)} is present, but nearby overhead cloud can cap the move.`,
+      reason: "need 9EMA",
+      detail: "The scanner needs the 10m 9 EMA to judge the entry.",
+    };
+  }
+
+  if (nineEma.status === "extended") {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: "pullback 9EMA",
+      detail: support
+        ? `Price is above MTF clouds and ${shortMtfLabel(support.label)} is acting as support, but entry should wait for the 10m 9 EMA.`
+        : "Price is bullish but extended above the 10m 9 EMA. Wait for the entry pullback.",
+    };
+  }
+
+  if (nineEma.status === "below") {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: "reclaim 9EMA",
+      detail: "Price is below the 10m 9 EMA. Wait for reclaim before considering a long entry.",
     };
   }
 
   if (goodLongMatch) {
     return {
       kind: "long",
-      label: "Long",
-      reason: displayMatchName(goodLongMatch),
-      detail: "Bullish 10m trend with an active long setup.",
+      label: "Entry",
+      reason: "at 9EMA",
+      detail: support
+        ? `${displayMatchName(goodLongMatch)} with price at the 10m 9 EMA. MTF cloud below is support.`
+        : `${displayMatchName(goodLongMatch)} with price at the 10m 9 EMA.`,
     };
   }
 
@@ -147,39 +188,73 @@ function scannerDecision(quote, trend) {
     return {
       kind: "wait",
       label: "Wait",
-      reason: "cloud touch",
-      detail: "Price is at an MTF cloud, but there is no confirmed long trigger yet.",
-    };
-  }
-
-  if (fastDistance && fastDistance.distancePct <= 0.35) {
-    return {
-      kind: "wait",
-      label: "Wait",
-      reason: "near 5/12",
-      detail: "Bullish trend and price is near the 10m 5/12, but the setup trigger has not fired.",
+      reason: "9EMA trigger",
+      detail: "Price has cleared MTF resistance, but wait for the 10m 9 EMA entry trigger.",
     };
   }
 
   return {
     kind: "wait",
     label: "Wait",
-    reason: "no trigger",
-    detail: "Bullish trend, but no curl or quality 10m bounce trigger is active.",
+    reason: "at 9, no trigger",
+    detail: "Price is at the 10m 9 EMA, but no curl or quality 10m bounce trigger is active.",
   };
 }
 
-function nearestOverheadCloud(quote) {
+function nineEmaDistance(quote) {
+  const price = Number(quote.price);
+  const ema9 = Number(quote.ema_10m?.["9"]);
+  if (![price, ema9].every(Number.isFinite) || price <= 0) return null;
+  const distance = Math.abs(price - ema9);
+  const distancePct = distance / price * 100;
+  return {
+    ema: ema9,
+    distance,
+    distancePct,
+    status: distancePct <= 0.25 ? "entry" : price > ema9 ? "extended" : "below",
+  };
+}
+
+function nearestMtfResistance(quote) {
   const price = Number(quote.price);
   if (!Number.isFinite(price) || price <= 0) return null;
   return scannerCloudsForQuote(quote)
-    .filter((cloud) => cloud.direction === "above")
+    .filter(isMtfCloud)
+    .filter((cloud) => cloud.direction === "above" || cloud.direction === "inside")
     .map((cloud) => ({
       ...cloud,
-      distancePct: Number.isFinite(Number(cloud.distancePct)) ? Number(cloud.distancePct) : (Number(cloud.low) - price) / price * 100,
+      distancePct: cloud.direction === "inside" ? 0 : normalizedCloudDistancePct(cloud, price),
     }))
-    .filter((cloud) => Number.isFinite(cloud.distancePct) && cloud.distancePct <= 0.75)
+    .filter((cloud) => Number.isFinite(cloud.distancePct) && cloud.distancePct <= 1.5)
     .sort((left, right) => left.distancePct - right.distancePct)[0] || null;
+}
+
+function nearestMtfSupport(quote) {
+  const price = Number(quote.price);
+  if (!Number.isFinite(price) || price <= 0) return null;
+  return scannerCloudsForQuote(quote)
+    .filter(isMtfCloud)
+    .filter((cloud) => cloud.direction === "below")
+    .map((cloud) => ({
+      ...cloud,
+      distancePct: normalizedCloudDistancePct(cloud, price),
+    }))
+    .filter((cloud) => Number.isFinite(cloud.distancePct))
+    .sort((left, right) => left.distancePct - right.distancePct)[0] || null;
+}
+
+function isMtfCloud(cloud) {
+  return cloud.label !== "10m 34/50";
+}
+
+function normalizedCloudDistancePct(cloud, price) {
+  const direct = Number(cloud.distancePct);
+  if (Number.isFinite(direct)) return direct;
+  const low = Number(cloud.low);
+  const high = Number(cloud.high);
+  if (![low, high].every(Number.isFinite) || price <= 0) return Number.NaN;
+  const distance = price < low ? low - price : price > high ? price - high : 0;
+  return distance / price * 100;
 }
 
 function displayMatchName(match) {
