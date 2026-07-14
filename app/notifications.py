@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pywebpush import WebPushException, webpush
 
 from app.alert_history import AlertHistoryStore
-from app.alert_strategies import AlertStrategySettingsStore, filter_enabled_matches
+from app.alert_strategies import MATCH_TYPE_TO_STRATEGY_KEY, AlertStrategySettingsStore, filter_enabled_matches
 from app.config import Settings
 from app.dependencies import service
 from app.live_data_gate import POST_MARKET_CLOSE_MINUTES
@@ -326,11 +326,7 @@ def setup_alert_matches(quote: dict[str, Any], strategies: dict[str, bool] | Non
 def direct_alert_match(match: dict[str, Any]) -> bool:
     if match.get("status") and match.get("status") != "confirmed":
         return False
-    if match.get("type") == "mtf_cloud_price_touch":
-        return True
-    if match.get("type") == "10m_34_50_bounce":
-        return match.get("setup_quality") != "bad"
-    return False
+    return match.get("type") != "scanner_entry" and match.get("type") in MATCH_TYPE_TO_STRATEGY_KEY
 
 
 def same_setup_match(left: dict[str, Any], right: dict[str, Any]) -> bool:

@@ -120,12 +120,12 @@ VAPID_PUBLIC_KEY=...
 VAPID_PRIVATE_KEY=...
 VAPID_SUBJECT=mailto:you@example.com
 PUSH_SUBSCRIPTION_FILE=.web-push-subscriptions.json
-MTF_PUSH_ENABLED=false
+MTF_PUSH_ENABLED=true
 MTF_PUSH_POLL_SECONDS=300
 MTF_PUSH_TIMEZONE=America/Chicago
 ```
 
-`MTF_PUSH_ENABLED` defaults to `false`; leave it off to prevent background Webull live-data polling and phone push alerts. Manual app refresh buttons still work.
+`MTF_PUSH_ENABLED` defaults to `false`; set it to `true` and restart FastAPI to allow closed-app phone push alerts. Leave it off to prevent background Webull live-data polling. Manual app refresh buttons still work.
 
 When `MTF_PUSH_ENABLED=true`, background live-data refreshes run during the market refresh window as long as at least one push subscription is saved. The phone push monitor does not require the app to be open first.
 
@@ -183,7 +183,7 @@ VAPID_PUBLIC_KEY=...
 VAPID_PRIVATE_KEY=...
 VAPID_SUBJECT=mailto:you@example.com
 PUSH_SUBSCRIPTION_FILE=/data/push-subscriptions.json
-MTF_PUSH_ENABLED=false
+MTF_PUSH_ENABLED=true
 MTF_PUSH_POLL_SECONDS=60
 MTF_PUSH_TIMEZONE=America/Chicago
 ```

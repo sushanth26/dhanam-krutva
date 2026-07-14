@@ -39,6 +39,11 @@ export async function loadNotificationState() {
     permission: Notification.permission,
     appEnabled,
     webPushConfigured: Boolean(config.web_push_configured && config.vapid_public_key),
+    mtfPushEnabled: Boolean(config.mtf_push_enabled),
+    monitorRunning: Boolean(config.monitor_running),
+    marketWindow: Boolean(config.market_window),
+    pollSeconds: config.poll_seconds,
+    subscriptions: Number(config.subscriptions) || 0,
     vapidPublicKey: config.vapid_public_key,
     subscribed: Boolean(subscription),
   };
@@ -66,6 +71,11 @@ export async function enableNotifications() {
     permission,
     appEnabled: true,
     webPushConfigured: Boolean(config.web_push_configured && config.vapid_public_key),
+    mtfPushEnabled: Boolean(config.mtf_push_enabled),
+    monitorRunning: Boolean(config.monitor_running),
+    marketWindow: Boolean(config.market_window),
+    pollSeconds: config.poll_seconds,
+    subscriptions: Number(config.subscriptions) || 0,
     subscribed: Boolean(subscription),
   };
 }
@@ -136,6 +146,10 @@ export async function syncNotificationPreferences() {
   const registration = await registerNotificationWorker();
   const subscription = await ensureServerSubscription(registration, config);
   return Boolean(subscription);
+}
+
+export async function sendTestPushNotification() {
+  return postJson("/api/notifications/test", {});
 }
 
 async function registerNotificationWorker() {

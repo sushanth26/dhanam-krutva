@@ -1,10 +1,18 @@
 import { useMemo, useState } from "react";
 
-import { alertStrategyEnabled } from "../lib/alertStrategies";
+import { alertStrategyEnabled, strategyKeyForMatch } from "../lib/alertStrategies";
 import { formatDateTime } from "../lib/dates";
 import { formatPrice } from "../lib/market";
 
 const LIVE_ENTRY_SETUP_TYPES = new Set(["long_mtf_5_12_touch", "10m_34_50_bounce"]);
+const ALERT_FILTERS = [
+  { key: "entry", label: "Entry" },
+  { key: "curl", label: "Curl" },
+  { key: "bounce", label: "10m Bounce" },
+  { key: "rejection", label: "10m Rejection" },
+  { key: "cloudTouch", label: "MTF Touch" },
+];
+const DEFAULT_VISIBLE_ALERTS = Object.fromEntries(ALERT_FILTERS.map((filter) => [filter.key, true]));
 
 export function longAlertRows(watchlists, quotesByTab, strategies = {}) {
   return watchlists.flatMap((watchlist) => {
@@ -34,9 +42,7 @@ function setupAlertRows(watchlist, quote, strategies) {
 
 function directAlertMatch(match) {
   if (match.status && match.status !== "confirmed") return false;
-  if (match.type === "mtf_cloud_price_touch") return true;
-  if (match.type === "10m_34_50_bounce") return match.setup_quality !== "bad";
-  return false;
+  return match.type !== "scanner_entry" && Boolean(strategyKeyForMatch(match));
 }
 
 function sameMatch(left, right) {
@@ -69,8 +75,21 @@ function entryAlertMatch(quote, sourceMatch) {
 
 export function MtfAlertsPage({ loading, onDeleteAlert, onRefresh, rows }) {
   const [searchText, setSearchText] = useState("");
+  const [visibleAlertTypes, setVisibleAlertTypes] = useState(DEFAULT_VISIBLE_ALERTS);
   const sortedRows = useMemo(() => [...rows].sort(compareAlertRows), [rows]);
-  const visibleRows = useMemo(() => filterRows(sortedRows, searchText), [sortedRows, searchText]);
+  const visibleRows = useMemo(
+    () => filterRows(sortedRows, searchText, visibleAlertTypes),
+    [sortedRows, searchText, visibleAlertTypes],
+  );
+  const visibleFilterCount = ALERT_FILTERS.filter((filter) => visibleAlertTypes[filter.key]).length;
+
+  function toggleAlertType(key) {
+    setVisibleAlertTypes((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  function showAllAlertTypes() {
+    setVisibleAlertTypes(DEFAULT_VISIBLE_ALERTS);
+  }
 
   return (
     <section className="mtf-alerts-page" aria-label="Setup alerts">
@@ -88,6 +107,23 @@ export function MtfAlertsPage({ loading, onDeleteAlert, onRefresh, rows }) {
         <span className="mtf-alert-legend-item bounce-good"><b></b>Good 10m bounce</span>
         <span className="mtf-alert-legend-item bounce-bad"><b></b>Weak 10m bounce</span>
         <span className="mtf-alert-legend-item cloud-touch"><b></b>MTF cloud touch</span>
+      </div>
+      <div className="mtf-alert-filters" aria-label="Alert visibility filters">
+        {ALERT_FILTERS.map((filter) => (
+          <button
+            key={filter.key}
+            type="button"
+            className={`mtf-alert-filter ${visibleAlertTypes[filter.key] ? "active" : ""}`}
+            aria-pressed={visibleAlertTypes[filter.key]}
+            onClick={() => toggleAlertType(filter.key)}
+          >
+            <span className="mtf-alert-filter-check" aria-hidden="true"></span>
+            <span>{filter.label}</span>
+          </button>
+        ))}
+        <button type="button" className="mtf-alert-filter-reset" onClick={showAllAlertTypes} disabled={visibleFilterCount === ALERT_FILTERS.length}>
+          Show all
+        </button>
       </div>
       <label className="mtf-alert-search">
         <span>Search alerts</span>
@@ -113,7 +149,7 @@ export function MtfAlertsPage({ loading, onDeleteAlert, onRefresh, rows }) {
           <tbody>
             {visibleRows.length ? visibleRows.map((row, index) => (
               <tr
-                key={`${row.watchlist.id}-${row.quote.symbol}-${row.match.label}-${row.match.mtf_label || ""}-${row.match.candle_time || index}`}
+                key={alertRowKey(row, index)}
                 className={`mtf-alert-row ${setupClass(row.match)}`}
               >
                 <td data-label="Symbol"><strong>{row.quote.symbol}</strong></td>
@@ -141,7 +177,7 @@ export function MtfAlertsPage({ loading, onDeleteAlert, onRefresh, rows }) {
               </tr>
             )) : (
               <tr>
-                <td colSpan="6" className="empty-table-cell">{rows.length ? "No alerts match this search" : "No stored alerts yet"}</td>
+                <td colSpan="6" className="empty-table-cell">{emptyTableText(rows, searchText, visibleFilterCount)}</td>
               </tr>
             )}
           </tbody>
@@ -161,10 +197,34 @@ function alertTimestamp(row) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function filterRows(rows, query) {
+function alertRowKey(row, index) {
+  return [
+    row.id || index,
+    row.watchlist?.id,
+    row.quote?.symbol,
+    row.match?.type,
+    row.match?.display_label || row.match?.label,
+    row.match?.candle_time,
+    row.match?.mtf_label || row.match?.cloud_label,
+    index,
+  ].filter((value) => value !== undefined && value !== null && value !== "").join("|");
+}
+
+function filterRows(rows, query, visibleAlertTypes) {
+  if (!Object.values(visibleAlertTypes).some(Boolean)) return [];
   const normalizedQuery = query.trim().toLowerCase();
-  if (!normalizedQuery) return rows;
-  return rows.filter((row) => searchableText(row).includes(normalizedQuery));
+  return rows.filter((row) => {
+    const filterKey = alertFilterKey(row.match || {});
+    if (!filterKey || !visibleAlertTypes[filterKey]) return false;
+    if (!normalizedQuery) return true;
+    return searchableText(row).includes(normalizedQuery);
+  });
+}
+
+function emptyTableText(rows, searchText, visibleFilterCount) {
+  if (!rows.length) return "No stored alerts yet";
+  if (!visibleFilterCount) return "All alert types are hidden";
+  return searchText.trim() ? "No alerts match this search" : "No alerts match these filters";
 }
 
 function searchableText(row) {
@@ -188,4 +248,17 @@ function setupClass(match) {
   if (match.type === "10m_34_50_bounce") return match.setup_quality === "bad" ? "bounce-bad" : "bounce-good";
   if (match.type === "mtf_cloud_price_touch") return "cloud-touch";
   return "other";
+}
+
+function alertFilterKey(match) {
+  const labelText = String(`${match.display_label || ""} ${match.label || ""} ${match.direction || ""}`).toLowerCase();
+  if (match.type === "scanner_entry") return "entry";
+  if (match.type === "long_mtf_5_12_touch") return "curl";
+  if (match.type === "10m_34_50_bounce" || match.type === "10m_cloud_bounce") {
+    return match.trade_action === "Short" || labelText.includes("reject") ? "rejection" : "bounce";
+  }
+  if (match.type === "mtf_cloud_price_touch" || match.type === "mtf_cloud_touch" || match.type === "mtf_cloud_inside") {
+    return "cloudTouch";
+  }
+  return null;
 }
