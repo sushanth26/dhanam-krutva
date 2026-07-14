@@ -1778,7 +1778,7 @@ select {
 .live-price-table .trade-level-col,
 .live-price-table .trade-level-cell {
   text-align: right;
-  width: 72px;
+  width: 66px;
 }
 
 .live-price-table td {
@@ -2433,7 +2433,7 @@ h1 {
 
 .live-price-table .trade-level-col,
 .live-price-table .trade-level-cell {
-  width: 60px;
+  width: 54px;
 }
 
 .live-price-table .price-col,
@@ -2735,7 +2735,7 @@ h1 {
 
   .live-price-table .trade-level-col,
   .live-price-table .trade-level-cell {
-    width: 72px;
+    width: 66px;
   }
 
   .live-price-table .price-col,

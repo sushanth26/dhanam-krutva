@@ -20,6 +20,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
               <th className="rr-col">R:R</th>
               <th className="qty-col">Qty</th>
               <th className="trade-level-col">Entry</th>
+              <th className="trade-level-col">SL</th>
               <th className="trade-level-col">TP1</th>
               <th className="price-col">Last</th>
               {onRemoveSymbol ? <th className="action-col" aria-label="Actions"></th> : null}
@@ -29,7 +30,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
             {sortedQuotes.length ? sortedQuotes.map((quote) => (
               <PriceRow key={quote.symbol} quote={quote} onRemoveSymbol={onRemoveSymbol} />
             )) : (
-              <tr><td colSpan={onRemoveSymbol ? "8" : "7"}>No {kind} stocks right now.</td></tr>
+              <tr><td colSpan={onRemoveSymbol ? "9" : "8"}>No {kind} stocks right now.</td></tr>
             )}
           </tbody>
         </table>
@@ -46,6 +47,7 @@ function PriceRow({ quote, onRemoveSymbol }) {
       <td className="rr-cell"><RewardRisk quote={quote} /></td>
       <td className="qty-cell"><TradeQuantity quote={quote} /></td>
       <td className="trade-level-cell"><TradeLevel quote={quote} field="entry" /></td>
+      <td className="trade-level-cell"><TradeLevel quote={quote} field="stop" /></td>
       <td className="trade-level-cell"><TradeLevel quote={quote} field="tp1" /></td>
     </BaseRow>
   );
@@ -163,9 +165,9 @@ function TradeLevel({ quote, field }) {
   if (!isPlayableQuote(quote)) return <span className="trade-mini-empty">-</span>;
   const plan = quote.trade_plan;
   const target = firstTradeTarget(plan);
-  const value = field === "entry" ? plan?.entry : target?.price ?? plan?.target;
+  const value = field === "entry" ? plan?.entry : field === "stop" ? plan?.stop : target?.price ?? plan?.target;
   if (!Number.isFinite(Number(value))) return <span className="trade-mini-empty">-</span>;
-  const title = field === "entry"
+  const title = field === "entry" || field === "stop"
     ? tradePlanTitle(plan)
     : `${target?.label || "TP1"}: ${formatPrice(value)}${Number.isFinite(Number(target?.reward_risk)) ? ` = ${Number(target.reward_risk).toFixed(2)}R` : ""}`;
   return <span className="trade-mini-value" title={title}>{formatPrice(value)}</span>;
