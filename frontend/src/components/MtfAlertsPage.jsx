@@ -4,26 +4,52 @@ import { alertStrategyEnabled } from "../lib/alertStrategies";
 import { formatDateTime } from "../lib/dates";
 import { formatPrice } from "../lib/market";
 
-const LIVE_LONG_SETUP_TYPES = new Set(["long_mtf_5_12_touch", "10m_34_50_bounce"]);
+const LIVE_ENTRY_SETUP_TYPES = new Set(["long_mtf_5_12_touch", "10m_34_50_bounce"]);
 
 export function longAlertRows(watchlists, quotesByTab, strategies = {}) {
   return watchlists.flatMap((watchlist) => {
     const quotes = quotesByTab[watchlist.id] || [];
-    return quotes
-      .filter((quote) => quote.scanner_read?.kind === "entry")
-      .flatMap((quote) => {
-        const sourceMatch = entrySourceMatch(quote);
-        if (!sourceMatch || !alertStrategyEnabled(sourceMatch, strategies)) return [];
-        return [{ watchlist, quote, match: entryAlertMatch(quote, sourceMatch) }];
-      });
+    return quotes.flatMap((quote) => setupAlertRows(watchlist, quote, strategies));
   });
+}
+
+function setupAlertRows(watchlist, quote, strategies) {
+  const rows = [];
+  const sourceMatch = quote.scanner_read?.kind === "entry" ? entrySourceMatch(quote) : null;
+  const entryMatch = sourceMatch ? entryAlertMatch(quote, sourceMatch) : null;
+  let emittedEntry = false;
+  if (entryMatch && alertStrategyEnabled(entryMatch, strategies)) {
+    rows.push({ watchlist, quote, match: entryMatch });
+    emittedEntry = true;
+  }
+
+  for (const match of quote.mtf_matches || []) {
+    if (!directAlertMatch(match)) continue;
+    if (emittedEntry && sourceMatch && sameMatch(match, sourceMatch)) continue;
+    if (!alertStrategyEnabled(match, strategies)) continue;
+    rows.push({ watchlist, quote, match });
+  }
+  return rows;
+}
+
+function directAlertMatch(match) {
+  if (match.status && match.status !== "confirmed") return false;
+  if (match.type === "mtf_cloud_price_touch") return true;
+  if (match.type === "10m_34_50_bounce") return match.setup_quality !== "bad";
+  return false;
+}
+
+function sameMatch(left, right) {
+  return left.type === right.type
+    && left.candle_time === right.candle_time
+    && (left.display_label || left.label) === (right.display_label || right.label);
 }
 
 function entrySourceMatch(quote) {
   const read = quote.scanner_read || {};
   const sourceType = read.source_match_type;
   return (quote.mtf_matches || []).find((match) => match.type === sourceType)
-    || (quote.mtf_matches || []).find((match) => match.trade_action === "Long" && LIVE_LONG_SETUP_TYPES.has(match.type) && match.setup_quality !== "bad")
+    || (quote.mtf_matches || []).find((match) => LIVE_ENTRY_SETUP_TYPES.has(match.type) && match.setup_quality !== "bad")
     || null;
 }
 
@@ -51,7 +77,7 @@ export function MtfAlertsPage({ loading, onDeleteAlert, onRefresh, rows }) {
       <div className="mtf-alerts-header">
         <div>
           <h2>Setups</h2>
-          <p className="muted">Live long setups for Curls and confirmed 10m 34/50 Bounces, plus MTF cloud touch alerts.</p>
+          <p className="muted">Live setups for Curls and confirmed 10m 34/50 Bounces/Rejections, plus MTF cloud touch alerts.</p>
         </div>
         <button type="button" className="secondary-button" onClick={() => onRefresh()} disabled={loading}>
           {loading ? "Refreshing" : "Refresh"}

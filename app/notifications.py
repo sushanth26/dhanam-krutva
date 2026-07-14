@@ -92,8 +92,7 @@ class MtfPushMonitor:
     def check_once(self) -> dict[str, Any] | None:
         strategies = AlertStrategySettingsStore(self.settings.alert_strategy_file).get()
         quotes = confirmed_mtf_quotes(build_monitored_quotes(self.settings))
-        quotes = apply_enabled_strategies(quotes, strategies)
-        quotes = scanner_entry_quotes(quotes)
+        quotes = setup_alert_quotes(quotes, strategies)
         signature = mtf_signature(quotes)
         changed = bool(signature) and signature != self.last_signature
         self.last_signature = signature
@@ -291,6 +290,55 @@ def scanner_entry_quotes(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         output.append({**quote, "mtf_matches": [entry_alert_match(quote, read, source_match)]})
     return output
+
+
+def setup_alert_quotes(quotes: list[dict[str, Any]], strategies: dict[str, bool] | None = None) -> list[dict[str, Any]]:
+    output = []
+    for quote in quotes:
+        matches = setup_alert_matches(quote, strategies)
+        if matches:
+            output.append({**quote, "mtf_matches": matches})
+    return output
+
+
+def setup_alert_matches(quote: dict[str, Any], strategies: dict[str, bool] | None = None) -> list[dict[str, Any]]:
+    matches = []
+    read = quote.get("scanner_read") if isinstance(quote.get("scanner_read"), dict) else {}
+    source_match = entry_source_match(quote, read) if read.get("kind") == "entry" else None
+    emitted_entry = False
+    if source_match:
+        entry_match = entry_alert_match(quote, read, source_match)
+        if strategies is None or filter_enabled_matches([entry_match], strategies):
+            matches.append(entry_match)
+            emitted_entry = True
+
+    for match in quote.get("mtf_matches", []):
+        if not direct_alert_match(match):
+            continue
+        if emitted_entry and source_match and same_setup_match(match, source_match):
+            continue
+        if strategies is not None and not filter_enabled_matches([match], strategies):
+            continue
+        matches.append(match)
+    return matches
+
+
+def direct_alert_match(match: dict[str, Any]) -> bool:
+    if match.get("status") and match.get("status") != "confirmed":
+        return False
+    if match.get("type") == "mtf_cloud_price_touch":
+        return True
+    if match.get("type") == "10m_34_50_bounce":
+        return match.get("setup_quality") != "bad"
+    return False
+
+
+def same_setup_match(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    return (
+        left.get("type") == right.get("type")
+        and left.get("candle_time") == right.get("candle_time")
+        and (left.get("display_label") or left.get("label")) == (right.get("display_label") or right.get("label"))
+    )
 
 
 def entry_source_match(quote: dict[str, Any], read: dict[str, Any]) -> dict[str, Any] | None:

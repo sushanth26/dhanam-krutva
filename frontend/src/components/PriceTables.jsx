@@ -100,22 +100,23 @@ function ScannerDecision({ quote, trend }) {
 
 function scannerDecision(quote, trend) {
   const matches = quote.mtf_matches || [];
-  const longMatches = matches.filter((match) => match.trade_action === "Long" && LIVE_LONG_SETUP_TYPES.has(match.type));
-  const goodLongMatch = longMatches.find((match) => match.setup_quality !== "bad");
-  const badBounce = longMatches.find((match) => match.type === "10m_34_50_bounce" && match.setup_quality === "bad");
-  const touchMatch = matches.find((match) => TOUCH_ALERT_TYPES.has(match.type));
-  const entryCloud = entryCloudDistance(quote);
-  const resistance = nearestMtfResistance(quote);
-  const support = nearestMtfSupport(quote);
-
-  if (trend !== "Bullish") {
+  if (!["Bullish", "Bearish"].includes(trend)) {
     return {
       kind: "skip",
       label: "Skip",
       reason: `${trend || "No"} trend`,
-      detail: "Long-only read waits for the 10m trend to turn bullish first.",
+      detail: "Scanner waits for a bullish or bearish 10m trend.",
     };
   }
+  if (trend === "Bearish") return bearishScannerDecision(quote);
+
+  const entryMatches = matches.filter((match) => match.trade_action === "Long" && LIVE_LONG_SETUP_TYPES.has(match.type));
+  const goodEntryMatch = entryMatches.find((match) => match.setup_quality !== "bad");
+  const badBounce = entryMatches.find((match) => match.type === "10m_34_50_bounce" && match.setup_quality === "bad");
+  const touchMatch = matches.find((match) => TOUCH_ALERT_TYPES.has(match.type));
+  const entryCloud = entryCloudDistance(quote);
+  const resistance = nearestMtfResistance(quote);
+  const support = nearestMtfSupport(quote);
 
   if (resistance?.direction === "inside") {
     return {
@@ -135,7 +136,7 @@ function scannerDecision(quote, trend) {
     };
   }
 
-  if (badBounce && !goodLongMatch) {
+  if (badBounce && !goodEntryMatch) {
     return {
       kind: "skip",
       label: "Skip",
@@ -173,14 +174,14 @@ function scannerDecision(quote, trend) {
     };
   }
 
-  if (goodLongMatch) {
+  if (goodEntryMatch) {
     return {
       kind: "entry",
       label: "Entry",
       reason: "in 5/12",
       detail: support
-        ? `${displayMatchName(goodLongMatch)} with price inside the 10m 5/12 EMA cloud. MTF cloud below is support.`
-        : `${displayMatchName(goodLongMatch)} with price inside the 10m 5/12 EMA cloud.`,
+        ? `${displayMatchName(goodEntryMatch)} with price inside the 10m 5/12 EMA cloud. MTF cloud below is support.`
+        : `${displayMatchName(goodEntryMatch)} with price inside the 10m 5/12 EMA cloud.`,
     };
   }
 
@@ -198,6 +199,100 @@ function scannerDecision(quote, trend) {
     label: "Wait",
     reason: "in 5/12, no trigger",
     detail: "Price is inside the 10m 5/12 EMA cloud, but no curl or quality 10m bounce trigger is active.",
+  };
+}
+
+function bearishScannerDecision(quote) {
+  const matches = quote.mtf_matches || [];
+  const entryMatches = matches.filter((match) => match.trade_action === "Short" && LIVE_LONG_SETUP_TYPES.has(match.type));
+  const goodEntryMatch = entryMatches.find((match) => match.setup_quality !== "bad");
+  const badBounce = entryMatches.find((match) => match.type === "10m_34_50_bounce" && match.setup_quality === "bad");
+  const touchMatch = matches.find((match) => TOUCH_ALERT_TYPES.has(match.type));
+  const entryCloud = entryCloudDistance(quote);
+  const resistance = nearestMtfResistance(quote);
+  const support = nearestMtfSupport(quote);
+
+  if (support?.direction === "inside") {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: `break ${shortMtfLabel(support.label)}`,
+      detail: "Price is inside an MTF cloud. Treat it as support until price breaks below it.",
+    };
+  }
+
+  if (support && Number(support.distancePct) <= 1.5) {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: `break ${shortMtfLabel(support.label)}`,
+      detail: "Nearest MTF cloud is still underfoot support. A clean move below it makes the read more bearish.",
+    };
+  }
+
+  if (badBounce && !goodEntryMatch) {
+    return {
+      kind: "skip",
+      label: "Skip",
+      reason: "weak rejection",
+      detail: badBounce.setup_quality_note || "The 10m 34/50 rejection is marked low quality.",
+    };
+  }
+
+  if (!entryCloud) {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: "need 5/12",
+      detail: "The scanner needs the 10m 5/12 EMA cloud to judge the short entry.",
+    };
+  }
+
+  if (entryCloud.status === "below") {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: "pullback 5/12",
+      detail: resistance
+        ? `Price is below MTF support and ${shortMtfLabel(resistance.label)} is overhead resistance, but entry should wait for the 10m 5/12 EMA cloud.`
+        : "Price is bearish but extended below the 10m 5/12 EMA cloud. Wait for the entry pullback.",
+    };
+  }
+
+  if (entryCloud.status === "extended") {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: "reject 5/12",
+      detail: "Price is above the 10m 5/12 EMA cloud. Wait for rejection back into the short entry zone.",
+    };
+  }
+
+  if (goodEntryMatch) {
+    return {
+      kind: "entry",
+      label: "Entry",
+      reason: "in 5/12",
+      detail: resistance
+        ? `${displayMatchName(goodEntryMatch)} with price inside the 10m 5/12 EMA cloud. MTF cloud above is resistance.`
+        : `${displayMatchName(goodEntryMatch)} with price inside the 10m 5/12 EMA cloud.`,
+    };
+  }
+
+  if (touchMatch) {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: "5/12 trigger",
+      detail: "Price has broken MTF support, but wait for the 10m 5/12 EMA cloud short entry trigger.",
+    };
+  }
+
+  return {
+    kind: "wait",
+    label: "Wait",
+    reason: "in 5/12, no trigger",
+    detail: "Price is inside the 10m 5/12 EMA cloud, but no quality 10m rejection trigger is active.",
   };
 }
 
@@ -238,10 +333,10 @@ function nearestMtfSupport(quote) {
   if (!Number.isFinite(price) || price <= 0) return null;
   return scannerCloudsForQuote(quote)
     .filter(isMtfCloud)
-    .filter((cloud) => cloud.direction === "below")
+    .filter((cloud) => cloud.direction === "below" || cloud.direction === "inside")
     .map((cloud) => ({
       ...cloud,
-      distancePct: normalizedCloudDistancePct(cloud, price),
+      distancePct: cloud.direction === "inside" ? 0 : normalizedCloudDistancePct(cloud, price),
     }))
     .filter((cloud) => Number.isFinite(cloud.distancePct))
     .sort((left, right) => left.distancePct - right.distancePct)[0] || null;
