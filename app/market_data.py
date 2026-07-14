@@ -126,6 +126,7 @@ def build_live_prices(
                 "ema_10m": ten_minute_ema,
                 "ema_1h": ema_1h,
                 "ema_daily": ema_daily,
+                "mtf_proximity": mtf_proximity(price, ema_1h, ema_daily, daily_candles),
                 "mtf_matches": mtf_signal_matches(
                     candle_price,
                     ten_minute_trend,
@@ -426,6 +427,73 @@ def mtf_touch_reaction_direction(price: float, cloud_low: float, cloud_high: flo
     if price < cloud_low:
         return "reject_down"
     return None
+
+
+def mtf_proximity(
+    price: float | None,
+    ema_1h: dict[str, float | None],
+    ema_daily: dict[str, float | None],
+    daily_candles: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    volatility = daily_volatility(daily_candles or [], price)
+    range_unit = volatility.get("average_range")
+    clouds = []
+    for check in LONG_MTF_CLOUDS:
+        ema_set = ema_1h if check["source"] == "hourly" else ema_daily
+        first = ema_set.get(check["keys"][0])
+        second = ema_set.get(check["keys"][1])
+        if price is None or first is None or second is None:
+            continue
+
+        cloud_low = min(first, second)
+        cloud_high = max(first, second)
+        distance, direction = distance_to_cloud(price, cloud_low, cloud_high)
+        distance_pct = (distance / price * 100) if price else None
+        range_ratio = (distance / range_unit) if range_unit else None
+        clouds.append(
+            {
+                "label": check["label"],
+                "timeframe": check["timeframe"],
+                "cloud_low": round(cloud_low, 4),
+                "cloud_high": round(cloud_high, 4),
+                "direction": direction,
+                "distance": round(distance, 4),
+                "distance_pct": round(distance_pct, 2) if distance_pct is not None else None,
+                "range_ratio": round(range_ratio, 2) if range_ratio is not None else None,
+                "status": mtf_proximity_status(distance, range_ratio),
+            }
+        )
+
+    clouds.sort(key=lambda cloud: (cloud["distance"], cloud["label"]))
+    return {
+        "nearest": clouds[0] if clouds else None,
+        "clouds": clouds,
+        "range_unit": round(range_unit, 4) if range_unit is not None else None,
+        "range_unit_pct": volatility.get("average_range_pct"),
+        "range_sample_size": volatility.get("sample_size", 0),
+    }
+
+
+def distance_to_cloud(price: float, cloud_low: float, cloud_high: float) -> tuple[float, str]:
+    if cloud_low <= price <= cloud_high:
+        return 0, "inside"
+    if price < cloud_low:
+        return cloud_low - price, "above"
+    return price - cloud_high, "below"
+
+
+def mtf_proximity_status(distance: float, range_ratio: float | None) -> str:
+    if distance <= 0:
+        return "inside"
+    if range_ratio is None:
+        return "unknown"
+    if range_ratio <= 0.25:
+        return "hot"
+    if range_ratio <= 0.5:
+        return "near"
+    if range_ratio <= 1:
+        return "reachable"
+    return "far"
 
 
 def long_mtf_pullback_matches(
