@@ -1694,13 +1694,16 @@ select {
   font-weight: 850;
 }
 
-.scanner-decision.long {
+.scanner-decision.long,
+.scanner-decision.entry {
   background: #075747;
   border-color: #054639;
 }
 
 .scanner-decision.long b,
-.scanner-decision.long small {
+.scanner-decision.long small,
+.scanner-decision.entry b,
+.scanner-decision.entry small {
   color: #ffffff;
 }
 

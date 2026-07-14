@@ -83,7 +83,7 @@ function FastEmaDistance({ quote }) {
 }
 
 function ScannerDecision({ quote, trend }) {
-  const decision = scannerDecision(quote, trend);
+  const decision = quote.scanner_read || scannerDecision(quote, trend);
   const clouds = scannerCloudsForQuote(quote);
   const detail = [
     decision.detail,
@@ -175,7 +175,7 @@ function scannerDecision(quote, trend) {
 
   if (goodLongMatch) {
     return {
-      kind: "long",
+      kind: "entry",
       label: "Entry",
       reason: "at 9EMA",
       detail: support

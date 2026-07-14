@@ -94,6 +94,7 @@ class MtfPushMonitor:
         strategies = AlertStrategySettingsStore(self.settings.alert_strategy_file).get()
         quotes = confirmed_mtf_quotes(build_monitored_quotes(self.settings))
         quotes = apply_enabled_strategies(quotes, strategies)
+        quotes = scanner_entry_quotes(quotes)
         signature = mtf_signature(quotes)
         changed = bool(signature) and signature != self.last_signature
         self.last_signature = signature
@@ -278,6 +279,49 @@ def confirmed_mtf_quotes(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if matches:
             output.append({**quote, "mtf_matches": matches})
     return output
+
+
+def scanner_entry_quotes(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    output = []
+    for quote in quotes:
+        read = quote.get("scanner_read") if isinstance(quote.get("scanner_read"), dict) else {}
+        if read.get("kind") != "entry":
+            continue
+        source_match = entry_source_match(quote, read)
+        if not source_match:
+            continue
+        output.append({**quote, "mtf_matches": [entry_alert_match(quote, read, source_match)]})
+    return output
+
+
+def entry_source_match(quote: dict[str, Any], read: dict[str, Any]) -> dict[str, Any] | None:
+    source_type = read.get("source_match_type")
+    matches = quote.get("mtf_matches", [])
+    if source_type:
+        for match in matches:
+            if match.get("type") == source_type:
+                return match
+    for match in matches:
+        if (
+            match.get("trade_action") == "Long"
+            and match.get("type") in {"long_mtf_5_12_touch", "10m_34_50_bounce"}
+            and match.get("setup_quality") != "bad"
+        ):
+            return match
+    return None
+
+
+def entry_alert_match(quote: dict[str, Any], read: dict[str, Any], source_match: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **source_match,
+        "type": "scanner_entry",
+        "source_type": source_match.get("type"),
+        "label": "Entry",
+        "display_label": f"Entry: {read.get('reason') or 'at 9EMA'}",
+        "entry_price": read.get("entry_price") or source_match.get("entry_price") or quote.get("price"),
+        "candle_time": read.get("candle_time") or source_match.get("candle_time"),
+        "scanner_read": read,
+    }
 
 
 def mtf_notification_details(quotes: list[dict[str, Any]]) -> dict[str, Any]:
