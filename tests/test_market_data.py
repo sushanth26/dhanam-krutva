@@ -1311,7 +1311,33 @@ def test_trade_thesis_playable_when_confirmed_and_rr_is_good():
     assert thesis["reward_risk"]["status"] is True
 
 
-def test_playable_trade_alert_match_uses_trade_plan_levels():
+def test_trade_thesis_waits_when_tp1_reward_risk_is_thin_even_if_later_target_is_good():
+    thesis = trade_thesis_from_gates(
+        119.42,
+        "Bullish",
+        {"support": [{"label": "Prior resistance", "low": 116.5, "high": 118.2}], "resistance": [{"label": "T1", "low": 124.78, "high": 124.78}, {"label": "T2", "low": 127.51, "high": 127.51}]},
+        [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "entry_price": 119.42, "display_label": "Support bounce"}],
+        {
+            "action": "Long",
+            "entry": 119.42,
+            "stop": 115.5,
+            "targets": [
+                {"label": "T1", "price": 124.78, "reward_risk": 1.84, "is_acceptable": False},
+                {"label": "T2", "price": 127.51, "reward_risk": 2.77, "is_acceptable": True},
+            ],
+            "grade": "thin",
+            "has_acceptable_target": True,
+        },
+        {"kind": "entry", "reason": "in 5/12", "detail": "Confirmed bounce."},
+    )
+
+    assert thesis["decision"] == "Wait"
+    assert thesis["reason"] == "R:R not ready"
+    assert thesis["reward_risk"]["status"] is False
+    assert thesis["reward_risk"]["label"] == "TP1 1.84R to T1"
+
+
+def test_playable_trade_alert_match_uses_tp1_trade_plan_levels():
     match = playable_trade_alert_match(
         "AAOI",
         119.42,
@@ -1321,8 +1347,8 @@ def test_playable_trade_alert_match_uses_trade_plan_levels():
             "entry": 119.42,
             "stop": 115.5,
             "targets": [
-                {"label": "T1", "price": 124.78, "reward_risk": 1.84, "is_acceptable": False},
-                {"label": "T2", "price": 127.51, "reward_risk": 2.77, "is_acceptable": True},
+                {"label": "T1", "price": 127.51, "reward_risk": 2.77, "is_acceptable": True},
+                {"label": "T2", "price": 129.81, "reward_risk": 3.56, "is_acceptable": True},
             ],
             "risk_plan": {"shares": 25},
             "source_match_type": "long_mtf_5_12_touch",
@@ -1338,6 +1364,27 @@ def test_playable_trade_alert_match_uses_trade_plan_levels():
     assert match["target_price"] == 127.51
     assert match["reward_risk"] == 2.77
     assert match["risk_plan"]["shares"] == 25
+
+
+def test_playable_trade_alert_match_rejects_thin_tp1_even_when_later_target_is_good():
+    match = playable_trade_alert_match(
+        "AAOI",
+        119.42,
+        "Bullish",
+        {
+            "action": "Long",
+            "entry": 119.42,
+            "stop": 115.5,
+            "targets": [
+                {"label": "T1", "price": 124.78, "reward_risk": 1.84, "is_acceptable": False},
+                {"label": "T2", "price": 127.51, "reward_risk": 2.77, "is_acceptable": True},
+            ],
+        },
+        {"decision": "Playable", "bias": "Long"},
+        {"kind": "entry", "candle_time": "2026-07-13T15:10:00"},
+    )
+
+    assert match is None
 
 
 def test_scanner_read_entry_requires_price_inside_5_12_after_mtf_resistance_clears():

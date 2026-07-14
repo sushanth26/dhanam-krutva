@@ -875,7 +875,8 @@ def trade_thesis_from_gates(
     source_match = best_trade_plan_match(matches, action)
     setup_ok = bool(plan or source_match or read.get("kind") in {"wait", "entry"})
     confirmation_ok = read.get("kind") == "entry" or bool(source_match)
-    rr_ok = bool(plan and (plan.get("is_acceptable") or plan.get("has_acceptable_target")))
+    primary_target = first_plan_target(plan) if plan else None
+    rr_ok = bool(plan and (primary_target.get("is_acceptable") if primary_target else plan.get("is_acceptable")))
     invalidated = trade_plan_invalidated(price, action, plan)
 
     if invalidated:
@@ -897,7 +898,7 @@ def trade_thesis_from_gates(
     else:
         decision = "Playable"
         reason = "confirmed + R:R"
-        detail = "Setup is confirmed and at least one target gives acceptable reward-to-risk."
+        detail = "Setup is confirmed and TP1 gives acceptable reward-to-risk."
 
     return trade_thesis_payload(
         decision=decision,
@@ -991,9 +992,10 @@ def reward_risk_label(plan: dict[str, Any] | None) -> str:
     if not plan:
         return "Needs levels"
     targets = plan.get("targets") or []
-    acceptable = next((target for target in targets if target.get("is_acceptable")), None)
-    if acceptable:
-        return f"{acceptable.get('reward_risk')}R to {acceptable.get('label') or 'target'}"
+    if targets:
+        target = targets[0]
+        label = target.get("label") or "TP1"
+        return f"TP1 {target.get('reward_risk')}R to {label}"
     rr = plan.get("reward_risk")
     if rr is not None:
         return f"{rr}R"
@@ -1010,13 +1012,15 @@ def playable_trade_alert_match(
 ) -> dict[str, Any] | None:
     if not plan or not thesis or str(thesis.get("decision") or "").lower() != "playable":
         return None
-    target = first_acceptable_target(plan) or first_plan_target(plan)
+    target = first_plan_target(plan)
     entry = plan.get("entry") if plan.get("entry") is not None else price
     rr = target.get("reward_risk") if target else plan.get("reward_risk")
     action = plan.get("action") or thesis.get("bias") or trade_action_for_trend(ten_minute_trend)
     if entry is None:
         return None
     parsed_rr = safe_float(rr)
+    if parsed_rr is None or parsed_rr < MIN_ENTRY_REWARD_RISK:
+        return None
     rr_text = f"{parsed_rr:.2f}R" if parsed_rr is not None else "R:R ready"
     target_label = target.get("label") if target else plan.get("target_level", {}).get("label")
     display_label = f"Playable: {action or 'Trade'} {rr_text}"
@@ -1047,10 +1051,6 @@ def safe_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
-
-
-def first_acceptable_target(plan: dict[str, Any]) -> dict[str, Any] | None:
-    return next((target for target in plan.get("targets", []) if target.get("is_acceptable")), None)
 
 
 def first_plan_target(plan: dict[str, Any]) -> dict[str, Any] | None:
