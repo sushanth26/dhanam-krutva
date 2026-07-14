@@ -1553,6 +1553,11 @@ select {
   width: 34px;
 }
 
+.live-price-table .mtf-col,
+.live-price-table .mtf-cell {
+  width: 118px;
+}
+
 .live-price-table td {
   font-size: 14px;
   font-weight: 700;
@@ -1572,6 +1577,99 @@ select {
 
 .stock-row {
   position: relative;
+}
+
+.mtf-mini-map {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mtf-mini-chip,
+.mtf-mini-more {
+  align-items: center;
+  border: 1px solid #cfd8cc;
+  border-radius: 6px;
+  display: inline-grid;
+  gap: 1px;
+  line-height: 1.05;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 3px 5px;
+}
+
+.mtf-mini-chip b,
+.mtf-mini-chip small {
+  display: block;
+  max-width: 78px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mtf-mini-chip b {
+  color: #184d36;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.mtf-mini-chip small {
+  color: #4d5a55;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.mtf-mini-chip.curl {
+  background: #eef7ff;
+  border-color: #c9dff3;
+}
+
+.mtf-mini-chip.touch {
+  background: #f3f0ff;
+  border-color: #d9d1ff;
+}
+
+.mtf-mini-chip.radar.inside {
+  background: #f3f0ff;
+  border-color: #cfc4ff;
+}
+
+.mtf-mini-chip.radar.hot {
+  background: #dff4e9;
+  border-color: #afdcc4;
+}
+
+.mtf-mini-chip.radar.near {
+  background: #fff4d8;
+  border-color: #ecc46f;
+}
+
+.mtf-mini-chip.radar.reachable {
+  background: #eaf3fb;
+  border-color: #bfd8ee;
+}
+
+.mtf-mini-chip.radar.far,
+.mtf-mini-chip.radar.unknown {
+  background: #f8faf7;
+  border-color: #dbe2d8;
+}
+
+.mtf-mini-more {
+  background: #ffffff;
+  color: #68766c;
+  font-size: 10px;
+  font-weight: 900;
+  justify-content: center;
+  min-width: 26px;
+}
+
+.mtf-empty {
+  color: #9aa39e;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .row-action-cell {
@@ -1892,13 +1990,38 @@ h1 {
 
 .live-price-table th:first-child,
 .live-price-table td:first-child {
-  width: 72px;
+  width: 64px;
+}
+
+.live-price-table .mtf-col,
+.live-price-table .mtf-cell {
+  width: 104px;
 }
 
 .live-price-table .price-col,
 .live-price-table .price-cell {
   text-align: right;
-  width: 76px;
+  width: 68px;
+}
+
+.live-price-table .action-col,
+.row-action-cell {
+  width: 30px;
+}
+
+.mtf-mini-map {
+  gap: 3px;
+}
+
+.mtf-mini-chip,
+.mtf-mini-more {
+  min-height: 25px;
+  padding: 2px 4px;
+}
+
+.mtf-mini-chip b,
+.mtf-mini-chip small {
+  max-width: 70px;
 }
 
   .cloud-tag {
@@ -2099,6 +2222,36 @@ h1 {
   .live-price-table th:first-child,
   .live-price-table td:first-child {
     width: 72px;
+  }
+
+  .live-price-table .mtf-col,
+  .live-price-table .mtf-cell {
+    width: 118px;
+  }
+
+  .live-price-table .price-col,
+  .live-price-table .price-cell {
+    width: 76px;
+  }
+
+  .live-price-table .action-col,
+  .row-action-cell {
+    width: 34px;
+  }
+
+  .mtf-mini-map {
+    gap: 4px;
+  }
+
+  .mtf-mini-chip,
+  .mtf-mini-more {
+    min-height: 28px;
+    padding: 3px 5px;
+  }
+
+  .mtf-mini-chip b,
+  .mtf-mini-chip small {
+    max-width: 78px;
   }
 
   .cloud-tag {

@@ -10,6 +10,7 @@ from app.market_data import (
     ema_values,
     mtf_cloud_touch_matches,
     mtf_matches,
+    mtf_proximity,
     mtf_signal_matches,
     nine_ema_touch_matches,
     parse_symbols,
@@ -1029,3 +1030,45 @@ def test_daily_volatility_grades_slow_names_from_last_three_days():
         "average_range_pct": 1,
         "sample_size": 3,
     }
+
+
+def test_mtf_proximity_returns_nearest_cloud_with_range_ratio():
+    proximity = mtf_proximity(
+        100,
+        {"34": 103, "50": 105},
+        {"20": 94, "21": 95, "50": 110, "55": 112},
+        [
+            {"high": 106, "low": 100},
+            {"high": 108, "low": 102},
+            {"high": 109, "low": 103},
+        ],
+    )
+
+    assert proximity["range_unit"] == 6
+    assert proximity["nearest"] == {
+        "label": "Hourly 34/50",
+        "timeframe": "1h",
+        "cloud_low": 103,
+        "cloud_high": 105,
+        "direction": "above",
+        "distance": 3,
+        "distance_pct": 3,
+        "range_ratio": 0.5,
+        "status": "near",
+    }
+    assert [cloud["label"] for cloud in proximity["clouds"]] == ["Hourly 34/50", "Daily 20/21", "Daily 50/55"]
+
+
+def test_mtf_proximity_marks_inside_cloud_as_highest_priority():
+    proximity = mtf_proximity(
+        104,
+        {"34": 103, "50": 105},
+        {"20": 94, "21": 95, "50": 110, "55": 112},
+        [{"high": 108, "low": 102}, {"high": 109, "low": 103}, {"high": 110, "low": 104}],
+    )
+
+    assert proximity["nearest"]["label"] == "Hourly 34/50"
+    assert proximity["nearest"]["direction"] == "inside"
+    assert proximity["nearest"]["distance"] == 0
+    assert proximity["nearest"]["range_ratio"] == 0
+    assert proximity["nearest"]["status"] == "inside"

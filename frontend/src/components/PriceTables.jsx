@@ -14,6 +14,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
             <tr>
               <th>Symbol</th>
               <th>Trend</th>
+              <th className="mtf-col">MTF</th>
               <th className="price-col">Last</th>
               {onRemoveSymbol ? <th className="action-col" aria-label="Actions"></th> : null}
             </tr>
@@ -22,7 +23,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
             {quotes.length ? quotes.map((quote) => (
               <PriceRow key={quote.symbol} quote={quote} onRemoveSymbol={onRemoveSymbol} />
             )) : (
-              <tr><td colSpan={onRemoveSymbol ? "4" : "3"}>No {kind} stocks right now.</td></tr>
+              <tr><td colSpan={onRemoveSymbol ? "5" : "4"}>No {kind} stocks right now.</td></tr>
             )}
           </tbody>
         </table>
@@ -36,6 +37,7 @@ function PriceRow({ quote, onRemoveSymbol }) {
   return (
     <BaseRow quote={quote} trend={tenMinuteStatus} action={onRemoveSymbol ? <RemoveCell onRemove={() => onRemoveSymbol(quote.symbol)} symbol={quote.symbol} /> : null}>
       <td><CloudTag status={tenMinuteStatus} /></td>
+      <td className="mtf-cell"><MtfCloudMiniMap quote={quote} /></td>
     </BaseRow>
   );
 }
@@ -60,4 +62,91 @@ function RemoveCell({ onRemove, symbol }) {
       </button>
     </td>
   );
+}
+
+function MtfCloudMiniMap({ quote }) {
+  const proximity = quote.mtf_proximity?.nearest;
+  const clouds = proximity ? [mtfCloudFromProximity(proximity)] : mtfCloudsForQuote(quote);
+  if (!clouds.length) return <span className="mtf-empty">-</span>;
+
+  const visibleClouds = clouds.slice(0, 2);
+  const extraCount = clouds.length - visibleClouds.length;
+  return (
+    <div className="mtf-mini-map" title={clouds.map(cloudTitle).join("\n")} aria-label={clouds.map(cloudTitle).join(", ")}>
+      {visibleClouds.map((cloud) => (
+        <span className={`mtf-mini-chip ${cloud.kind} ${cloud.status || ""}`} key={`${cloud.label}-${cloud.low}-${cloud.high}`}>
+          <b>{shortMtfLabel(cloud.label)} {directionSymbol(cloud.direction)}</b>
+          <small>{cloud.rangeRatio == null ? `${formatPrice(cloud.low)}-${formatPrice(cloud.high)}` : `${formatRangeRatio(cloud.rangeRatio)}R`}</small>
+        </span>
+      ))}
+      {extraCount > 0 ? <span className="mtf-mini-more">+{extraCount}</span> : null}
+    </div>
+  );
+}
+
+function mtfCloudFromProximity(proximity) {
+  return {
+    label: proximity.label,
+    low: proximity.cloud_low,
+    high: proximity.cloud_high,
+    kind: "radar",
+    direction: proximity.direction,
+    distance: proximity.distance,
+    distancePct: proximity.distance_pct,
+    rangeRatio: proximity.range_ratio,
+    status: proximity.status,
+  };
+}
+
+function mtfCloudsForQuote(quote) {
+  const seen = new Set();
+  return (quote.mtf_matches || []).flatMap(mtfCloudsForMatch).filter((cloud) => {
+    const key = `${cloud.label}-${cloud.low}-${cloud.high}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function mtfCloudsForMatch(match) {
+  if (Array.isArray(match.mtf_touches) && match.mtf_touches.length) {
+    return match.mtf_touches.map((touch) => ({
+      label: touch.label,
+      low: touch.cloud_low,
+      high: touch.cloud_high,
+      kind: "curl",
+    }));
+  }
+  const label = match.cloud_label || match.mtf_label;
+  const low = match.mtf_cloud_low ?? match.cloud_low;
+  const high = match.mtf_cloud_high ?? match.cloud_high;
+  if (!label || low == null || high == null) return [];
+  return [{ label, low, high, kind: match.type === "mtf_cloud_price_touch" ? "touch" : "setup" }];
+}
+
+function cloudTitle(cloud) {
+  const rangeRatio = cloud.rangeRatio == null ? "" : ` | ${formatRangeRatio(cloud.rangeRatio)}R`;
+  const distance = cloud.distance == null ? "" : ` | ${formatPrice(cloud.distance)} away`;
+  return `${cloud.label}: ${formatPrice(cloud.low)}-${formatPrice(cloud.high)}${distance}${rangeRatio}`;
+}
+
+function shortMtfLabel(label = "") {
+  return String(label)
+    .replace(/^Hourly\s+/i, "H ")
+    .replace(/^Daily\s+/i, "D ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function directionSymbol(direction) {
+  if (direction === "above") return "↑";
+  if (direction === "below") return "↓";
+  if (direction === "inside") return "•";
+  return "";
+}
+
+function formatRangeRatio(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return "-";
+  return parsed.toFixed(2);
 }
