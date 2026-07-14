@@ -26,6 +26,7 @@ BOUNCE_OVERHEAD_CLOUD_BUFFER = 0.015
 A_PLUS_PLUS_MAX_RISK = 100
 A_PLUS_PLUS_STOP_BUFFER = 1
 MTF_CLOUD_STOP_BUFFER = 3
+MIN_ENTRY_REWARD_RISK = 2
 A_PLUS_PLUS_STOP_MODE_FIXED = "fixed"
 A_PLUS_PLUS_STOP_MODE_AUTO = "auto"
 MTF_RESISTANCE_DISTANCE_PCT = 1.5
@@ -118,6 +119,7 @@ def build_live_prices(
         ten_minute_trend = cloud_status(ten_minute_ema, ["5", "12"], ["34", "50"])
         candle_price = latest_ten_minute_price(ten_minute_candles, price)
         proximity = mtf_proximity(price, ema_1h, ema_daily, daily_candles)
+        support_resistance = support_resistance_levels(price, h1_candles, daily_candles, ema_1h, ema_daily)
         matches = mtf_signal_matches(
             candle_price,
             ten_minute_trend,
@@ -131,6 +133,24 @@ def build_live_prices(
             fixed_stop_buffer=fixed_stop_buffer,
             live_price=price,
         )
+        plan = trade_plan_from_levels(
+            price,
+            ten_minute_trend,
+            support_resistance,
+            matches,
+            risk_amount=risk_amount,
+            fixed_stop_buffer=fixed_stop_buffer,
+        )
+        read = scanner_read(price, ten_minute_trend, ten_minute_ema, proximity, matches)
+        thesis = trade_thesis_from_gates(
+            price,
+            ten_minute_trend,
+            support_resistance,
+            matches,
+            plan,
+            read,
+            fixed_stop_buffer=fixed_stop_buffer,
+        )
         quotes.append(
             {
                 "symbol": symbol,
@@ -142,8 +162,11 @@ def build_live_prices(
                 "ema_1h": ema_1h,
                 "ema_daily": ema_daily,
                 "mtf_proximity": proximity,
+                "support_resistance": support_resistance,
                 "mtf_matches": matches,
-                "scanner_read": scanner_read(price, ten_minute_trend, ten_minute_ema, proximity, matches),
+                "trade_plan": plan,
+                "trade_thesis": thesis,
+                "scanner_read": read,
             }
         )
 
@@ -498,6 +521,501 @@ def mtf_proximity_status(distance: float, range_ratio: float | None) -> str:
     if range_ratio <= 1:
         return "reachable"
     return "far"
+
+
+def support_resistance_levels(
+    price: float | None,
+    hourly_candles: list[dict[str, Any]],
+    daily_candles: list[dict[str, Any]],
+    ema_1h: dict[str, float | None],
+    ema_daily: dict[str, float | None],
+) -> dict[str, Any]:
+    levels = [
+        *ema_cloud_levels(price, ema_1h, "Hourly 34/50", "1h", ("34", "50")),
+        *ema_cloud_levels(price, ema_daily, "Daily 20/21", "daily", ("20", "21")),
+        *ema_cloud_levels(price, ema_daily, "Daily 50/55", "daily", ("50", "55")),
+        *swing_levels(price, hourly_candles, "1h", lookback=96),
+        *swing_levels(price, daily_candles, "daily", lookback=120),
+    ]
+    levels = dedupe_price_levels(levels)
+    support = [level for level in levels if level.get("side") in {"support", "inside"}]
+    resistance = [level for level in levels if level.get("side") in {"resistance", "inside"}]
+    support.sort(key=lambda level: level_sort_key(level, price))
+    resistance.sort(key=lambda level: level_sort_key(level, price))
+    return {
+        "support": support[:6],
+        "resistance": resistance[:6],
+        "levels": levels[:16],
+    }
+
+
+def ema_cloud_levels(
+    price: float | None,
+    ema_set: dict[str, float | None],
+    label: str,
+    timeframe: str,
+    keys: tuple[str, str],
+) -> list[dict[str, Any]]:
+    first = ema_set.get(keys[0])
+    second = ema_set.get(keys[1])
+    if price is None or first is None or second is None or price <= 0:
+        return []
+    low = min(first, second)
+    high = max(first, second)
+    side = level_side(price, low, high)
+    distance = level_distance(price, low, high)
+    return [
+        {
+            "label": label,
+            "timeframe": timeframe,
+            "kind": "ema_cloud",
+            "side": side,
+            "low": round(low, 4),
+            "high": round(high, 4),
+            "price": round((low + high) / 2, 4),
+            "distance": round(distance, 4),
+            "distance_pct": round(distance / price * 100, 2),
+            "strength": 3 if timeframe == "daily" else 2,
+        }
+    ]
+
+
+def swing_levels(
+    price: float | None,
+    candles: list[dict[str, Any]],
+    timeframe: str,
+    lookback: int,
+) -> list[dict[str, Any]]:
+    if price is None or price <= 0:
+        return []
+    recent = candles[-lookback:]
+    levels: list[dict[str, Any]] = []
+    for index, candle in enumerate(recent):
+        high = candle.get("high")
+        low = candle.get("low")
+        if high is not None and is_swing_high(recent, index):
+            levels.append(swing_level(price, high, high, timeframe, "swing_high", candle_time_key(candle)))
+        if low is not None and is_swing_low(recent, index):
+            levels.append(swing_level(price, low, low, timeframe, "swing_low", candle_time_key(candle)))
+    return levels
+
+
+def swing_level(
+    price: float,
+    low: float,
+    high: float,
+    timeframe: str,
+    kind: str,
+    touched_at: Any,
+) -> dict[str, Any]:
+    side = level_side(price, low, high)
+    distance = level_distance(price, low, high)
+    return {
+        "label": f"{timeframe.upper()} {'high' if kind == 'swing_high' else 'low'}",
+        "timeframe": timeframe,
+        "kind": kind,
+        "side": side,
+        "low": round(low, 4),
+        "high": round(high, 4),
+        "price": round((low + high) / 2, 4),
+        "distance": round(distance, 4),
+        "distance_pct": round(distance / price * 100, 2),
+        "strength": 2 if timeframe == "daily" else 1,
+        "touched_at": touched_at,
+    }
+
+
+def is_swing_high(candles: list[dict[str, Any]], index: int, window: int = 2) -> bool:
+    value = candles[index].get("high")
+    if value is None or index < window or index >= len(candles) - window:
+        return False
+    neighbors = candles[index - window:index] + candles[index + 1:index + window + 1]
+    highs = [candle.get("high") for candle in neighbors if candle.get("high") is not None]
+    return bool(highs) and all(value >= high for high in highs)
+
+
+def is_swing_low(candles: list[dict[str, Any]], index: int, window: int = 2) -> bool:
+    value = candles[index].get("low")
+    if value is None or index < window or index >= len(candles) - window:
+        return False
+    neighbors = candles[index - window:index] + candles[index + 1:index + window + 1]
+    lows = [candle.get("low") for candle in neighbors if candle.get("low") is not None]
+    return bool(lows) and all(value <= low for low in lows)
+
+
+def level_side(price: float, low: float, high: float) -> str:
+    if low <= price <= high:
+        return "inside"
+    if price < low:
+        return "resistance"
+    return "support"
+
+
+def level_distance(price: float, low: float, high: float) -> float:
+    if low <= price <= high:
+        return 0
+    if price < low:
+        return low - price
+    return price - high
+
+
+def level_sort_key(level: dict[str, Any], price: float | None) -> tuple[float, int, str]:
+    distance = level.get("distance")
+    parsed_distance = float(distance) if distance is not None else float("inf")
+    return (parsed_distance, -int(level.get("strength") or 0), str(level.get("label") or ""))
+
+
+def dedupe_price_levels(levels: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    for level in sorted(levels, key=lambda item: (-int(item.get("strength") or 0), float(item.get("distance") or 0))):
+        level_price = float(level.get("price") or 0)
+        duplicate = next(
+            (
+                existing
+                for existing in selected
+                if existing.get("side") == level.get("side")
+                and existing.get("timeframe") == level.get("timeframe")
+                and abs(float(existing.get("price") or 0) - level_price) <= max(0.03, level_price * 0.0015)
+            ),
+            None,
+        )
+        if duplicate:
+            continue
+        selected.append(level)
+    selected.sort(key=lambda item: (float(item.get("distance") or 0), -int(item.get("strength") or 0), str(item.get("label") or "")))
+    return selected
+
+
+def trade_plan_from_levels(
+    price: float | None,
+    ten_minute_trend: str,
+    support_resistance: dict[str, Any],
+    matches: list[dict[str, Any]],
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
+    fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
+) -> dict[str, Any] | None:
+    action = trade_action_for_trend(ten_minute_trend)
+    if price is None or price <= 0 or action is None:
+        return None
+    source_match = best_trade_plan_match(matches, action)
+    entry = source_match.get("entry_price") if source_match else price
+    if entry is None:
+        entry = price
+    entry = float(entry)
+    if entry <= 0:
+        return None
+    levels = support_resistance or {}
+    if action == "Long":
+        stop_level = first_level(levels.get("support", []), entry, "support")
+        target_level = first_level(levels.get("resistance", []), entry, "resistance")
+        if not stop_level or not target_level:
+            return pending_trade_plan(action, entry, stop_level, target_level, source_match)
+        stop = min(float(stop_level["low"]), float(stop_level["high"])) - fixed_stop_buffer
+        target = min(float(target_level["low"]), float(target_level["high"]))
+        risk_per_share = entry - stop
+        reward_per_share = target - entry
+    else:
+        stop_level = first_level(levels.get("resistance", []), entry, "resistance")
+        target_level = first_level(levels.get("support", []), entry, "support")
+        if not stop_level or not target_level:
+            return pending_trade_plan(action, entry, stop_level, target_level, source_match)
+        stop = max(float(stop_level["low"]), float(stop_level["high"])) + fixed_stop_buffer
+        target = max(float(target_level["low"]), float(target_level["high"]))
+        risk_per_share = stop - entry
+        reward_per_share = entry - target
+    if risk_per_share <= 0 or reward_per_share <= 0:
+        return pending_trade_plan(action, entry, stop_level, target_level, source_match)
+    rr = reward_per_share / risk_per_share
+    targets = target_plans_from_levels(action, entry, risk_per_share, levels, target_level)
+    risk_plan = fixed_stop_risk_plan(
+        entry=entry,
+        stop=stop,
+        max_risk=risk_amount,
+        stop_buffer=fixed_stop_buffer,
+        stop_mode="support-resistance",
+    )
+    return {
+        "action": action,
+        "entry": round(entry, 4),
+        "stop": round(stop, 4),
+        "target": round(target, 4),
+        "risk_per_share": round(risk_per_share, 4),
+        "reward_per_share": round(reward_per_share, 4),
+        "reward_risk": round(rr, 2),
+        "grade": trade_plan_grade(rr),
+        "targets": targets,
+        "minimum_reward_risk": MIN_ENTRY_REWARD_RISK,
+        "is_acceptable": rr >= MIN_ENTRY_REWARD_RISK,
+        "has_acceptable_target": any(target.get("is_acceptable") for target in targets),
+        "stop_level": compact_level(stop_level),
+        "target_level": compact_level(target_level),
+        "source_match_type": source_match.get("type") if source_match else None,
+        "source_match_label": source_match.get("display_label") or source_match.get("label") if source_match else None,
+        "risk_plan": risk_plan,
+    }
+
+
+def best_trade_plan_match(matches: list[dict[str, Any]], action: str) -> dict[str, Any] | None:
+    candidates = [
+        match
+        for match in matches
+        if match.get("trade_action") == action
+        and match.get("type") in {"long_mtf_5_12_touch", "10m_34_50_bounce", "mtf_cloud_price_touch"}
+        and match.get("setup_quality") != "bad"
+    ]
+    priority = {"long_mtf_5_12_touch": 0, "10m_34_50_bounce": 1, "mtf_cloud_price_touch": 2}
+    candidates.sort(key=lambda match: (priority.get(str(match.get("type")), 99), str(match.get("label") or "")))
+    return candidates[0] if candidates else None
+
+
+def target_plans_from_levels(
+    action: str,
+    entry: float,
+    risk_per_share: float,
+    levels: dict[str, Any],
+    primary_target_level: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if risk_per_share <= 0:
+        return []
+    side = "resistance" if action == "Long" else "support"
+    target_levels = [
+        level
+        for level in levels.get(side, [])
+        if level.get("low") is not None and level.get("high") is not None
+    ]
+    if primary_target_level not in target_levels:
+        target_levels.insert(0, primary_target_level)
+    targets = []
+    for level in target_levels:
+        low = float(level["low"])
+        high = float(level["high"])
+        target_price = low if action == "Long" else high
+        reward = target_price - entry if action == "Long" else entry - target_price
+        if reward <= 0:
+            continue
+        rr = reward / risk_per_share
+        targets.append(
+            {
+                "price": round(target_price, 4),
+                "label": level.get("label"),
+                "timeframe": level.get("timeframe"),
+                "reward_per_share": round(reward, 4),
+                "reward_risk": round(rr, 2),
+                "grade": trade_plan_grade(rr),
+                "is_acceptable": rr >= MIN_ENTRY_REWARD_RISK,
+            }
+        )
+    targets.sort(key=lambda target: (target["price"] if action == "Long" else -target["price"]))
+    return targets[:4]
+
+
+def first_level(levels: list[dict[str, Any]], entry: float, side: str) -> dict[str, Any] | None:
+    filtered = []
+    for level in levels:
+        low = level.get("low")
+        high = level.get("high")
+        if low is None or high is None:
+            continue
+        low_value = float(low)
+        high_value = float(high)
+        if side == "support" and high_value < entry:
+            filtered.append(level)
+        elif side == "resistance" and low_value > entry:
+            filtered.append(level)
+    filtered.sort(key=lambda level: (abs(entry - float(level.get("price") or entry)), -int(level.get("strength") or 0)))
+    return filtered[0] if filtered else None
+
+
+def pending_trade_plan(
+    action: str,
+    entry: float,
+    stop_level: dict[str, Any] | None,
+    target_level: dict[str, Any] | None,
+    source_match: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return {
+        "action": action,
+        "entry": round(entry, 4),
+        "grade": "incomplete",
+        "minimum_reward_risk": MIN_ENTRY_REWARD_RISK,
+        "is_acceptable": False,
+        "stop_level": compact_level(stop_level) if stop_level else None,
+        "target_level": compact_level(target_level) if target_level else None,
+        "source_match_type": source_match.get("type") if source_match else None,
+        "source_match_label": source_match.get("display_label") or source_match.get("label") if source_match else None,
+    }
+
+
+def trade_thesis_from_gates(
+    price: float | None,
+    ten_minute_trend: str,
+    support_resistance: dict[str, Any],
+    matches: list[dict[str, Any]],
+    plan: dict[str, Any] | None,
+    read: dict[str, Any],
+    fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
+) -> dict[str, Any]:
+    action = trade_action_for_trend(ten_minute_trend)
+    if price is None or price <= 0 or action is None:
+        return trade_thesis_payload(
+            decision="Skip",
+            bias=action,
+            setup=False,
+            confirmation=False,
+            reward_risk=False,
+            reason=f"{ten_minute_trend or 'No'} trend",
+            detail="No directional setup yet. Scanner waits for a bullish or bearish 10m trend before planning a trade.",
+            plan=plan,
+        )
+
+    source_match = best_trade_plan_match(matches, action)
+    setup_ok = bool(plan or source_match or read.get("kind") in {"wait", "entry"})
+    confirmation_ok = read.get("kind") == "entry" or bool(source_match)
+    rr_ok = bool(plan and (plan.get("is_acceptable") or plan.get("has_acceptable_target")))
+    invalidated = trade_plan_invalidated(price, action, plan)
+
+    if invalidated:
+        decision = "Skip"
+        reason = "invalidation broken"
+        detail = "Price is through the planned invalidation level, so the setup is no longer playable."
+    elif not setup_ok:
+        decision = "Skip"
+        reason = "no setup"
+        detail = "No actionable setup is visible from the current trend, support/resistance, and signal rules."
+    elif not confirmation_ok:
+        decision = "Wait"
+        reason = read.get("reason") or "needs confirmation"
+        detail = read.get("detail") or "Setup exists, but price has not confirmed the trigger yet."
+    elif not rr_ok:
+        decision = "Wait" if plan and plan.get("grade") == "thin" else "Skip"
+        reason = "R:R not ready"
+        detail = "The setup is confirmed, but reward-to-risk is not strong enough from the current entry."
+    else:
+        decision = "Playable"
+        reason = "confirmed + R:R"
+        detail = "Setup is confirmed and at least one target gives acceptable reward-to-risk."
+
+    return trade_thesis_payload(
+        decision=decision,
+        bias=action,
+        setup=setup_ok,
+        confirmation=confirmation_ok,
+        reward_risk=rr_ok,
+        reason=reason,
+        detail=detail,
+        plan=plan,
+        source_match=source_match,
+        read=read,
+        support_resistance=support_resistance,
+    )
+
+
+def trade_plan_invalidated(price: float, action: str, plan: dict[str, Any] | None) -> bool:
+    if not plan or plan.get("stop") is None:
+        return False
+    stop = float(plan["stop"])
+    if action == "Long":
+        return price <= stop
+    if action == "Short":
+        return price >= stop
+    return False
+
+
+def trade_thesis_payload(
+    decision: str,
+    bias: str | None,
+    setup: bool,
+    confirmation: bool,
+    reward_risk: bool,
+    reason: str,
+    detail: str,
+    plan: dict[str, Any] | None,
+    source_match: dict[str, Any] | None = None,
+    read: dict[str, Any] | None = None,
+    support_resistance: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "decision": decision,
+        "bias": bias,
+        "reason": reason,
+        "detail": detail,
+        "setup": {
+            "status": setup,
+            "label": setup_label(source_match, read, support_resistance),
+        },
+        "confirmation": {
+            "status": confirmation,
+            "label": confirmation_label(confirmation, read, source_match),
+        },
+        "reward_risk": {
+            "status": reward_risk,
+            "label": reward_risk_label(plan),
+        },
+        "entry": plan.get("entry") if plan else None,
+        "invalidation": plan.get("stop") if plan else None,
+        "targets": plan.get("targets", []) if plan else [],
+    }
+
+
+def setup_label(
+    source_match: dict[str, Any] | None,
+    read: dict[str, Any] | None,
+    support_resistance: dict[str, Any] | None,
+) -> str:
+    if source_match:
+        return str(source_match.get("display_label") or source_match.get("label") or "Confirmed setup")
+    if read and read.get("kind") in {"wait", "entry"}:
+        return str(read.get("reason") or "Setup forming")
+    nearest_support = (support_resistance or {}).get("support", [None])[0] if (support_resistance or {}).get("support") else None
+    nearest_resistance = (support_resistance or {}).get("resistance", [None])[0] if (support_resistance or {}).get("resistance") else None
+    if nearest_support and nearest_resistance:
+        return "Directional setup with nearby levels"
+    return "No setup"
+
+
+def confirmation_label(
+    confirmation: bool,
+    read: dict[str, Any] | None,
+    source_match: dict[str, Any] | None,
+) -> str:
+    if confirmation:
+        return str((source_match or {}).get("display_label") or (read or {}).get("reason") or "Confirmed")
+    return str((read or {}).get("reason") or "Needs trigger")
+
+
+def reward_risk_label(plan: dict[str, Any] | None) -> str:
+    if not plan:
+        return "Needs levels"
+    targets = plan.get("targets") or []
+    acceptable = next((target for target in targets if target.get("is_acceptable")), None)
+    if acceptable:
+        return f"{acceptable.get('reward_risk')}R to {acceptable.get('label') or 'target'}"
+    rr = plan.get("reward_risk")
+    if rr is not None:
+        return f"{rr}R"
+    return "Needs target"
+
+
+def trade_plan_grade(reward_risk: float) -> str:
+    if reward_risk >= 3:
+        return "excellent"
+    if reward_risk >= MIN_ENTRY_REWARD_RISK:
+        return "good"
+    if reward_risk >= 1:
+        return "thin"
+    return "poor"
+
+
+def compact_level(level: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "label": level.get("label"),
+        "timeframe": level.get("timeframe"),
+        "kind": level.get("kind"),
+        "side": level.get("side"),
+        "low": level.get("low"),
+        "high": level.get("high"),
+        "distance_pct": level.get("distance_pct"),
+    }
 
 
 def scanner_read(
