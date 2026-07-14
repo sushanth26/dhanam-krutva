@@ -15,12 +15,13 @@ import { pageFromLocationHash, hashForPage } from "./lib/appNavigation";
 import { trendBucketsForQuotes } from "./lib/appSelectors";
 import { formatMarketTime } from "./lib/dates";
 import { longAlertNotification, longAlertSignature } from "./lib/longAlertNotifications";
-import { isMarketRefreshWindow, marketDateKey, marginTradingAccountId, shouldUseManualRefresh } from "./lib/market";
+import { isMarketRefreshWindow, isRegularMarketHours, marketDateKey, marginTradingAccountId, shouldUseManualRefresh } from "./lib/market";
 import { showDeviceNotification } from "./lib/notifications";
 import { loadAutoTradeSettings, loadRiskSettings, normalizeRiskSettings, saveAutoTradeSettings, saveRiskSettings } from "./lib/settings";
 import { initialTabState, loadWatchlists, normalizeSymbols, normalizeWatchlists, OG_WATCHLIST_ID, saveWatchlists, shouldPromoteLocalWatchlists, slugify, uniqueId } from "./lib/watchlists";
 
 const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
+const ACCOUNT_KEEPALIVE_INTERVAL_MS = 2 * 60 * 1000;
 const WATCHLIST_SYNC_INTERVAL_MS = 2 * 60 * 1000;
 const LIVE_DATA_UNLOCK_KEY = "dhanam-live-data-unlock-date";
 
@@ -53,6 +54,7 @@ export default function App() {
     notificationState,
   } = useAppNotifications({ setLiveAlert, setLoadingKey });
   const passiveMarketTimer = useRef(null);
+  const accountKeepaliveTimer = useRef(null);
   const watchlistSyncTimer = useRef(null);
   const lastMtfSignature = useRef(initialTabState(loadWatchlists(), null));
   const lastMtfRows = useRef(initialTabState(loadWatchlists(), {}));
@@ -397,14 +399,31 @@ export default function App() {
     passiveMarketTimer.current = null;
   }
 
+  function startAccountKeepalive() {
+    if (accountKeepaliveTimer.current) return;
+    accountKeepaliveTimer.current = setInterval(() => {
+      if (!isRegularMarketHours()) return;
+      refreshShell({ includeAccounts: true, showLoading: false });
+    }, ACCOUNT_KEEPALIVE_INTERVAL_MS);
+  }
+
+  function stopAccountKeepalive() {
+    if (!accountKeepaliveTimer.current) return;
+    clearInterval(accountKeepaliveTimer.current);
+    accountKeepaliveTimer.current = null;
+  }
+
   useEffect(() => {
     refreshShell({ includeAccounts: true });
     loadMtfAlertHistory();
     refreshWatchlists();
     if (canKeepPassiveRefreshArmed()) startPassiveMarketRefresh();
+    if (isRegularMarketHours()) refreshShell({ includeAccounts: true, showLoading: false });
+    startAccountKeepalive();
     watchlistSyncTimer.current = setInterval(() => refreshWatchlists({ showLoading: false }), WATCHLIST_SYNC_INTERVAL_MS);
     return () => {
       stopPassiveMarketRefresh();
+      stopAccountKeepalive();
       if (watchlistSyncTimer.current) clearInterval(watchlistSyncTimer.current);
     };
   }, []);

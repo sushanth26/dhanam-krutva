@@ -146,6 +146,12 @@ export function shouldUseManualRefresh(date = new Date()) {
   return parts.minutes < 9 * 60 || parts.minutes >= 16 * 60;
 }
 
+export function isRegularMarketHours(date = new Date()) {
+  const parts = easternMarketTime(date);
+  if (!isEasternWeekday(parts)) return false;
+  return parts.minutes >= 9 * 60 && parts.minutes < 16 * 60;
+}
+
 export function marketDateKey(date = new Date()) {
   const parts = easternMarketTime(date);
   return `${parts.year}-${parts.month}-${parts.day}`;

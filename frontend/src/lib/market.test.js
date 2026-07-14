@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isMarketRefreshWindow, marketDateKey, shouldUseManualRefresh } from "./market.js";
+import { isMarketRefreshWindow, isRegularMarketHours, marketDateKey, shouldUseManualRefresh } from "./market.js";
 
 test("manual refresh is used overnight before 9 AM Eastern", () => {
   assert.equal(shouldUseManualRefresh(new Date("2026-07-14T12:59:00Z")), true);
@@ -14,6 +14,13 @@ test("manual refresh is not used during regular market hours", () => {
 
 test("manual refresh returns after the 4 PM Eastern close", () => {
   assert.equal(shouldUseManualRefresh(new Date("2026-07-14T20:00:00Z")), true);
+});
+
+test("regular market hours match the live Webull account keepalive window", () => {
+  assert.equal(isRegularMarketHours(new Date("2026-07-14T12:59:00Z")), false);
+  assert.equal(isRegularMarketHours(new Date("2026-07-14T13:00:00Z")), true);
+  assert.equal(isRegularMarketHours(new Date("2026-07-14T19:59:00Z")), true);
+  assert.equal(isRegularMarketHours(new Date("2026-07-14T20:00:00Z")), false);
 });
 
 test("market refresh window follows Eastern time", () => {
