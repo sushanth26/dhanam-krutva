@@ -1,8 +1,7 @@
-import { CloudTag } from "./Tags";
 import { cloudStatus, formatPrice } from "../lib/market";
 
 export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
-  const sortedQuotes = [...quotes].sort(compareMtfProximity);
+  const sortedQuotes = [...quotes].sort(compareTenMinuteFastCloud);
   return (
     <section className="price-bucket">
       <div className="bucket-heading">
@@ -14,7 +13,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
           <thead>
             <tr>
               <th>Symbol</th>
-              <th>Trend</th>
+              <th className="fast-ema-col">10m 5/12</th>
               <th className="mtf-col">MTF</th>
               <th className="price-col">Last</th>
               {onRemoveSymbol ? <th className="action-col" aria-label="Actions"></th> : null}
@@ -37,7 +36,7 @@ function PriceRow({ quote, onRemoveSymbol }) {
   const tenMinuteStatus = cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
   return (
     <BaseRow quote={quote} trend={tenMinuteStatus} action={onRemoveSymbol ? <RemoveCell onRemove={() => onRemoveSymbol(quote.symbol)} symbol={quote.symbol} /> : null}>
-      <td><CloudTag status={tenMinuteStatus} /></td>
+      <td className="fast-ema-cell"><FastEmaDistance quote={quote} /></td>
       <td className="mtf-cell"><MtfCloudMiniMap quote={quote} trend={tenMinuteStatus} /></td>
     </BaseRow>
   );
@@ -62,6 +61,21 @@ function RemoveCell({ onRemove, symbol }) {
         x
       </button>
     </td>
+  );
+}
+
+function FastEmaDistance({ quote }) {
+  const distance = fastEmaDistance(quote);
+  if (!distance) return <span className="mtf-empty">-</span>;
+  return (
+    <span
+      className={`fast-ema-chip ${distance.status}`}
+      title={`10m 5/12: ${formatPrice(distance.low)}-${formatPrice(distance.high)} | ${formatPrice(distance.distance)} away`}
+      style={fastEmaStyle(distance)}
+    >
+      <b>5/12 {directionSymbol(distance.direction)}</b>
+      <small>{formatPercent(distance.distancePct)}</small>
+    </span>
   );
 }
 
@@ -156,6 +170,19 @@ function formatRangeRatio(value) {
   return parsed.toFixed(2);
 }
 
+function compareTenMinuteFastCloud(left, right) {
+  const leftScore = fastEmaSortScore(left);
+  const rightScore = fastEmaSortScore(right);
+  if (leftScore !== rightScore) return leftScore - rightScore;
+  return compareMtfProximity(left, right);
+}
+
+function fastEmaSortScore(quote) {
+  const distance = fastEmaDistance(quote);
+  if (!distance) return Number.POSITIVE_INFINITY;
+  return distance.distancePct;
+}
+
 function compareMtfProximity(left, right) {
   const leftScore = mtfSortScore(left);
   const rightScore = mtfSortScore(right);
@@ -171,6 +198,43 @@ function mtfSortScore(quote) {
   if (Number.isFinite(ratio)) return ratio;
   const distance = Number(nearest.distance);
   return Number.isFinite(distance) ? 1000 + distance : Number.POSITIVE_INFINITY;
+}
+
+function fastEmaDistance(quote) {
+  const price = Number(quote.price);
+  const ema5 = Number(quote.ema_10m?.["5"]);
+  const ema12 = Number(quote.ema_10m?.["12"]);
+  if (![price, ema5, ema12].every(Number.isFinite) || price <= 0) return null;
+  const low = Math.min(ema5, ema12);
+  const high = Math.max(ema5, ema12);
+  const [distance, direction] = distanceToRange(price, low, high);
+  const distancePct = distance / price * 100;
+  return {
+    low,
+    high,
+    distance,
+    distancePct,
+    direction,
+    status: distance <= 0 ? "inside" : "nearby",
+  };
+}
+
+function distanceToRange(price, low, high) {
+  if (low <= price && price <= high) return [0, "inside"];
+  if (price < low) return [low - price, "above"];
+  return [price - high, "below"];
+}
+
+function fastEmaStyle(distance) {
+  const progress = Math.min(Math.max(distance.distancePct / 2, 0), 1);
+  const background = mixRgb([7, 87, 71], [238, 242, 245], progress);
+  const border = mixRgb([5, 70, 57], [207, 216, 204], progress);
+  const text = progress < 0.42 ? "#ffffff" : "#184d36";
+  return {
+    "--fast-ema-bg": background,
+    "--fast-ema-border": border,
+    "--fast-ema-text": text,
+  };
 }
 
 function mtfRadarStyle(cloud, trend) {
@@ -230,4 +294,10 @@ function mtfRadarPalette(direction, trend) {
 function mixRgb(start, end, progress) {
   const values = start.map((value, index) => Math.round(value + (end[index] - value) * progress));
   return `rgb(${values.join(", ")})`;
+}
+
+function formatPercent(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return "-";
+  return `${parsed.toFixed(2)}%`;
 }
