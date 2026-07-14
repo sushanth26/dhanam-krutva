@@ -9,7 +9,7 @@ import { useAppNotifications } from "./hooks/useAppNotifications";
 import { useLatestRef } from "./hooks/useLatestRef";
 import { useLoadingState } from "./hooks/useLoadingState";
 import { useShellData } from "./hooks/useShellData";
-import { fetchAlertStrategies, saveAlertStrategiesRemote } from "./lib/alertStrategies";
+import { fetchAlertStrategies, mergeAlertStrategySettings, saveAlertStrategiesRemote } from "./lib/alertStrategies";
 import { deleteJson, getJson, postJson } from "./lib/api";
 import { pageFromLocationHash, hashForPage } from "./lib/appNavigation";
 import { trendBucketsForQuotes } from "./lib/appSelectors";
@@ -488,10 +488,14 @@ export default function App() {
   useEffect(() => {
     fetchAlertStrategies()
       .then((strategies) => {
-        const next = { ...autoTradeRef.current, strategies: { ...autoTradeRef.current.strategies, ...strategies } };
+        const synced = mergeAlertStrategySettings(autoTradeRef.current.strategies, strategies);
+        const next = { ...autoTradeRef.current, strategies: synced.strategies };
         autoTradeRef.current = next;
         setAutoTrade(next);
         saveAutoTradeSettings(next);
+        if (synced.shouldSaveRemote) {
+          saveAlertStrategiesRemote(synced.strategies).catch(() => {});
+        }
       })
       .catch(() => {});
   }, []);

@@ -1,4 +1,4 @@
-import { getJson, postJson } from "./api";
+import { getJson, postJson } from "./api.js";
 
 export const ALERT_STRATEGIES = [
   {
@@ -40,6 +40,21 @@ const MATCH_TYPE_TO_STRATEGY_KEY = ALERT_STRATEGIES.reduce((lookup, strategy) =>
 
 export function defaultAlertStrategies() {
   return Object.fromEntries(ALERT_STRATEGIES.map((strategy) => [strategy.key, true]));
+}
+
+export function hasAlertStrategyOverrides(strategies = {}) {
+  const defaults = defaultAlertStrategies();
+  return Object.keys(defaults).some((key) => Boolean(strategies[key]) !== defaults[key]);
+}
+
+export function mergeAlertStrategySettings(localStrategies = {}, remoteStrategies = {}) {
+  const defaults = defaultAlertStrategies();
+  const local = { ...defaults, ...localStrategies };
+  const remote = { ...defaults, ...remoteStrategies };
+  if (hasAlertStrategyOverrides(local) && !hasAlertStrategyOverrides(remote)) {
+    return { strategies: local, shouldSaveRemote: true };
+  }
+  return { strategies: remote, shouldSaveRemote: false };
 }
 
 export function strategyKeyForMatch(match) {
