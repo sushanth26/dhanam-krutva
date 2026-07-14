@@ -30,7 +30,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
             {sortedQuotes.length ? sortedQuotes.map((quote) => (
               <PriceRow key={quote.symbol} quote={quote} onRemoveSymbol={onRemoveSymbol} />
             )) : (
-              <tr><td colSpan={onRemoveSymbol ? "9" : "8"}>No {kind} stocks right now.</td></tr>
+              <tr><td className="empty-table-cell" colSpan={onRemoveSymbol ? "9" : "8"}>No {kind} stocks right now.</td></tr>
             )}
           </tbody>
         </table>
@@ -43,12 +43,12 @@ function PriceRow({ quote, onRemoveSymbol }) {
   const tenMinuteStatus = cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
   return (
     <BaseRow quote={quote} trend={tenMinuteStatus} action={onRemoveSymbol ? <RemoveCell onRemove={() => onRemoveSymbol(quote.symbol)} symbol={quote.symbol} /> : null}>
-      <td className="mtf-cell"><ScannerDecision quote={quote} trend={tenMinuteStatus} /></td>
-      <td className="rr-cell"><RewardRisk quote={quote} /></td>
-      <td className="qty-cell"><TradeQuantity quote={quote} /></td>
-      <td className="trade-level-cell"><TradeLevel quote={quote} field="entry" /></td>
-      <td className="trade-level-cell"><TradeLevel quote={quote} field="stop" /></td>
-      <td className="trade-level-cell"><TradeLevel quote={quote} field="tp1" /></td>
+      <td className="mtf-cell" data-label="Read"><ScannerDecision quote={quote} trend={tenMinuteStatus} /></td>
+      <td className="rr-cell" data-label="R:R"><RewardRisk quote={quote} /></td>
+      <td className="qty-cell" data-label="Qty"><TradeQuantity quote={quote} /></td>
+      <td className="trade-level-cell" data-label="Entry"><TradeLevel quote={quote} field="entry" /></td>
+      <td className="trade-level-cell" data-label="SL"><TradeLevel quote={quote} field="stop" /></td>
+      <td className="trade-level-cell" data-label="TP1"><TradeLevel quote={quote} field="tp1" /></td>
     </BaseRow>
   );
 }
@@ -57,9 +57,9 @@ function BaseRow({ quote, children, trend = "", action = null, className = "", i
   const rowClass = [trend ? `trend-${String(trend).toLowerCase()}` : "", className].filter(Boolean).join(" ");
   return (
     <tr className={`stock-row ${rowClass}`} id={id} onClick={onClick}>
-      <td><strong>{quote.symbol}</strong></td>
+      <td data-label="Symbol"><strong>{quote.symbol}</strong></td>
       {children}
-      {showPrice ? <td className="price-cell">{formatPrice(quote.price)}</td> : null}
+      {showPrice ? <td className="price-cell" data-label="Last">{formatPrice(quote.price)}</td> : null}
       {action}
     </tr>
   );
@@ -67,7 +67,7 @@ function BaseRow({ quote, children, trend = "", action = null, className = "", i
 
 function RemoveCell({ onRemove, symbol }) {
   return (
-    <td className="row-action-cell">
+    <td className="row-action-cell" data-label="">
       <button type="button" className="row-delete-button" onClick={onRemove} aria-label={`Remove ${symbol}`}>
         x
       </button>
