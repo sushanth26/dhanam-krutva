@@ -81,15 +81,15 @@ test("scanner entry notification is explicit", () => {
       quote: { symbol: "BE" },
       match: {
         type: "scanner_entry",
-        display_label: "Entry: at 9EMA",
+        display_label: "Entry: in 5/12",
         entry_price: 12.5,
-        scanner_read: { detail: "curl with price at the 10m 9 EMA." },
+        scanner_read: { detail: "curl with price inside the 10m 5/12 EMA cloud." },
       },
     },
   ]);
 
   assert.deepEqual(notification, {
     title: "BE: Entry alert",
-    message: "Entry at 12.50: curl with price at the 10m 9 EMA.",
+    message: "Entry at 12.50: curl with price inside the 10m 5/12 EMA cloud.",
   });
 });

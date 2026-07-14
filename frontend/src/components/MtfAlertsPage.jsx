@@ -34,7 +34,7 @@ function entryAlertMatch(quote, sourceMatch) {
     type: "scanner_entry",
     source_type: sourceMatch.type,
     label: "Entry",
-    display_label: `Entry: ${read.reason || "at 9EMA"}`,
+    display_label: `Entry: ${read.reason || "in 5/12"}`,
     entry_price: read.entry_price || sourceMatch.entry_price || quote.price,
     candle_time: read.candle_time || sourceMatch.candle_time,
     scanner_read: read,

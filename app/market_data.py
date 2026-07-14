@@ -28,7 +28,6 @@ A_PLUS_PLUS_STOP_BUFFER = 1
 MTF_CLOUD_STOP_BUFFER = 3
 A_PLUS_PLUS_STOP_MODE_FIXED = "fixed"
 A_PLUS_PLUS_STOP_MODE_AUTO = "auto"
-ENTRY_NINE_EMA_DISTANCE_PCT = 0.25
 MTF_RESISTANCE_DISTANCE_PCT = 1.5
 LONG_MTF_CLOUDS = [
     {"label": "Hourly 34/50", "timeframe": "1h", "source": "hourly", "keys": ("34", "50")},
@@ -527,7 +526,7 @@ def scanner_read(
         None,
     )
     touch_match = next((match for match in matches if match.get("type") == "mtf_cloud_price_touch"), None)
-    nine_ema = nine_ema_distance(price, ema_10m)
+    entry_cloud = entry_cloud_distance(price, ema_10m)
     resistance = nearest_mtf_resistance(proximity)
     support = nearest_mtf_support(proximity)
 
@@ -545,32 +544,32 @@ def scanner_read(
     if bad_bounce and not good_long_match:
         return scanner_read_payload("skip", "Skip", "weak bounce", bad_bounce.get("setup_quality_note") or "The 10m 34/50 bounce is marked low quality.", source_match=bad_bounce)
 
-    if not nine_ema:
-        return scanner_read_payload("wait", "Wait", "need 9EMA", "The scanner needs the 10m 9 EMA to judge the entry.")
+    if not entry_cloud:
+        return scanner_read_payload("wait", "Wait", "need 5/12", "The scanner needs the 10m 5/12 EMA cloud to judge the entry.")
 
-    if nine_ema["status"] == "extended":
+    if entry_cloud["status"] == "extended":
         detail = (
-            f"Price is above MTF clouds and {short_mtf_label(support.get('label'))} is acting as support, but entry should wait for the 10m 9 EMA."
+            f"Price is above MTF clouds and {short_mtf_label(support.get('label'))} is acting as support, but entry should wait for the 10m 5/12 EMA cloud."
             if support
-            else "Price is bullish but extended above the 10m 9 EMA. Wait for the entry pullback."
+            else "Price is bullish but extended above the 10m 5/12 EMA cloud. Wait for the entry pullback."
         )
-        return scanner_read_payload("wait", "Wait", "pullback 9EMA", detail, support=support, nine_ema=nine_ema)
+        return scanner_read_payload("wait", "Wait", "pullback 5/12", detail, support=support, entry_cloud=entry_cloud)
 
-    if nine_ema["status"] == "below":
-        return scanner_read_payload("wait", "Wait", "reclaim 9EMA", "Price is below the 10m 9 EMA. Wait for reclaim before considering a long entry.", nine_ema=nine_ema)
+    if entry_cloud["status"] == "below":
+        return scanner_read_payload("wait", "Wait", "reclaim 5/12", "Price is below the 10m 5/12 EMA cloud. Wait for reclaim before considering a long entry.", entry_cloud=entry_cloud)
 
     if good_long_match:
         detail = (
-            f"{display_match_name(good_long_match)} with price at the 10m 9 EMA. MTF cloud below is support."
+            f"{display_match_name(good_long_match)} with price inside the 10m 5/12 EMA cloud. MTF cloud below is support."
             if support
-            else f"{display_match_name(good_long_match)} with price at the 10m 9 EMA."
+            else f"{display_match_name(good_long_match)} with price inside the 10m 5/12 EMA cloud."
         )
-        return scanner_read_payload("entry", "Entry", "at 9EMA", detail, source_match=good_long_match, support=support, nine_ema=nine_ema)
+        return scanner_read_payload("entry", "Entry", "in 5/12", detail, source_match=good_long_match, support=support, entry_cloud=entry_cloud)
 
     if touch_match:
-        return scanner_read_payload("wait", "Wait", "9EMA trigger", "Price has cleared MTF resistance, but wait for the 10m 9 EMA entry trigger.", source_match=touch_match, nine_ema=nine_ema)
+        return scanner_read_payload("wait", "Wait", "5/12 trigger", "Price has cleared MTF resistance, but wait for the 10m 5/12 EMA cloud entry trigger.", source_match=touch_match, entry_cloud=entry_cloud)
 
-    return scanner_read_payload("wait", "Wait", "at 9, no trigger", "Price is at the 10m 9 EMA, but no curl or quality 10m bounce trigger is active.", nine_ema=nine_ema)
+    return scanner_read_payload("wait", "Wait", "in 5/12, no trigger", "Price is inside the 10m 5/12 EMA cloud, but no curl or quality 10m bounce trigger is active.", entry_cloud=entry_cloud)
 
 
 def scanner_read_payload(
@@ -581,7 +580,7 @@ def scanner_read_payload(
     source_match: dict[str, Any] | None = None,
     resistance: dict[str, Any] | None = None,
     support: dict[str, Any] | None = None,
-    nine_ema: dict[str, Any] | None = None,
+    entry_cloud: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "kind": kind,
@@ -598,22 +597,34 @@ def scanner_read_payload(
         payload["resistance"] = compact_cloud(resistance)
     if support:
         payload["support"] = compact_cloud(support)
-    if nine_ema:
-        payload["nine_ema"] = nine_ema
+    if entry_cloud:
+        payload["entry_cloud"] = entry_cloud
     return payload
 
 
-def nine_ema_distance(price: float | None, ema_10m: dict[str, float | None]) -> dict[str, Any] | None:
-    ema9 = ema_10m.get("9")
-    if price is None or ema9 is None or price <= 0:
+def entry_cloud_distance(price: float | None, ema_10m: dict[str, float | None]) -> dict[str, Any] | None:
+    ema5 = ema_10m.get("5")
+    ema12 = ema_10m.get("12")
+    if price is None or ema5 is None or ema12 is None or price <= 0:
         return None
-    distance = abs(price - ema9)
+    low = min(ema5, ema12)
+    high = max(ema5, ema12)
+    if low <= price <= high:
+        distance = 0
+        status = "entry"
+    elif price > high:
+        distance = price - high
+        status = "extended"
+    else:
+        distance = low - price
+        status = "below"
     distance_pct = distance / price * 100
     return {
-        "ema": round(ema9, 4),
+        "low": round(low, 4),
+        "high": round(high, 4),
         "distance": round(distance, 4),
         "distance_pct": round(distance_pct, 2),
-        "status": "entry" if distance_pct <= ENTRY_NINE_EMA_DISTANCE_PCT else "extended" if price > ema9 else "below",
+        "status": status,
     }
 
 

@@ -1075,11 +1075,11 @@ def test_mtf_proximity_marks_inside_cloud_as_highest_priority():
     assert proximity["nearest"]["status"] == "inside"
 
 
-def test_scanner_read_entry_requires_price_at_9ema_after_mtf_resistance_clears():
+def test_scanner_read_entry_requires_price_inside_5_12_after_mtf_resistance_clears():
     read = scanner_read(
         100,
         "Bullish",
-        {"9": 100},
+        {"5": 99, "12": 101},
         {
             "clouds": [
                 {"label": "Hourly 34/50", "cloud_low": 94, "cloud_high": 96, "direction": "below", "distance_pct": 4},
@@ -1099,23 +1099,23 @@ def test_scanner_read_entry_requires_price_at_9ema_after_mtf_resistance_clears()
 
     assert read["kind"] == "entry"
     assert read["label"] == "Entry"
-    assert read["reason"] == "at 9EMA"
+    assert read["reason"] == "in 5/12"
     assert read["source_match_type"] == "long_mtf_5_12_touch"
     assert read["support"]["label"] == "Hourly 34/50"
 
 
-def test_scanner_read_waits_for_mtf_resistance_and_9ema_pullback():
+def test_scanner_read_waits_for_mtf_resistance_and_5_12_pullback():
     resistance_read = scanner_read(
         100,
         "Bullish",
-        {"9": 100},
+        {"5": 99, "12": 101},
         {"clouds": [{"label": "Daily 50/55", "cloud_low": 101, "cloud_high": 103, "direction": "above", "distance_pct": 1}]},
         [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "entry_price": 100}],
     )
     extended_read = scanner_read(
         103,
         "Bullish",
-        {"9": 100},
+        {"5": 99, "12": 101},
         {"clouds": [{"label": "Daily 50/55", "cloud_low": 95, "cloud_high": 96, "direction": "below", "distance_pct": 6.8}]},
         [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "entry_price": 103}],
     )
@@ -1123,4 +1123,4 @@ def test_scanner_read_waits_for_mtf_resistance_and_9ema_pullback():
     assert resistance_read["kind"] == "wait"
     assert resistance_read["reason"] == "break D 50/55"
     assert extended_read["kind"] == "wait"
-    assert extended_read["reason"] == "pullback 9EMA"
+    assert extended_read["reason"] == "pullback 5/12"

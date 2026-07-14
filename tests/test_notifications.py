@@ -178,7 +178,7 @@ def test_scanner_entry_quotes_keep_only_entry_reads():
             "price": 12.5,
             "scanner_read": {
                 "kind": "entry",
-                "reason": "at 9EMA",
+                "reason": "in 5/12",
                 "source_match_type": "long_mtf_5_12_touch",
                 "entry_price": 12.5,
                 "candle_time": "2026-07-13T15:10:00",
@@ -195,7 +195,7 @@ def test_scanner_entry_quotes_keep_only_entry_reads():
         },
         {
             "symbol": "AAOI",
-            "scanner_read": {"kind": "wait", "reason": "pullback 9EMA"},
+            "scanner_read": {"kind": "wait", "reason": "pullback 5/12"},
             "mtf_matches": [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "label": "Curl"}],
         },
     ]
@@ -204,7 +204,7 @@ def test_scanner_entry_quotes_keep_only_entry_reads():
 
     assert [quote["symbol"] for quote in entries] == ["BE"]
     assert entries[0]["mtf_matches"][0]["type"] == "scanner_entry"
-    assert entries[0]["mtf_matches"][0]["display_label"] == "Entry: at 9EMA"
+    assert entries[0]["mtf_matches"][0]["display_label"] == "Entry: in 5/12"
 
 
 def test_monitored_symbols_use_saved_watchlists_not_static_og(tmp_path):

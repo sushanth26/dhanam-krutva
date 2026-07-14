@@ -104,7 +104,7 @@ function scannerDecision(quote, trend) {
   const goodLongMatch = longMatches.find((match) => match.setup_quality !== "bad");
   const badBounce = longMatches.find((match) => match.type === "10m_34_50_bounce" && match.setup_quality === "bad");
   const touchMatch = matches.find((match) => TOUCH_ALERT_TYPES.has(match.type));
-  const nineEma = nineEmaDistance(quote);
+  const entryCloud = entryCloudDistance(quote);
   const resistance = nearestMtfResistance(quote);
   const support = nearestMtfSupport(quote);
 
@@ -144,32 +144,32 @@ function scannerDecision(quote, trend) {
     };
   }
 
-  if (!nineEma) {
+  if (!entryCloud) {
     return {
       kind: "wait",
       label: "Wait",
-      reason: "need 9EMA",
-      detail: "The scanner needs the 10m 9 EMA to judge the entry.",
+      reason: "need 5/12",
+      detail: "The scanner needs the 10m 5/12 EMA cloud to judge the entry.",
     };
   }
 
-  if (nineEma.status === "extended") {
+  if (entryCloud.status === "extended") {
     return {
       kind: "wait",
       label: "Wait",
-      reason: "pullback 9EMA",
+      reason: "pullback 5/12",
       detail: support
-        ? `Price is above MTF clouds and ${shortMtfLabel(support.label)} is acting as support, but entry should wait for the 10m 9 EMA.`
-        : "Price is bullish but extended above the 10m 9 EMA. Wait for the entry pullback.",
+        ? `Price is above MTF clouds and ${shortMtfLabel(support.label)} is acting as support, but entry should wait for the 10m 5/12 EMA cloud.`
+        : "Price is bullish but extended above the 10m 5/12 EMA cloud. Wait for the entry pullback.",
     };
   }
 
-  if (nineEma.status === "below") {
+  if (entryCloud.status === "below") {
     return {
       kind: "wait",
       label: "Wait",
-      reason: "reclaim 9EMA",
-      detail: "Price is below the 10m 9 EMA. Wait for reclaim before considering a long entry.",
+      reason: "reclaim 5/12",
+      detail: "Price is below the 10m 5/12 EMA cloud. Wait for reclaim before considering a long entry.",
     };
   }
 
@@ -177,10 +177,10 @@ function scannerDecision(quote, trend) {
     return {
       kind: "entry",
       label: "Entry",
-      reason: "at 9EMA",
+      reason: "in 5/12",
       detail: support
-        ? `${displayMatchName(goodLongMatch)} with price at the 10m 9 EMA. MTF cloud below is support.`
-        : `${displayMatchName(goodLongMatch)} with price at the 10m 9 EMA.`,
+        ? `${displayMatchName(goodLongMatch)} with price inside the 10m 5/12 EMA cloud. MTF cloud below is support.`
+        : `${displayMatchName(goodLongMatch)} with price inside the 10m 5/12 EMA cloud.`,
     };
   }
 
@@ -188,30 +188,34 @@ function scannerDecision(quote, trend) {
     return {
       kind: "wait",
       label: "Wait",
-      reason: "9EMA trigger",
-      detail: "Price has cleared MTF resistance, but wait for the 10m 9 EMA entry trigger.",
+      reason: "5/12 trigger",
+      detail: "Price has cleared MTF resistance, but wait for the 10m 5/12 EMA cloud entry trigger.",
     };
   }
 
   return {
     kind: "wait",
     label: "Wait",
-    reason: "at 9, no trigger",
-    detail: "Price is at the 10m 9 EMA, but no curl or quality 10m bounce trigger is active.",
+    reason: "in 5/12, no trigger",
+    detail: "Price is inside the 10m 5/12 EMA cloud, but no curl or quality 10m bounce trigger is active.",
   };
 }
 
-function nineEmaDistance(quote) {
+function entryCloudDistance(quote) {
   const price = Number(quote.price);
-  const ema9 = Number(quote.ema_10m?.["9"]);
-  if (![price, ema9].every(Number.isFinite) || price <= 0) return null;
-  const distance = Math.abs(price - ema9);
+  const ema5 = Number(quote.ema_10m?.["5"]);
+  const ema12 = Number(quote.ema_10m?.["12"]);
+  if (![price, ema5, ema12].every(Number.isFinite) || price <= 0) return null;
+  const low = Math.min(ema5, ema12);
+  const high = Math.max(ema5, ema12);
+  const [distance, direction] = distanceToRange(price, low, high);
   const distancePct = distance / price * 100;
   return {
-    ema: ema9,
+    low,
+    high,
     distance,
     distancePct,
-    status: distancePct <= 0.25 ? "entry" : price > ema9 ? "extended" : "below",
+    status: distance <= 0 ? "entry" : direction === "below" ? "extended" : "below",
   };
 }
 

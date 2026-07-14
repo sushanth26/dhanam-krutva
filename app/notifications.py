@@ -316,7 +316,7 @@ def entry_alert_match(quote: dict[str, Any], read: dict[str, Any], source_match:
         "type": "scanner_entry",
         "source_type": source_match.get("type"),
         "label": "Entry",
-        "display_label": f"Entry: {read.get('reason') or 'at 9EMA'}",
+        "display_label": f"Entry: {read.get('reason') or 'in 5/12'}",
         "entry_price": read.get("entry_price") or source_match.get("entry_price") or quote.get("price"),
         "candle_time": read.get("candle_time") or source_match.get("candle_time"),
         "scanner_read": read,
