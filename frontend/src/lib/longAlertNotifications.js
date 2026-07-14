@@ -23,6 +23,7 @@ function rowSymbol(row) {
 }
 
 function setupName(match) {
+  if (match.type === "scanner_entry") return "Entry";
   if (match.type === "10m_34_50_bounce" || match.type === "10m_cloud_bounce") {
     return cleanSetupLabel(match.display_label || match.label || "10m 34/50 Bounce");
   }
@@ -31,6 +32,9 @@ function setupName(match) {
 }
 
 function setupMessage(match) {
+  if (match.type === "scanner_entry") {
+    return `Entry at ${formatPrice(match.entry_price)}: ${match.scanner_read?.detail || "Scanner says Entry"}`;
+  }
   if (match.type === "10m_34_50_bounce" || match.type === "10m_cloud_bounce") {
     return `${cleanSetupLabel(match.display_label || match.label || "10m 34/50 Bounce")} at ${formatPrice(match.entry_price)}`;
   }

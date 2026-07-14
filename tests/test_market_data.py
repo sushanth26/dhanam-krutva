@@ -14,6 +14,7 @@ from app.market_data import (
     mtf_signal_matches,
     nine_ema_touch_matches,
     parse_symbols,
+    scanner_read,
     symbol_chunks,
 )
 
@@ -1072,3 +1073,54 @@ def test_mtf_proximity_marks_inside_cloud_as_highest_priority():
     assert proximity["nearest"]["distance"] == 0
     assert proximity["nearest"]["range_ratio"] == 0
     assert proximity["nearest"]["status"] == "inside"
+
+
+def test_scanner_read_entry_requires_price_at_9ema_after_mtf_resistance_clears():
+    read = scanner_read(
+        100,
+        "Bullish",
+        {"9": 100},
+        {
+            "clouds": [
+                {"label": "Hourly 34/50", "cloud_low": 94, "cloud_high": 96, "direction": "below", "distance_pct": 4},
+                {"label": "Daily 20/21", "cloud_low": 90, "cloud_high": 91, "direction": "below", "distance_pct": 9},
+            ]
+        },
+        [
+            {
+                "type": "long_mtf_5_12_touch",
+                "trade_action": "Long",
+                "display_label": "Curl: Hourly 34/50 -> above 10m 5/12",
+                "entry_price": 100,
+                "candle_time": "2026-07-13T15:10:00",
+            }
+        ],
+    )
+
+    assert read["kind"] == "entry"
+    assert read["label"] == "Entry"
+    assert read["reason"] == "at 9EMA"
+    assert read["source_match_type"] == "long_mtf_5_12_touch"
+    assert read["support"]["label"] == "Hourly 34/50"
+
+
+def test_scanner_read_waits_for_mtf_resistance_and_9ema_pullback():
+    resistance_read = scanner_read(
+        100,
+        "Bullish",
+        {"9": 100},
+        {"clouds": [{"label": "Daily 50/55", "cloud_low": 101, "cloud_high": 103, "direction": "above", "distance_pct": 1}]},
+        [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "entry_price": 100}],
+    )
+    extended_read = scanner_read(
+        103,
+        "Bullish",
+        {"9": 100},
+        {"clouds": [{"label": "Daily 50/55", "cloud_low": 95, "cloud_high": 96, "direction": "below", "distance_pct": 6.8}]},
+        [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "entry_price": 103}],
+    )
+
+    assert resistance_read["kind"] == "wait"
+    assert resistance_read["reason"] == "break D 50/55"
+    assert extended_read["kind"] == "wait"
+    assert extended_read["reason"] == "pullback 9EMA"

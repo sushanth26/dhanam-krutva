@@ -28,6 +28,8 @@ A_PLUS_PLUS_STOP_BUFFER = 1
 MTF_CLOUD_STOP_BUFFER = 3
 A_PLUS_PLUS_STOP_MODE_FIXED = "fixed"
 A_PLUS_PLUS_STOP_MODE_AUTO = "auto"
+ENTRY_NINE_EMA_DISTANCE_PCT = 0.25
+MTF_RESISTANCE_DISTANCE_PCT = 1.5
 LONG_MTF_CLOUDS = [
     {"label": "Hourly 34/50", "timeframe": "1h", "source": "hourly", "keys": ("34", "50")},
     {"label": "Daily 20/21", "timeframe": "daily", "source": "daily", "keys": ("20", "21")},
@@ -116,6 +118,20 @@ def build_live_prices(
         ten_minute_ema = ema_values(ten_minute_candles, [5, 9, 12, 34, 50])
         ten_minute_trend = cloud_status(ten_minute_ema, ["5", "12"], ["34", "50"])
         candle_price = latest_ten_minute_price(ten_minute_candles, price)
+        proximity = mtf_proximity(price, ema_1h, ema_daily, daily_candles)
+        matches = mtf_signal_matches(
+            candle_price,
+            ten_minute_trend,
+            ten_minute_candles,
+            ten_minute_ema,
+            ema_1h,
+            ema_daily,
+            daily_candles=daily_candles,
+            risk_amount=risk_amount,
+            stop_mode=stop_mode,
+            fixed_stop_buffer=fixed_stop_buffer,
+            live_price=price,
+        )
         quotes.append(
             {
                 "symbol": symbol,
@@ -126,20 +142,9 @@ def build_live_prices(
                 "ema_10m": ten_minute_ema,
                 "ema_1h": ema_1h,
                 "ema_daily": ema_daily,
-                "mtf_proximity": mtf_proximity(price, ema_1h, ema_daily, daily_candles),
-                "mtf_matches": mtf_signal_matches(
-                    candle_price,
-                    ten_minute_trend,
-                    ten_minute_candles,
-                    ten_minute_ema,
-                    ema_1h,
-                    ema_daily,
-                    daily_candles=daily_candles,
-                    risk_amount=risk_amount,
-                    stop_mode=stop_mode,
-                    fixed_stop_buffer=fixed_stop_buffer,
-                    live_price=price,
-                ),
+                "mtf_proximity": proximity,
+                "mtf_matches": matches,
+                "scanner_read": scanner_read(price, ten_minute_trend, ten_minute_ema, proximity, matches),
             }
         )
 
@@ -494,6 +499,173 @@ def mtf_proximity_status(distance: float, range_ratio: float | None) -> str:
     if range_ratio <= 1:
         return "reachable"
     return "far"
+
+
+def scanner_read(
+    price: float | None,
+    ten_minute_trend: str,
+    ema_10m: dict[str, float | None],
+    proximity: dict[str, Any],
+    matches: list[dict[str, Any]],
+) -> dict[str, Any]:
+    good_long_match = next(
+        (
+            match
+            for match in matches
+            if match.get("trade_action") == "Long"
+            and match.get("type") in {"long_mtf_5_12_touch", "10m_34_50_bounce"}
+            and match.get("setup_quality") != "bad"
+        ),
+        None,
+    )
+    bad_bounce = next(
+        (
+            match
+            for match in matches
+            if match.get("type") == "10m_34_50_bounce" and match.get("setup_quality") == "bad"
+        ),
+        None,
+    )
+    touch_match = next((match for match in matches if match.get("type") == "mtf_cloud_price_touch"), None)
+    nine_ema = nine_ema_distance(price, ema_10m)
+    resistance = nearest_mtf_resistance(proximity)
+    support = nearest_mtf_support(proximity)
+
+    if ten_minute_trend != "Bullish":
+        return scanner_read_payload("skip", "Skip", f"{ten_minute_trend or 'No'} trend", "Long-only read waits for the 10m trend to turn bullish first.")
+
+    if resistance and resistance.get("direction") == "inside":
+        label = short_mtf_label(resistance.get("label"))
+        return scanner_read_payload("wait", "Wait", f"clear {label}", "Price is inside an MTF cloud. Treat it as resistance until price clears above it.", resistance=resistance)
+
+    if resistance:
+        label = short_mtf_label(resistance.get("label"))
+        return scanner_read_payload("wait", "Wait", f"break {label}", "Nearest MTF cloud is still overhead resistance. A clean move above it makes the read more bullish.", resistance=resistance)
+
+    if bad_bounce and not good_long_match:
+        return scanner_read_payload("skip", "Skip", "weak bounce", bad_bounce.get("setup_quality_note") or "The 10m 34/50 bounce is marked low quality.", source_match=bad_bounce)
+
+    if not nine_ema:
+        return scanner_read_payload("wait", "Wait", "need 9EMA", "The scanner needs the 10m 9 EMA to judge the entry.")
+
+    if nine_ema["status"] == "extended":
+        detail = (
+            f"Price is above MTF clouds and {short_mtf_label(support.get('label'))} is acting as support, but entry should wait for the 10m 9 EMA."
+            if support
+            else "Price is bullish but extended above the 10m 9 EMA. Wait for the entry pullback."
+        )
+        return scanner_read_payload("wait", "Wait", "pullback 9EMA", detail, support=support, nine_ema=nine_ema)
+
+    if nine_ema["status"] == "below":
+        return scanner_read_payload("wait", "Wait", "reclaim 9EMA", "Price is below the 10m 9 EMA. Wait for reclaim before considering a long entry.", nine_ema=nine_ema)
+
+    if good_long_match:
+        detail = (
+            f"{display_match_name(good_long_match)} with price at the 10m 9 EMA. MTF cloud below is support."
+            if support
+            else f"{display_match_name(good_long_match)} with price at the 10m 9 EMA."
+        )
+        return scanner_read_payload("entry", "Entry", "at 9EMA", detail, source_match=good_long_match, support=support, nine_ema=nine_ema)
+
+    if touch_match:
+        return scanner_read_payload("wait", "Wait", "9EMA trigger", "Price has cleared MTF resistance, but wait for the 10m 9 EMA entry trigger.", source_match=touch_match, nine_ema=nine_ema)
+
+    return scanner_read_payload("wait", "Wait", "at 9, no trigger", "Price is at the 10m 9 EMA, but no curl or quality 10m bounce trigger is active.", nine_ema=nine_ema)
+
+
+def scanner_read_payload(
+    kind: str,
+    label: str,
+    reason: str,
+    detail: str,
+    source_match: dict[str, Any] | None = None,
+    resistance: dict[str, Any] | None = None,
+    support: dict[str, Any] | None = None,
+    nine_ema: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "kind": kind,
+        "label": label,
+        "reason": reason,
+        "detail": detail,
+    }
+    if source_match:
+        payload["source_match_type"] = source_match.get("type")
+        payload["source_match_label"] = source_match.get("display_label") or source_match.get("label")
+        payload["entry_price"] = source_match.get("entry_price")
+        payload["candle_time"] = source_match.get("candle_time")
+    if resistance:
+        payload["resistance"] = compact_cloud(resistance)
+    if support:
+        payload["support"] = compact_cloud(support)
+    if nine_ema:
+        payload["nine_ema"] = nine_ema
+    return payload
+
+
+def nine_ema_distance(price: float | None, ema_10m: dict[str, float | None]) -> dict[str, Any] | None:
+    ema9 = ema_10m.get("9")
+    if price is None or ema9 is None or price <= 0:
+        return None
+    distance = abs(price - ema9)
+    distance_pct = distance / price * 100
+    return {
+        "ema": round(ema9, 4),
+        "distance": round(distance, 4),
+        "distance_pct": round(distance_pct, 2),
+        "status": "entry" if distance_pct <= ENTRY_NINE_EMA_DISTANCE_PCT else "extended" if price > ema9 else "below",
+    }
+
+
+def nearest_mtf_resistance(proximity: dict[str, Any]) -> dict[str, Any] | None:
+    candidates = [
+        cloud
+        for cloud in proximity.get("clouds", [])
+        if cloud.get("direction") in {"above", "inside"}
+        and cloud_distance_pct(cloud) is not None
+        and cloud_distance_pct(cloud) <= MTF_RESISTANCE_DISTANCE_PCT
+    ]
+    candidates.sort(key=lambda cloud: (cloud_distance_pct(cloud) or 0, cloud.get("label") or ""))
+    return candidates[0] if candidates else None
+
+
+def nearest_mtf_support(proximity: dict[str, Any]) -> dict[str, Any] | None:
+    candidates = [
+        cloud
+        for cloud in proximity.get("clouds", [])
+        if cloud.get("direction") == "below" and cloud_distance_pct(cloud) is not None
+    ]
+    candidates.sort(key=lambda cloud: (cloud_distance_pct(cloud) or 0, cloud.get("label") or ""))
+    return candidates[0] if candidates else None
+
+
+def cloud_distance_pct(cloud: dict[str, Any]) -> float | None:
+    if cloud.get("direction") == "inside":
+        return 0
+    value = cloud.get("distance_pct")
+    return float(value) if value is not None else None
+
+
+def compact_cloud(cloud: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "label": cloud.get("label"),
+        "cloud_low": cloud.get("cloud_low"),
+        "cloud_high": cloud.get("cloud_high"),
+        "direction": cloud.get("direction"),
+        "distance_pct": cloud.get("distance_pct"),
+    }
+
+
+def short_mtf_label(label: Any) -> str:
+    return str(label or "").replace("Hourly ", "H ").replace("Daily ", "D ").strip()
+
+
+def display_match_name(match: dict[str, Any]) -> str:
+    if match.get("type") == "long_mtf_5_12_touch":
+        return "curl"
+    if match.get("type") == "10m_34_50_bounce":
+        return "10m bounce"
+    return str(match.get("display_label") or match.get("label") or "setup").lower()
 
 
 def long_mtf_pullback_matches(
