@@ -1607,7 +1607,7 @@ select {
 
 .live-price-table .mtf-col,
 .live-price-table .mtf-cell {
-  width: 118px;
+  width: 170px;
 }
 
 .live-price-table td {
@@ -1687,7 +1687,7 @@ select {
 .mtf-mini-chip b,
 .mtf-mini-chip small {
   display: block;
-  max-width: 78px;
+  max-width: 72px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1695,13 +1695,13 @@ select {
 
 .mtf-mini-chip b {
   color: #184d36;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 900;
 }
 
 .mtf-mini-chip small {
   color: #4d5a55;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
 }
 
@@ -2089,7 +2089,7 @@ h1 {
 
 .live-price-table .mtf-col,
 .live-price-table .mtf-cell {
-  width: 104px;
+  width: 126px;
 }
 
 .live-price-table .price-col,
@@ -2115,7 +2115,7 @@ h1 {
 
 .mtf-mini-chip b,
 .mtf-mini-chip small {
-  max-width: 70px;
+  max-width: 56px;
 }
 
 .fast-ema-chip {
@@ -2354,7 +2354,7 @@ h1 {
 
   .live-price-table .mtf-col,
   .live-price-table .mtf-cell {
-    width: 118px;
+    width: 170px;
   }
 
   .live-price-table .price-col,
@@ -2379,7 +2379,7 @@ h1 {
 
   .mtf-mini-chip b,
   .mtf-mini-chip small {
-    max-width: 78px;
+    max-width: 72px;
   }
 
   .fast-ema-chip {
