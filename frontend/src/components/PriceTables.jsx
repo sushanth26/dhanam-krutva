@@ -18,6 +18,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
               <th>Symbol</th>
               <th className="fast-ema-col">10m 5/12</th>
               <th className="mtf-col">Read</th>
+              <th className="rr-col">R:R</th>
               <th className="price-col">Last</th>
               {onRemoveSymbol ? <th className="action-col" aria-label="Actions"></th> : null}
             </tr>
@@ -26,7 +27,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
             {sortedQuotes.length ? sortedQuotes.map((quote) => (
               <PriceRow key={quote.symbol} quote={quote} onRemoveSymbol={onRemoveSymbol} />
             )) : (
-              <tr><td colSpan={onRemoveSymbol ? "5" : "4"}>No {kind} stocks right now.</td></tr>
+              <tr><td colSpan={onRemoveSymbol ? "6" : "5"}>No {kind} stocks right now.</td></tr>
             )}
           </tbody>
         </table>
@@ -41,6 +42,7 @@ function PriceRow({ quote, onRemoveSymbol }) {
     <BaseRow quote={quote} trend={tenMinuteStatus} action={onRemoveSymbol ? <RemoveCell onRemove={() => onRemoveSymbol(quote.symbol)} symbol={quote.symbol} /> : null}>
       <td className="fast-ema-cell"><FastEmaDistance quote={quote} /></td>
       <td className="mtf-cell"><ScannerDecision quote={quote} trend={tenMinuteStatus} /></td>
+      <td className="rr-cell"><RewardRisk quote={quote} /></td>
     </BaseRow>
   );
 }
@@ -83,9 +85,11 @@ function FastEmaDistance({ quote }) {
 }
 
 function ScannerDecision({ quote, trend }) {
-  const decision = quote.scanner_read || scannerDecision(quote, trend);
+  const thesis = quote.trade_thesis;
+  const decision = thesis ? thesisDecision(thesis) : quote.scanner_read || scannerDecision(quote, trend);
   const clouds = scannerCloudsForQuote(quote);
   const detail = [
+    thesis ? tradeThesisTitle(thesis) : "",
     decision.detail,
     clouds.length ? clouds.map(cloudTitle).join("\n") : "",
   ].filter(Boolean).join("\n\n");
@@ -96,6 +100,79 @@ function ScannerDecision({ quote, trend }) {
       <small>{decision.reason}</small>
     </span>
   );
+}
+
+function thesisDecision(thesis) {
+  const decision = String(thesis.decision || "Skip");
+  return {
+    kind: decision.toLowerCase(),
+    label: decision,
+    reason: thesis.reason || "-",
+    detail: thesis.detail || "",
+  };
+}
+
+function tradeThesisTitle(thesis) {
+  const lines = [
+    `${thesis.decision || "Decision"}: ${thesis.reason || ""}`,
+    `Setup: ${gateText(thesis.setup)}`,
+    `Confirmation: ${gateText(thesis.confirmation)}`,
+    `R:R: ${gateText(thesis.reward_risk)}`,
+    Number.isFinite(Number(thesis.entry)) ? `Entry: ${formatPrice(thesis.entry)}` : "",
+    Number.isFinite(Number(thesis.invalidation)) ? `Invalidation: ${formatPrice(thesis.invalidation)}` : "",
+    ...(thesis.targets || []).slice(0, 3).map((target, index) => (
+      `T${index + 1}: ${formatPrice(target.price)}${Number.isFinite(Number(target.reward_risk)) ? ` = ${Number(target.reward_risk).toFixed(2)}R` : ""}`
+    )),
+  ];
+  return lines.filter(Boolean).join("\n");
+}
+
+function gateText(gate) {
+  if (!gate) return "-";
+  return `${gate.status ? "Yes" : "No"} - ${gate.label || ""}`;
+}
+
+function RewardRisk({ quote }) {
+  const plan = quote.trade_plan;
+  if (!plan) return <span className="rr-chip rr-empty">-</span>;
+  const target = bestRewardRiskTarget(plan);
+  const rr = Number(target?.reward_risk ?? plan.reward_risk);
+  const detail = tradePlanTitle(plan);
+  const label = Number.isFinite(rr) ? `${rr.toFixed(2)}R` : "Plan";
+  const reason = Number.isFinite(rr) ? rewardRiskReason(plan) : "needs S/R";
+  return (
+    <span className={`rr-chip ${target?.grade || plan.grade || "incomplete"}`} title={detail} aria-label={detail}>
+      <b>{label}</b>
+      <small>{reason}</small>
+    </span>
+  );
+}
+
+function tradePlanTitle(plan) {
+  const lines = [
+    `${plan.action || "Trade"} plan`,
+    Number.isFinite(Number(plan.entry)) ? `Entry: ${formatPrice(plan.entry)}` : "",
+    Number.isFinite(Number(plan.stop)) ? `Stop: ${formatPrice(plan.stop)} (${plan.stop_level?.label || "support/resistance"})` : "",
+    Number.isFinite(Number(plan.target)) ? `Target: ${formatPrice(plan.target)} (${plan.target_level?.label || "support/resistance"})` : "",
+    Number.isFinite(Number(plan.risk_per_share)) ? `Risk/share: ${formatPrice(plan.risk_per_share)}` : "",
+    Number.isFinite(Number(plan.reward_per_share)) ? `Reward/share: ${formatPrice(plan.reward_per_share)}` : "",
+    Number.isFinite(Number(plan.reward_risk)) ? `Reward:risk: ${Number(plan.reward_risk).toFixed(2)}R` : "Needs both stop and target levels.",
+    ...(plan.targets || []).slice(0, 3).map((target, index) => (
+      `T${index + 1}: ${formatPrice(target.price)} = ${Number(target.reward_risk).toFixed(2)}R (${target.label || "target"})`
+    )),
+  ];
+  return lines.filter(Boolean).join("\n");
+}
+
+function rewardRiskReason(plan) {
+  if (plan.has_acceptable_target || plan.is_acceptable) return plan.grade === "excellent" ? "great room" : "good room";
+  if (plan.grade === "thin") return "thin";
+  return "skip";
+}
+
+function bestRewardRiskTarget(plan) {
+  const targets = plan.targets || [];
+  return targets.find((target) => target.is_acceptable) || targets[0] || null;
 }
 
 function scannerDecision(quote, trend) {
@@ -475,10 +552,22 @@ function formatRangeRatio(value) {
 }
 
 function compareTenMinuteFastCloud(left, right) {
+  const leftPlanScore = tradePlanSortScore(left);
+  const rightPlanScore = tradePlanSortScore(right);
+  if (leftPlanScore !== rightPlanScore) return leftPlanScore - rightPlanScore;
   const leftScore = fastEmaSortScore(left);
   const rightScore = fastEmaSortScore(right);
   if (leftScore !== rightScore) return leftScore - rightScore;
   return compareMtfProximity(left, right);
+}
+
+function tradePlanSortScore(quote) {
+  const plan = quote.trade_plan;
+  const rr = Number(bestRewardRiskTarget(plan || {})?.reward_risk ?? plan?.reward_risk);
+  if (!Number.isFinite(rr)) return Number.POSITIVE_INFINITY;
+  const decision = String(quote.trade_thesis?.decision || "").toLowerCase();
+  const kindBonus = decision === "playable" ? 0 : decision === "wait" ? 10 : quote.scanner_read?.kind === "entry" ? 2 : 20;
+  return kindBonus - rr;
 }
 
 function fastEmaSortScore(quote) {

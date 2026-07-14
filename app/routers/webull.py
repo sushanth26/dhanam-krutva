@@ -49,7 +49,7 @@ def webull_live_prices(
             stop_mode=stop_mode,
             fixed_stop_buffer=fixed_stop_buffer,
         )
-        if manual:
+        if manual and payload.get("ok") is True:
             manual_unlock_for_today(settings)
         return payload
     except WebullConfigurationError as exc:

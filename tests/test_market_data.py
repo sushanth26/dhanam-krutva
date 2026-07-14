@@ -15,7 +15,10 @@ from app.market_data import (
     nine_ema_touch_matches,
     parse_symbols,
     scanner_read,
+    support_resistance_levels,
     symbol_chunks,
+    trade_plan_from_levels,
+    trade_thesis_from_gates,
 )
 
 
@@ -1165,6 +1168,146 @@ def test_mtf_proximity_marks_inside_cloud_as_highest_priority():
     assert proximity["nearest"]["distance"] == 0
     assert proximity["nearest"]["range_ratio"] == 0
     assert proximity["nearest"]["status"] == "inside"
+
+
+def test_support_resistance_levels_include_hourly_daily_clouds_and_swings():
+    hourly = [
+        {"high": 100, "low": 96},
+        {"high": 104, "low": 97},
+        {"high": 108, "low": 98},
+        {"high": 104, "low": 97},
+        {"high": 101, "low": 96},
+        {"high": 99, "low": 94},
+        {"high": 98, "low": 92},
+        {"high": 100, "low": 95},
+    ]
+    daily = [
+        {"high": 120, "low": 90},
+        {"high": 125, "low": 88},
+        {"high": 130, "low": 86},
+        {"high": 124, "low": 89},
+        {"high": 121, "low": 92},
+    ]
+
+    levels = support_resistance_levels(
+        100,
+        hourly,
+        daily,
+        {"34": 94, "50": 96},
+        {"20": 108, "21": 110, "50": 90, "55": 92},
+    )
+
+    assert levels["support"][0]["label"] == "Hourly 34/50"
+    assert levels["support"][0]["side"] == "support"
+    assert levels["resistance"][0]["label"] == "Daily 20/21"
+    assert levels["resistance"][0]["side"] == "resistance"
+    assert any(level["kind"] == "swing_high" for level in levels["resistance"])
+
+
+def test_trade_plan_from_levels_calculates_reward_to_risk_for_long():
+    levels = {
+        "support": [{"label": "Hourly 34/50", "timeframe": "1h", "kind": "ema_cloud", "side": "support", "low": 94, "high": 96}],
+        "resistance": [{"label": "Daily 20/21", "timeframe": "daily", "kind": "ema_cloud", "side": "resistance", "low": 110, "high": 112}],
+    }
+
+    plan = trade_plan_from_levels(
+        100,
+        "Bullish",
+        levels,
+        [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "entry_price": 100, "display_label": "Curl"}],
+        risk_amount=100,
+        fixed_stop_buffer=1,
+    )
+
+    assert plan["action"] == "Long"
+    assert plan["entry"] == 100
+    assert plan["stop"] == 93
+    assert plan["target"] == 110
+    assert plan["risk_per_share"] == 7
+    assert plan["reward_per_share"] == 10
+    assert plan["reward_risk"] == 1.43
+    assert plan["grade"] == "thin"
+    assert plan["is_acceptable"] is False
+    assert plan["risk_plan"]["shares"] == 14
+
+
+def test_trade_plan_from_levels_calculates_reward_to_risk_for_short():
+    levels = {
+        "support": [{"label": "Daily 20/21", "timeframe": "daily", "kind": "ema_cloud", "side": "support", "low": 88, "high": 90}],
+        "resistance": [{"label": "Hourly 34/50", "timeframe": "1h", "kind": "ema_cloud", "side": "resistance", "low": 104, "high": 106}],
+    }
+
+    plan = trade_plan_from_levels(
+        100,
+        "Bearish",
+        levels,
+        [{"type": "10m_34_50_bounce", "trade_action": "Short", "entry_price": 100, "setup_quality": "good"}],
+        fixed_stop_buffer=1,
+    )
+
+    assert plan["action"] == "Short"
+    assert plan["stop"] == 107
+    assert plan["target"] == 90
+    assert plan["reward_risk"] == 1.43
+    assert plan["stop_level"]["label"] == "Hourly 34/50"
+    assert plan["target_level"]["label"] == "Daily 20/21"
+
+
+def test_trade_plan_from_levels_keeps_multiple_targets_for_rr():
+    levels = {
+        "support": [{"label": "Prior support", "timeframe": "daily", "kind": "swing_low", "side": "support", "low": 117.5, "high": 118.2}],
+        "resistance": [
+            {"label": "T1", "timeframe": "daily", "kind": "swing_high", "side": "resistance", "low": 124.78, "high": 124.78},
+            {"label": "T2", "timeframe": "daily", "kind": "swing_high", "side": "resistance", "low": 127.51, "high": 127.51},
+            {"label": "T3", "timeframe": "daily", "kind": "swing_high", "side": "resistance", "low": 129.81, "high": 129.81},
+        ],
+    }
+
+    plan = trade_plan_from_levels(
+        119.42,
+        "Bullish",
+        levels,
+        [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "entry_price": 119.42, "display_label": "Gap support reclaim"}],
+        fixed_stop_buffer=1,
+    )
+
+    assert [target["label"] for target in plan["targets"]] == ["T1", "T2", "T3"]
+    assert [target["reward_risk"] for target in plan["targets"]] == [1.84, 2.77, 3.56]
+    assert plan["is_acceptable"] is False
+    assert plan["has_acceptable_target"] is True
+
+
+def test_trade_thesis_waits_when_setup_exists_without_confirmation():
+    thesis = trade_thesis_from_gates(
+        119.42,
+        "Bullish",
+        {"support": [{"label": "Prior resistance", "low": 116.5, "high": 118.2}], "resistance": [{"label": "Target", "low": 127.51, "high": 127.51}]},
+        [],
+        {"action": "Long", "entry": 119.42, "stop": 115.5, "targets": [{"label": "Target", "price": 127.51, "reward_risk": 2.1, "is_acceptable": True}], "has_acceptable_target": True},
+        {"kind": "wait", "reason": "hold support", "detail": "Setup exists, but wait for support to hold."},
+    )
+
+    assert thesis["decision"] == "Wait"
+    assert thesis["setup"]["status"] is True
+    assert thesis["confirmation"]["status"] is False
+    assert thesis["reward_risk"]["status"] is True
+    assert thesis["reason"] == "hold support"
+
+
+def test_trade_thesis_playable_when_confirmed_and_rr_is_good():
+    thesis = trade_thesis_from_gates(
+        119.42,
+        "Bullish",
+        {"support": [{"label": "Prior resistance", "low": 116.5, "high": 118.2}], "resistance": [{"label": "Target", "low": 127.51, "high": 127.51}]},
+        [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "entry_price": 119.42, "display_label": "Support bounce"}],
+        {"action": "Long", "entry": 119.42, "stop": 115.5, "targets": [{"label": "Target", "price": 127.51, "reward_risk": 2.1, "is_acceptable": True}], "has_acceptable_target": True},
+        {"kind": "entry", "reason": "in 5/12", "detail": "Confirmed bounce."},
+    )
+
+    assert thesis["decision"] == "Playable"
+    assert thesis["setup"]["label"] == "Support bounce"
+    assert thesis["confirmation"]["status"] is True
+    assert thesis["reward_risk"]["status"] is True
 
 
 def test_scanner_read_entry_requires_price_inside_5_12_after_mtf_resistance_clears():

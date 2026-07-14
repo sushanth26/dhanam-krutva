@@ -1769,6 +1769,11 @@ select {
   width: 118px;
 }
 
+.live-price-table .rr-col,
+.live-price-table .rr-cell {
+  width: 82px;
+}
+
 .live-price-table td {
   font-size: 14px;
   font-weight: 700;
@@ -1854,7 +1859,8 @@ select {
 }
 
 .scanner-decision.long,
-.scanner-decision.entry {
+.scanner-decision.entry,
+.scanner-decision.playable {
   background: #075747;
   border-color: #054639;
 }
@@ -1862,7 +1868,9 @@ select {
 .scanner-decision.long b,
 .scanner-decision.long small,
 .scanner-decision.entry b,
-.scanner-decision.entry small {
+.scanner-decision.entry small,
+.scanner-decision.playable b,
+.scanner-decision.playable small {
   color: #ffffff;
 }
 
@@ -1890,6 +1898,77 @@ select {
 
 .scanner-decision.skip small {
   color: #68766c;
+}
+
+.rr-chip {
+  align-items: start;
+  background: #eef2f5;
+  border: 1px solid #cfd8cc;
+  border-radius: 7px;
+  display: inline-grid;
+  gap: 2px;
+  line-height: 1.05;
+  min-height: 34px;
+  min-width: 64px;
+  padding: 5px 7px;
+}
+
+.rr-chip b,
+.rr-chip small {
+  display: block;
+  max-width: 58px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rr-chip b {
+  color: #25312c;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.rr-chip small {
+  color: #68766c;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.rr-chip.good,
+.rr-chip.excellent {
+  background: #075747;
+  border-color: #054639;
+}
+
+.rr-chip.good b,
+.rr-chip.good small,
+.rr-chip.excellent b,
+.rr-chip.excellent small {
+  color: #ffffff;
+}
+
+.rr-chip.thin {
+  background: #fff3de;
+  border-color: #efc77e;
+}
+
+.rr-chip.thin b {
+  color: #6d4510;
+}
+
+.rr-chip.thin small {
+  color: #7b5a28;
+}
+
+.rr-chip.poor {
+  background: #fff0f0;
+  border-color: #efb1a1;
+}
+
+.rr-chip.poor b,
+.rr-chip.poor small {
+  color: #8a2d17;
 }
 
 .mtf-mini-map {
@@ -2321,6 +2400,11 @@ h1 {
   width: 104px;
 }
 
+.live-price-table .rr-col,
+.live-price-table .rr-cell {
+  width: 68px;
+}
+
 .live-price-table .price-col,
 .live-price-table .price-cell {
   text-align: right;
@@ -2613,6 +2697,11 @@ h1 {
     width: 118px;
   }
 
+  .live-price-table .rr-col,
+  .live-price-table .rr-cell {
+    width: 82px;
+  }
+
   .live-price-table .price-col,
   .live-price-table .price-cell {
     width: 76px;
@@ -2660,6 +2749,20 @@ h1 {
   .scanner-decision small {
     font-size: 10px;
     max-width: 82px;
+  }
+
+  .rr-chip {
+    min-width: 64px;
+    padding: 5px 7px;
+  }
+
+  .rr-chip b {
+    font-size: 11px;
+  }
+
+  .rr-chip small {
+    font-size: 10px;
+    max-width: 58px;
   }
 
   .cloud-tag {

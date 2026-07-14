@@ -575,6 +575,7 @@ class WebullService:
 
     def _guarded_result(self, result: dict[str, Any]) -> dict[str, Any]:
         if result.get("ok"):
+            self._clear_guard()
             return result
         settings = self._guard_settings()
         if not settings:
@@ -658,6 +659,15 @@ class WebullService:
             path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         except OSError:
             logging.getLogger(__name__).exception("Failed to write Webull guard file")
+
+    def _clear_guard(self) -> None:
+        settings = self._guard_settings()
+        if not settings:
+            return
+        try:
+            settings.webull_guard_file.unlink(missing_ok=True)
+        except OSError:
+            logging.getLogger(__name__).exception("Failed to clear Webull guard file")
 
     def _guard_settings(self) -> Settings | None:
         settings = getattr(self, "settings", None)

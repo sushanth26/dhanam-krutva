@@ -89,7 +89,7 @@ def get_settings() -> Settings:
         webull_verify_cooldown_seconds=max(300, int(os.getenv("WEBULL_VERIFY_COOLDOWN_SECONDS", "43200") or "43200")),
         webull_rate_limit_cooldown_seconds=max(60, int(os.getenv("WEBULL_RATE_LIMIT_COOLDOWN_SECONDS", "1800") or "1800")),
         mtf_push_enabled=env_bool("MTF_PUSH_ENABLED", False),
-        mtf_push_poll_seconds=max(30, int(os.getenv("MTF_PUSH_POLL_SECONDS", "300") or "300")),
+        mtf_push_poll_seconds=max(30, int(os.getenv("MTF_PUSH_POLL_SECONDS", "30") or "30")),
         mtf_push_timezone=os.getenv("MTF_PUSH_TIMEZONE", "America/Chicago").strip() or "America/Chicago",
     )
 

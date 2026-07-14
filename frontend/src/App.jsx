@@ -112,8 +112,8 @@ export default function App() {
     try {
       const activeTab = watchlistTabRef.current;
       const selectedWatchlist = watchlistsRef.current.find((item) => item.id === activeTab);
-      await refreshWatchlistPrices(selectedWatchlist, { manual });
-      if (manual) unlockLiveDataForToday();
+      const refreshed = await refreshWatchlistPrices(selectedWatchlist, { manual });
+      if (manual && refreshed) unlockLiveDataForToday();
     } catch (error) {
       setLiveAlert(error.message);
     } finally {
@@ -132,10 +132,12 @@ export default function App() {
     if (showLoading) setLoadingKey("prices", true);
     try {
       const lists = watchlistsRef.current;
+      let allRefreshed = true;
       for (const watchlist of lists) {
-        await refreshWatchlistPrices(watchlist, { manual });
+        const refreshed = await refreshWatchlistPrices(watchlist, { manual });
+        allRefreshed = allRefreshed && refreshed;
       }
-      if (manual) unlockLiveDataForToday();
+      if (manual && allRefreshed) unlockLiveDataForToday();
     } catch (error) {
       setLiveAlert(error.message);
     } finally {
@@ -161,14 +163,27 @@ export default function App() {
     if (manual) query.set("manual", "true");
     const payload = await getJson(`/api/webull/live-prices?${query.toString()}`);
     const nextQuotes = payload.quotes || [];
+    const paused = webullPollingPaused(payload);
     const updatedAt = formatMarketTime(new Date());
     setQuotesForTab(watchlist.id, nextQuotes);
-    setUpdatedTextForTab(watchlist.id, `Updated ${updatedAt} from ${payload.source || "webull"}`);
-    notifyLongAlerts(watchlist, nextQuotes);
+    setUpdatedTextForTab(
+      watchlist.id,
+      paused
+        ? webullPausedText(payload)
+        : `Updated ${updatedAt} from ${payload.source || "webull"}`,
+    );
+    if (!paused) notifyLongAlerts(watchlist, nextQuotes);
 
-    if (payload.errors?.length) {
-      setLiveAlert(`Some data failed: ${payload.errors.map((item) => item.source).join(", ")}`);
+    if (paused) {
+      lockLiveDataPolling();
+      setLiveAlert(webullPausedText(payload));
+      return false;
     }
+
+    if (payload.errors?.length || payload.ok === false) {
+      setLiveAlert(`Some data failed: ${payload.errors?.map((item) => item.source).join(", ") || "webull"}`);
+    }
+    return payload.ok !== false;
   }
 
   function setQuotesForTab(tab, nextQuotes) {
@@ -380,6 +395,29 @@ export default function App() {
   function unlockLiveDataForToday() {
     window.localStorage.setItem(LIVE_DATA_UNLOCK_KEY, marketDateKey());
     startPassiveMarketRefresh();
+  }
+
+  function lockLiveDataPolling() {
+    window.localStorage.removeItem(LIVE_DATA_UNLOCK_KEY);
+    stopPassiveMarketRefresh();
+  }
+
+  function webullPollingPaused(payload) {
+    return Boolean((payload.errors || []).some((item) => webullPauseError(item.error)));
+  }
+
+  function webullPauseError(error) {
+    if (!error || typeof error !== "object") return false;
+    const code = String(error.error_code || "").toUpperCase();
+    return code === "VERIFY_FAILURE_EXCEED_LIMIT" || code === "TOO_MANY_REQUESTS" || code === "WEBULL_GUARD_ACTIVE" || error.webull_guard_active === true;
+  }
+
+  function webullPausedText(payload) {
+    const first = (payload.errors || []).map((item) => item.error).find(webullPauseError);
+    const code = String(first?.error_code || "").toUpperCase();
+    if (code === "WEBULL_GUARD_ACTIVE") return "Webull polling paused by guard; retry after verification/cooldown.";
+    if (code === "TOO_MANY_REQUESTS") return "Webull polling paused for rate limit cooldown.";
+    return "Webull polling paused for verification; complete Webull login, then refresh once.";
   }
 
   function startPassiveMarketRefresh() {

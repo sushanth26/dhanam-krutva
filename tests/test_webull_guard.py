@@ -1,3 +1,5 @@
+import json
+import time
 from pathlib import Path
 
 from app.config import Settings
@@ -71,6 +73,33 @@ def test_active_webull_guard_blocks_future_sdk_calls(tmp_path):
     assert result["status_code"] == 423
     assert result["error_code"] == "WEBULL_GUARD_ACTIVE"
     assert result["webull_guard_reason"] == "rate_limit"
+
+
+def test_successful_webull_call_clears_active_guard(tmp_path):
+    service = WebullService(settings(tmp_path))
+    service.settings.webull_guard_file.write_text(
+        json.dumps(
+            {
+                "active": True,
+                "reason": "rate_limit",
+                "blocked_until_epoch": time.time() - 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeResponse:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            return {"ok": True}
+
+    result = service._call(lambda: FakeResponse())
+
+    assert result["ok"] is True
+    assert service.status()["webull_guard"]["active"] is False
+    assert not service.settings.webull_guard_file.exists()
 
 
 def test_disabled_webull_guard_does_not_block_future_sdk_calls(tmp_path):
