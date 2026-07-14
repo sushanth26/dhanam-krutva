@@ -204,14 +204,15 @@ function tradePlanTitle(plan) {
 }
 
 function rewardRiskReason(plan) {
-  if (plan.has_acceptable_target || plan.is_acceptable) return plan.grade === "excellent" ? "great room" : "good room";
+  const target = firstTradeTarget(plan);
+  if (target?.is_acceptable || (!target && plan.is_acceptable)) return (target?.grade || plan.grade) === "excellent" ? "great room" : "good room";
   if (plan.grade === "thin") return "thin";
   return "skip";
 }
 
 function bestRewardRiskTarget(plan) {
   const targets = plan.targets || [];
-  return targets.find((target) => target.is_acceptable) || targets[0] || null;
+  return targets[0] || null;
 }
 
 function firstTradeTarget(plan) {
