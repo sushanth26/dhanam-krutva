@@ -12,6 +12,7 @@ from app.notifications import (
     mtf_notification_payload,
     mtf_signature,
     save_push_alert_history,
+    scanner_entry_quotes,
 )
 from app.watchlists import WatchlistStore
 
@@ -39,6 +40,20 @@ def test_mtf_push_monitor_does_not_start_when_disabled(tmp_path):
     monitor.start()
 
     assert monitor.task is None
+
+
+def test_mtf_push_monitor_polling_does_not_require_manual_live_data_unlock(tmp_path, monkeypatch):
+    settings = SimpleNamespace(
+        push_configured=True,
+        mtf_push_enabled=True,
+        push_subscription_file=tmp_path / "subscriptions.json",
+        mtf_push_timezone="America/Chicago",
+    )
+    monitor = MtfPushMonitor(settings)
+    monitor.store.upsert({"endpoint": "https://push.example/1", "keys": {"p256dh": "a", "auth": "b"}})
+    monkeypatch.setattr(notifications, "is_market_refresh_window", lambda _timezone: True)
+
+    assert monitor.should_poll() is True
 
 
 def test_apply_enabled_strategies_drops_matches_for_disabled_strategy_and_empties_quote():
@@ -154,6 +169,42 @@ def test_confirmed_mtf_quotes_removes_waiting_matches():
         {"label": "Daily 20/21", "status": "waiting", "type": "mtf_cloud_inside"},
         {"label": "Daily 50/55", "status": "confirmed"},
     ]
+
+
+def test_scanner_entry_quotes_keep_only_entry_reads():
+    quotes = [
+        {
+            "symbol": "BE",
+            "price": 12.5,
+            "scanner_read": {
+                "kind": "entry",
+                "reason": "in 5/12",
+                "source_match_type": "long_mtf_5_12_touch",
+                "entry_price": 12.5,
+                "candle_time": "2026-07-13T15:10:00",
+            },
+            "mtf_matches": [
+                {
+                    "type": "long_mtf_5_12_touch",
+                    "trade_action": "Long",
+                    "label": "Curl",
+                    "display_label": "Curl: Hourly 34/50 -> above 10m 5/12",
+                    "entry_price": 12.5,
+                }
+            ],
+        },
+        {
+            "symbol": "AAOI",
+            "scanner_read": {"kind": "wait", "reason": "pullback 5/12"},
+            "mtf_matches": [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "label": "Curl"}],
+        },
+    ]
+
+    entries = scanner_entry_quotes(quotes)
+
+    assert [quote["symbol"] for quote in entries] == ["BE"]
+    assert entries[0]["mtf_matches"][0]["type"] == "scanner_entry"
+    assert entries[0]["mtf_matches"][0]["display_label"] == "Entry: in 5/12"
 
 
 def test_monitored_symbols_use_saved_watchlists_not_static_og(tmp_path):

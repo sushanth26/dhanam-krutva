@@ -74,3 +74,22 @@ test("mtf touch notification describes immediate reaction", () => {
     message: "Price rejected down from Hourly 34/50 at 107.00",
   });
 });
+
+test("scanner entry notification is explicit", () => {
+  const notification = longAlertNotification([
+    {
+      quote: { symbol: "BE" },
+      match: {
+        type: "scanner_entry",
+        display_label: "Entry: in 5/12",
+        entry_price: 12.5,
+        scanner_read: { detail: "curl with price inside the 10m 5/12 EMA cloud." },
+      },
+    },
+  ]);
+
+  assert.deepEqual(notification, {
+    title: "BE: Entry alert",
+    message: "Entry at 12.50: curl with price inside the 10m 5/12 EMA cloud.",
+  });
+});

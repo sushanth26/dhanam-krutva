@@ -9,8 +9,8 @@ export function useShellData({ setLoadingKey }) {
   const [selectedAccountId, setSelectedAccountId] = useState(null);
   const [alert, setAlert] = useState("");
 
-  async function refreshShell({ includeAccounts = true } = {}) {
-    setLoadingKey("shell", true);
+  async function refreshShell({ includeAccounts = true, showLoading = true } = {}) {
+    if (showLoading) setLoadingKey("shell", true);
     try {
       const nextStatus = await getJson("/api/status");
       setStatus(nextStatus);
@@ -32,7 +32,7 @@ export function useShellData({ setLoadingKey }) {
     } catch (error) {
       setAlert(error.message);
     } finally {
-      setLoadingKey("shell", false);
+      if (showLoading) setLoadingKey("shell", false);
     }
   }
 

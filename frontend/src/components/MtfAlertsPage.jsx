@@ -5,22 +5,40 @@ import { formatDateTime } from "../lib/dates";
 import { formatPrice } from "../lib/market";
 
 const LIVE_LONG_SETUP_TYPES = new Set(["long_mtf_5_12_touch", "10m_34_50_bounce"]);
-const TOUCH_ALERT_TYPES = new Set(["mtf_cloud_price_touch"]);
 
 export function longAlertRows(watchlists, quotesByTab, strategies = {}) {
   return watchlists.flatMap((watchlist) => {
     const quotes = quotesByTab[watchlist.id] || [];
-    return quotes.flatMap((quote) => {
-      const matches = (quote.mtf_matches || []).filter((match) => (
-        (
-          (match.trade_action === "Long" && LIVE_LONG_SETUP_TYPES.has(match.type))
-          || TOUCH_ALERT_TYPES.has(match.type)
-        )
-        && alertStrategyEnabled(match, strategies)
-      ));
-      return matches.map((match) => ({ watchlist, quote, match }));
-    });
+    return quotes
+      .filter((quote) => quote.scanner_read?.kind === "entry")
+      .flatMap((quote) => {
+        const sourceMatch = entrySourceMatch(quote);
+        if (!sourceMatch || !alertStrategyEnabled(sourceMatch, strategies)) return [];
+        return [{ watchlist, quote, match: entryAlertMatch(quote, sourceMatch) }];
+      });
   });
+}
+
+function entrySourceMatch(quote) {
+  const read = quote.scanner_read || {};
+  const sourceType = read.source_match_type;
+  return (quote.mtf_matches || []).find((match) => match.type === sourceType)
+    || (quote.mtf_matches || []).find((match) => match.trade_action === "Long" && LIVE_LONG_SETUP_TYPES.has(match.type) && match.setup_quality !== "bad")
+    || null;
+}
+
+function entryAlertMatch(quote, sourceMatch) {
+  const read = quote.scanner_read || {};
+  return {
+    ...sourceMatch,
+    type: "scanner_entry",
+    source_type: sourceMatch.type,
+    label: "Entry",
+    display_label: `Entry: ${read.reason || "in 5/12"}`,
+    entry_price: read.entry_price || sourceMatch.entry_price || quote.price,
+    candle_time: read.candle_time || sourceMatch.candle_time,
+    scanner_read: read,
+  };
 }
 
 export function MtfAlertsPage({ loading, onDeleteAlert, onRefresh, rows }) {
@@ -38,6 +56,12 @@ export function MtfAlertsPage({ loading, onDeleteAlert, onRefresh, rows }) {
         <button type="button" className="secondary-button" onClick={() => onRefresh()} disabled={loading}>
           {loading ? "Refreshing" : "Refresh"}
         </button>
+      </div>
+      <div className="mtf-alert-legend" aria-label="Setup row color key">
+        <span className="mtf-alert-legend-item curl"><b></b>Curl</span>
+        <span className="mtf-alert-legend-item bounce-good"><b></b>Good 10m bounce</span>
+        <span className="mtf-alert-legend-item bounce-bad"><b></b>Weak 10m bounce</span>
+        <span className="mtf-alert-legend-item cloud-touch"><b></b>MTF cloud touch</span>
       </div>
       <label className="mtf-alert-search">
         <span>Search alerts</span>
@@ -133,6 +157,7 @@ function searchableText(row) {
 }
 
 function setupClass(match) {
+  if (match.type === "scanner_entry") return setupClass({ ...match, type: match.source_type });
   if (match.type === "long_mtf_5_12_touch") return "curl";
   if (match.type === "10m_34_50_bounce") return match.setup_quality === "bad" ? "bounce-bad" : "bounce-good";
   if (match.type === "mtf_cloud_price_touch") return "cloud-touch";

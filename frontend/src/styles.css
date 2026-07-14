@@ -1367,6 +1367,53 @@ select {
   font-size: 22px;
 }
 
+.mtf-alert-legend {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mtf-alert-legend-item {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 999px;
+  color: #35413b;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 850;
+  gap: 7px;
+  min-height: 30px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.mtf-alert-legend-item b {
+  border: 1px solid rgba(25, 33, 31, 0.12);
+  border-radius: 999px;
+  display: inline-block;
+  flex: 0 0 10px;
+  height: 10px;
+  width: 10px;
+}
+
+.mtf-alert-legend-item.curl b {
+  background: #eef7ff;
+}
+
+.mtf-alert-legend-item.bounce-good b {
+  background: #edf8f1;
+}
+
+.mtf-alert-legend-item.bounce-bad b {
+  background: #fff3de;
+}
+
+.mtf-alert-legend-item.cloud-touch b {
+  background: #f3f0ff;
+}
+
 .mtf-alert-search {
   align-items: center;
   display: grid;
@@ -1616,6 +1663,76 @@ select {
   font-weight: 800;
 }
 
+.scanner-decision {
+  align-items: start;
+  border: 1px solid #cfd8cc;
+  border-radius: 7px;
+  display: inline-grid;
+  gap: 2px;
+  line-height: 1.05;
+  min-height: 34px;
+  min-width: 86px;
+  padding: 5px 7px;
+}
+
+.scanner-decision b,
+.scanner-decision small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scanner-decision b {
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.scanner-decision small {
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.scanner-decision.long,
+.scanner-decision.entry {
+  background: #075747;
+  border-color: #054639;
+}
+
+.scanner-decision.long b,
+.scanner-decision.long small,
+.scanner-decision.entry b,
+.scanner-decision.entry small {
+  color: #ffffff;
+}
+
+.scanner-decision.wait {
+  background: #fff3de;
+  border-color: #efc77e;
+}
+
+.scanner-decision.wait b {
+  color: #6d4510;
+}
+
+.scanner-decision.wait small {
+  color: #7b5a28;
+}
+
+.scanner-decision.skip {
+  background: #eef2f5;
+  border-color: #cfd8cc;
+}
+
+.scanner-decision.skip b {
+  color: #3d4852;
+}
+
+.scanner-decision.skip small {
+  color: #68766c;
+}
+
 .mtf-mini-map {
   align-items: center;
   display: flex;
@@ -1640,7 +1757,7 @@ select {
 .mtf-mini-chip b,
 .mtf-mini-chip small {
   display: block;
-  max-width: 78px;
+  max-width: 72px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1648,13 +1765,13 @@ select {
 
 .mtf-mini-chip b {
   color: #184d36;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 900;
 }
 
 .mtf-mini-chip small {
   color: #4d5a55;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
 }
 
@@ -2068,7 +2185,7 @@ h1 {
 
 .mtf-mini-chip b,
 .mtf-mini-chip small {
-  max-width: 70px;
+  max-width: 56px;
 }
 
 .fast-ema-chip {
@@ -2079,6 +2196,20 @@ h1 {
 .fast-ema-chip b,
 .fast-ema-chip small {
   max-width: 54px;
+}
+
+.scanner-decision {
+  min-width: 78px;
+  padding: 4px 6px;
+}
+
+.scanner-decision b {
+  font-size: 10px;
+}
+
+.scanner-decision small {
+  font-size: 9px;
+  max-width: 70px;
 }
 
   .cloud-tag {
@@ -2103,6 +2234,25 @@ h1 {
     align-items: stretch;
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .mtf-alert-legend {
+    display: grid;
+    gap: 6px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mtf-alert-legend-item {
+    border-radius: 8px;
+    font-size: 11px;
+    justify-content: flex-start;
+    min-height: 32px;
+    padding: 6px 8px;
+    white-space: normal;
+  }
+
+  .mtf-alert-search {
+    max-width: none;
   }
 
   .mtf-alert-table-wrap {
@@ -2313,7 +2463,7 @@ h1 {
 
   .mtf-mini-chip b,
   .mtf-mini-chip small {
-    max-width: 78px;
+    max-width: 72px;
   }
 
   .fast-ema-chip {
@@ -2324,6 +2474,20 @@ h1 {
   .fast-ema-chip b,
   .fast-ema-chip small {
     max-width: 62px;
+  }
+
+  .scanner-decision {
+    min-width: 86px;
+    padding: 5px 7px;
+  }
+
+  .scanner-decision b {
+    font-size: 11px;
+  }
+
+  .scanner-decision small {
+    font-size: 10px;
+    max-width: 82px;
   }
 
   .cloud-tag {

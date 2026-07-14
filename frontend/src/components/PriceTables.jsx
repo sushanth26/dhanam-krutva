@@ -1,5 +1,8 @@
 import { cloudStatus, formatPrice } from "../lib/market";
 
+const LIVE_LONG_SETUP_TYPES = new Set(["long_mtf_5_12_touch", "10m_34_50_bounce"]);
+const TOUCH_ALERT_TYPES = new Set(["mtf_cloud_price_touch"]);
+
 export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
   const sortedQuotes = [...quotes].sort(compareTenMinuteFastCloud);
   return (
@@ -14,7 +17,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
             <tr>
               <th>Symbol</th>
               <th className="fast-ema-col">10m 5/12</th>
-              <th className="mtf-col">MTF</th>
+              <th className="mtf-col">Read</th>
               <th className="price-col">Last</th>
               {onRemoveSymbol ? <th className="action-col" aria-label="Actions"></th> : null}
             </tr>
@@ -37,7 +40,7 @@ function PriceRow({ quote, onRemoveSymbol }) {
   return (
     <BaseRow quote={quote} trend={tenMinuteStatus} action={onRemoveSymbol ? <RemoveCell onRemove={() => onRemoveSymbol(quote.symbol)} symbol={quote.symbol} /> : null}>
       <td className="fast-ema-cell"><FastEmaDistance quote={quote} /></td>
-      <td className="mtf-cell"><MtfCloudMiniMap quote={quote} trend={tenMinuteStatus} /></td>
+      <td className="mtf-cell"><ScannerDecision quote={quote} trend={tenMinuteStatus} /></td>
     </BaseRow>
   );
 }
@@ -79,28 +82,226 @@ function FastEmaDistance({ quote }) {
   );
 }
 
-function MtfCloudMiniMap({ quote, trend }) {
-  const proximity = quote.mtf_proximity?.nearest;
-  const clouds = proximity ? [mtfCloudFromProximity(proximity)] : mtfCloudsForQuote(quote);
-  if (!clouds.length) return <span className="mtf-empty">-</span>;
+function ScannerDecision({ quote, trend }) {
+  const decision = quote.scanner_read || scannerDecision(quote, trend);
+  const clouds = scannerCloudsForQuote(quote);
+  const detail = [
+    decision.detail,
+    clouds.length ? clouds.map(cloudTitle).join("\n") : "",
+  ].filter(Boolean).join("\n\n");
 
-  const visibleClouds = clouds.slice(0, 2);
-  const extraCount = clouds.length - visibleClouds.length;
   return (
-    <div className="mtf-mini-map" title={clouds.map(cloudTitle).join("\n")} aria-label={clouds.map(cloudTitle).join(", ")}>
-      {visibleClouds.map((cloud) => (
-        <span
-          className={`mtf-mini-chip ${cloud.kind} ${cloud.status || ""}`}
-          key={`${cloud.label}-${cloud.low}-${cloud.high}`}
-          style={cloud.kind === "radar" ? mtfRadarStyle(cloud, trend) : undefined}
-        >
-          <b>{shortMtfLabel(cloud.label)} {directionSymbol(cloud.direction)}</b>
-          <small>{cloud.rangeRatio == null ? `${formatPrice(cloud.low)}-${formatPrice(cloud.high)}` : `${formatRangeRatio(cloud.rangeRatio)}R`}</small>
-        </span>
-      ))}
-      {extraCount > 0 ? <span className="mtf-mini-more">+{extraCount}</span> : null}
-    </div>
+    <span className={`scanner-decision ${decision.kind}`} title={detail} aria-label={detail || `${decision.label}: ${decision.reason}`}>
+      <b>{decision.label}</b>
+      <small>{decision.reason}</small>
+    </span>
   );
+}
+
+function scannerDecision(quote, trend) {
+  const matches = quote.mtf_matches || [];
+  const longMatches = matches.filter((match) => match.trade_action === "Long" && LIVE_LONG_SETUP_TYPES.has(match.type));
+  const goodLongMatch = longMatches.find((match) => match.setup_quality !== "bad");
+  const badBounce = longMatches.find((match) => match.type === "10m_34_50_bounce" && match.setup_quality === "bad");
+  const touchMatch = matches.find((match) => TOUCH_ALERT_TYPES.has(match.type));
+  const entryCloud = entryCloudDistance(quote);
+  const resistance = nearestMtfResistance(quote);
+  const support = nearestMtfSupport(quote);
+
+  if (trend !== "Bullish") {
+    return {
+      kind: "skip",
+      label: "Skip",
+      reason: `${trend || "No"} trend`,
+      detail: "Long-only read waits for the 10m trend to turn bullish first.",
+    };
+  }
+
+  if (resistance?.direction === "inside") {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: `clear ${shortMtfLabel(resistance.label)}`,
+      detail: "Price is inside an MTF cloud. Treat it as resistance until price clears above it.",
+    };
+  }
+
+  if (resistance) {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: `break ${shortMtfLabel(resistance.label)}`,
+      detail: "Nearest MTF cloud is still overhead resistance. A clean move above it makes the read more bullish.",
+    };
+  }
+
+  if (badBounce && !goodLongMatch) {
+    return {
+      kind: "skip",
+      label: "Skip",
+      reason: "weak bounce",
+      detail: badBounce.setup_quality_note || "The 10m 34/50 bounce is marked low quality.",
+    };
+  }
+
+  if (!entryCloud) {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: "need 5/12",
+      detail: "The scanner needs the 10m 5/12 EMA cloud to judge the entry.",
+    };
+  }
+
+  if (entryCloud.status === "extended") {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: "pullback 5/12",
+      detail: support
+        ? `Price is above MTF clouds and ${shortMtfLabel(support.label)} is acting as support, but entry should wait for the 10m 5/12 EMA cloud.`
+        : "Price is bullish but extended above the 10m 5/12 EMA cloud. Wait for the entry pullback.",
+    };
+  }
+
+  if (entryCloud.status === "below") {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: "reclaim 5/12",
+      detail: "Price is below the 10m 5/12 EMA cloud. Wait for reclaim before considering a long entry.",
+    };
+  }
+
+  if (goodLongMatch) {
+    return {
+      kind: "entry",
+      label: "Entry",
+      reason: "in 5/12",
+      detail: support
+        ? `${displayMatchName(goodLongMatch)} with price inside the 10m 5/12 EMA cloud. MTF cloud below is support.`
+        : `${displayMatchName(goodLongMatch)} with price inside the 10m 5/12 EMA cloud.`,
+    };
+  }
+
+  if (touchMatch) {
+    return {
+      kind: "wait",
+      label: "Wait",
+      reason: "5/12 trigger",
+      detail: "Price has cleared MTF resistance, but wait for the 10m 5/12 EMA cloud entry trigger.",
+    };
+  }
+
+  return {
+    kind: "wait",
+    label: "Wait",
+    reason: "in 5/12, no trigger",
+    detail: "Price is inside the 10m 5/12 EMA cloud, but no curl or quality 10m bounce trigger is active.",
+  };
+}
+
+function entryCloudDistance(quote) {
+  const price = Number(quote.price);
+  const ema5 = Number(quote.ema_10m?.["5"]);
+  const ema12 = Number(quote.ema_10m?.["12"]);
+  if (![price, ema5, ema12].every(Number.isFinite) || price <= 0) return null;
+  const low = Math.min(ema5, ema12);
+  const high = Math.max(ema5, ema12);
+  const [distance, direction] = distanceToRange(price, low, high);
+  const distancePct = distance / price * 100;
+  return {
+    low,
+    high,
+    distance,
+    distancePct,
+    status: distance <= 0 ? "entry" : direction === "below" ? "extended" : "below",
+  };
+}
+
+function nearestMtfResistance(quote) {
+  const price = Number(quote.price);
+  if (!Number.isFinite(price) || price <= 0) return null;
+  return scannerCloudsForQuote(quote)
+    .filter(isMtfCloud)
+    .filter((cloud) => cloud.direction === "above" || cloud.direction === "inside")
+    .map((cloud) => ({
+      ...cloud,
+      distancePct: cloud.direction === "inside" ? 0 : normalizedCloudDistancePct(cloud, price),
+    }))
+    .filter((cloud) => Number.isFinite(cloud.distancePct) && cloud.distancePct <= 1.5)
+    .sort((left, right) => left.distancePct - right.distancePct)[0] || null;
+}
+
+function nearestMtfSupport(quote) {
+  const price = Number(quote.price);
+  if (!Number.isFinite(price) || price <= 0) return null;
+  return scannerCloudsForQuote(quote)
+    .filter(isMtfCloud)
+    .filter((cloud) => cloud.direction === "below")
+    .map((cloud) => ({
+      ...cloud,
+      distancePct: normalizedCloudDistancePct(cloud, price),
+    }))
+    .filter((cloud) => Number.isFinite(cloud.distancePct))
+    .sort((left, right) => left.distancePct - right.distancePct)[0] || null;
+}
+
+function isMtfCloud(cloud) {
+  return cloud.label !== "10m 34/50";
+}
+
+function normalizedCloudDistancePct(cloud, price) {
+  const direct = Number(cloud.distancePct);
+  if (Number.isFinite(direct)) return direct;
+  const low = Number(cloud.low);
+  const high = Number(cloud.high);
+  if (![low, high].every(Number.isFinite) || price <= 0) return Number.NaN;
+  const distance = price < low ? low - price : price > high ? price - high : 0;
+  return distance / price * 100;
+}
+
+function displayMatchName(match) {
+  if (match.type === "long_mtf_5_12_touch") return "curl";
+  if (match.type === "10m_34_50_bounce") return "10m bounce";
+  return String(match.display_label || match.label || "setup").toLowerCase();
+}
+
+function scannerCloudsForQuote(quote) {
+  const clouds = [
+    tenMinuteSlowCloud(quote),
+    ...(quote.mtf_proximity?.clouds || []).map(mtfCloudFromProximity),
+    ...mtfCloudsForQuote(quote),
+  ].filter(Boolean);
+  const seen = new Set();
+  return clouds.filter((cloud) => {
+    const key = `${cloud.label}-${cloud.low}-${cloud.high}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function tenMinuteSlowCloud(quote) {
+  const price = Number(quote.price);
+  const ema34 = Number(quote.ema_10m?.["34"]);
+  const ema50 = Number(quote.ema_10m?.["50"]);
+  if (![price, ema34, ema50].every(Number.isFinite) || price <= 0) return null;
+  const low = Math.min(ema34, ema50);
+  const high = Math.max(ema34, ema50);
+  const [distance, direction] = distanceToRange(price, low, high);
+  const distancePct = distance / price * 100;
+  return {
+    label: "10m 34/50",
+    low,
+    high,
+    kind: "radar",
+    direction,
+    distance,
+    distancePct,
+    rangeRatio: null,
+    status: scannerCloudStatus(distance, distancePct),
+  };
 }
 
 function mtfCloudFromProximity(proximity) {
@@ -115,6 +316,14 @@ function mtfCloudFromProximity(proximity) {
     rangeRatio: proximity.range_ratio,
     status: proximity.status,
   };
+}
+
+function scannerCloudStatus(distance, distancePct) {
+  if (distance <= 0) return "inside";
+  if (distancePct <= 0.25) return "hot";
+  if (distancePct <= 0.75) return "near";
+  if (distancePct <= 1.5) return "reachable";
+  return "far";
 }
 
 function mtfCloudsForQuote(quote) {
