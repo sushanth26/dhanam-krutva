@@ -14,7 +14,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
             <tr>
               <th>Symbol</th>
               <th className="fast-ema-col">10m 5/12</th>
-              <th className="mtf-col">MTF</th>
+              <th className="mtf-col">Clouds</th>
               <th className="price-col">Last</th>
               {onRemoveSymbol ? <th className="action-col" aria-label="Actions"></th> : null}
             </tr>
@@ -80,15 +80,12 @@ function FastEmaDistance({ quote }) {
 }
 
 function MtfCloudMiniMap({ quote, trend }) {
-  const proximity = quote.mtf_proximity?.nearest;
-  const clouds = proximity ? [mtfCloudFromProximity(proximity)] : mtfCloudsForQuote(quote);
+  const clouds = scannerCloudsForQuote(quote);
   if (!clouds.length) return <span className="mtf-empty">-</span>;
 
-  const visibleClouds = clouds.slice(0, 2);
-  const extraCount = clouds.length - visibleClouds.length;
   return (
     <div className="mtf-mini-map" title={clouds.map(cloudTitle).join("\n")} aria-label={clouds.map(cloudTitle).join(", ")}>
-      {visibleClouds.map((cloud) => (
+      {clouds.map((cloud) => (
         <span
           className={`mtf-mini-chip ${cloud.kind} ${cloud.status || ""}`}
           key={`${cloud.label}-${cloud.low}-${cloud.high}`}
@@ -98,9 +95,45 @@ function MtfCloudMiniMap({ quote, trend }) {
           <small>{cloud.rangeRatio == null ? `${formatPrice(cloud.low)}-${formatPrice(cloud.high)}` : `${formatRangeRatio(cloud.rangeRatio)}R`}</small>
         </span>
       ))}
-      {extraCount > 0 ? <span className="mtf-mini-more">+{extraCount}</span> : null}
     </div>
   );
+}
+
+function scannerCloudsForQuote(quote) {
+  const clouds = [
+    tenMinuteSlowCloud(quote),
+    ...(quote.mtf_proximity?.clouds || []).map(mtfCloudFromProximity),
+    ...mtfCloudsForQuote(quote),
+  ].filter(Boolean);
+  const seen = new Set();
+  return clouds.filter((cloud) => {
+    const key = `${cloud.label}-${cloud.low}-${cloud.high}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function tenMinuteSlowCloud(quote) {
+  const price = Number(quote.price);
+  const ema34 = Number(quote.ema_10m?.["34"]);
+  const ema50 = Number(quote.ema_10m?.["50"]);
+  if (![price, ema34, ema50].every(Number.isFinite) || price <= 0) return null;
+  const low = Math.min(ema34, ema50);
+  const high = Math.max(ema34, ema50);
+  const [distance, direction] = distanceToRange(price, low, high);
+  const distancePct = distance / price * 100;
+  return {
+    label: "10m 34/50",
+    low,
+    high,
+    kind: "radar",
+    direction,
+    distance,
+    distancePct,
+    rangeRatio: null,
+    status: scannerCloudStatus(distance, distancePct),
+  };
 }
 
 function mtfCloudFromProximity(proximity) {
@@ -115,6 +148,14 @@ function mtfCloudFromProximity(proximity) {
     rangeRatio: proximity.range_ratio,
     status: proximity.status,
   };
+}
+
+function scannerCloudStatus(distance, distancePct) {
+  if (distance <= 0) return "inside";
+  if (distancePct <= 0.25) return "hot";
+  if (distancePct <= 0.75) return "near";
+  if (distancePct <= 1.5) return "reachable";
+  return "far";
 }
 
 function mtfCloudsForQuote(quote) {
