@@ -1759,11 +1759,6 @@ select {
   width: 34px;
 }
 
-.live-price-table .fast-ema-col,
-.live-price-table .fast-ema-cell {
-  width: 82px;
-}
-
 .live-price-table .mtf-col,
 .live-price-table .mtf-cell {
   width: 118px;
@@ -1772,6 +1767,18 @@ select {
 .live-price-table .rr-col,
 .live-price-table .rr-cell {
   width: 82px;
+}
+
+.live-price-table .qty-col,
+.live-price-table .qty-cell {
+  text-align: right;
+  width: 58px;
+}
+
+.live-price-table .trade-level-col,
+.live-price-table .trade-level-cell {
+  text-align: right;
+  width: 66px;
 }
 
 .live-price-table td {
@@ -1969,6 +1976,25 @@ select {
 .rr-chip.poor b,
 .rr-chip.poor small {
   color: #8a2d17;
+}
+
+.trade-mini-value,
+.trade-mini-empty {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 900;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trade-mini-value {
+  color: #184d36;
+}
+
+.trade-mini-empty {
+  color: #9aa39e;
 }
 
 .mtf-mini-map {
@@ -2390,11 +2416,6 @@ h1 {
   width: 64px;
 }
 
-.live-price-table .fast-ema-col,
-.live-price-table .fast-ema-cell {
-  width: 74px;
-}
-
 .live-price-table .mtf-col,
 .live-price-table .mtf-cell {
   width: 104px;
@@ -2403,6 +2424,16 @@ h1 {
 .live-price-table .rr-col,
 .live-price-table .rr-cell {
   width: 68px;
+}
+
+.live-price-table .qty-col,
+.live-price-table .qty-cell {
+  width: 44px;
+}
+
+.live-price-table .trade-level-col,
+.live-price-table .trade-level-cell {
+  width: 54px;
 }
 
 .live-price-table .price-col,
@@ -2565,6 +2596,103 @@ h1 {
     border-bottom: 0;
   }
 
+  .live-price-table-wrap {
+    overflow-x: visible;
+  }
+
+  .live-price-table {
+    min-width: 0;
+  }
+
+  .live-price-table thead {
+    display: none;
+  }
+
+  .live-price-table,
+  .live-price-table tbody,
+  .live-price-table tr,
+  .live-price-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .live-price-table tbody {
+    display: grid;
+    gap: 8px;
+  }
+
+  .live-price-table tr {
+    background: #ffffff;
+    border: 1px solid #edf1eb;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .live-price-table th:first-child,
+  .live-price-table td:first-child,
+  .live-price-table .mtf-col,
+  .live-price-table .mtf-cell,
+  .live-price-table .rr-col,
+  .live-price-table .rr-cell,
+  .live-price-table .qty-col,
+  .live-price-table .qty-cell,
+  .live-price-table .trade-level-col,
+  .live-price-table .trade-level-cell,
+  .live-price-table .price-col,
+  .live-price-table .price-cell,
+  .live-price-table .action-col,
+  .row-action-cell {
+    width: 100%;
+  }
+
+  .live-price-table td {
+    align-items: center;
+    border-bottom: 1px solid #edf1eb;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 64px minmax(0, 1fr);
+    min-height: 38px;
+    padding: 8px 10px;
+    text-align: left;
+  }
+
+  .live-price-table td:before {
+    color: #68766c;
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .live-price-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .live-price-table .row-action-cell {
+    display: none;
+  }
+
+  .live-price-table .empty-table-cell {
+    display: block;
+    text-align: center;
+  }
+
+  .live-price-table .empty-table-cell:before {
+    content: "";
+  }
+
+  .scanner-decision,
+  .rr-chip {
+    justify-self: start;
+  }
+
+  .trade-mini-value,
+  .trade-mini-empty,
+  .price-cell {
+    justify-self: start;
+    max-width: 100%;
+  }
+
 }
 
 @media (min-width: 760px) {
@@ -2687,11 +2815,6 @@ h1 {
     width: 72px;
   }
 
-  .live-price-table .fast-ema-col,
-  .live-price-table .fast-ema-cell {
-    width: 82px;
-  }
-
   .live-price-table .mtf-col,
   .live-price-table .mtf-cell {
     width: 118px;
@@ -2700,6 +2823,16 @@ h1 {
   .live-price-table .rr-col,
   .live-price-table .rr-cell {
     width: 82px;
+  }
+
+  .live-price-table .qty-col,
+  .live-price-table .qty-cell {
+    width: 58px;
+  }
+
+  .live-price-table .trade-level-col,
+  .live-price-table .trade-level-cell {
+    width: 66px;
   }
 
   .live-price-table .price-col,

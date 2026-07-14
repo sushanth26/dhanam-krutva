@@ -16,9 +16,12 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
           <thead>
             <tr>
               <th>Symbol</th>
-              <th className="fast-ema-col">10m 5/12</th>
               <th className="mtf-col">Read</th>
               <th className="rr-col">R:R</th>
+              <th className="qty-col">Qty</th>
+              <th className="trade-level-col">Entry</th>
+              <th className="trade-level-col">SL</th>
+              <th className="trade-level-col">TP1</th>
               <th className="price-col">Last</th>
               {onRemoveSymbol ? <th className="action-col" aria-label="Actions"></th> : null}
             </tr>
@@ -27,7 +30,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
             {sortedQuotes.length ? sortedQuotes.map((quote) => (
               <PriceRow key={quote.symbol} quote={quote} onRemoveSymbol={onRemoveSymbol} />
             )) : (
-              <tr><td colSpan={onRemoveSymbol ? "6" : "5"}>No {kind} stocks right now.</td></tr>
+              <tr><td className="empty-table-cell" colSpan={onRemoveSymbol ? "9" : "8"}>No {kind} stocks right now.</td></tr>
             )}
           </tbody>
         </table>
@@ -40,9 +43,12 @@ function PriceRow({ quote, onRemoveSymbol }) {
   const tenMinuteStatus = cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
   return (
     <BaseRow quote={quote} trend={tenMinuteStatus} action={onRemoveSymbol ? <RemoveCell onRemove={() => onRemoveSymbol(quote.symbol)} symbol={quote.symbol} /> : null}>
-      <td className="fast-ema-cell"><FastEmaDistance quote={quote} /></td>
-      <td className="mtf-cell"><ScannerDecision quote={quote} trend={tenMinuteStatus} /></td>
-      <td className="rr-cell"><RewardRisk quote={quote} /></td>
+      <td className="mtf-cell" data-label="Read"><ScannerDecision quote={quote} trend={tenMinuteStatus} /></td>
+      <td className="rr-cell" data-label="R:R"><RewardRisk quote={quote} /></td>
+      <td className="qty-cell" data-label="Qty"><TradeQuantity quote={quote} /></td>
+      <td className="trade-level-cell" data-label="Entry"><TradeLevel quote={quote} field="entry" /></td>
+      <td className="trade-level-cell" data-label="SL"><TradeLevel quote={quote} field="stop" /></td>
+      <td className="trade-level-cell" data-label="TP1"><TradeLevel quote={quote} field="tp1" /></td>
     </BaseRow>
   );
 }
@@ -51,9 +57,9 @@ function BaseRow({ quote, children, trend = "", action = null, className = "", i
   const rowClass = [trend ? `trend-${String(trend).toLowerCase()}` : "", className].filter(Boolean).join(" ");
   return (
     <tr className={`stock-row ${rowClass}`} id={id} onClick={onClick}>
-      <td><strong>{quote.symbol}</strong></td>
+      <td data-label="Symbol"><strong>{quote.symbol}</strong></td>
       {children}
-      {showPrice ? <td className="price-cell">{formatPrice(quote.price)}</td> : null}
+      {showPrice ? <td className="price-cell" data-label="Last">{formatPrice(quote.price)}</td> : null}
       {action}
     </tr>
   );
@@ -61,7 +67,7 @@ function BaseRow({ quote, children, trend = "", action = null, className = "", i
 
 function RemoveCell({ onRemove, symbol }) {
   return (
-    <td className="row-action-cell">
+    <td className="row-action-cell" data-label="">
       <button type="button" className="row-delete-button" onClick={onRemove} aria-label={`Remove ${symbol}`}>
         x
       </button>
@@ -148,6 +154,29 @@ function RewardRisk({ quote }) {
   );
 }
 
+function TradeQuantity({ quote }) {
+  if (!isPlayableQuote(quote)) return <span className="trade-mini-empty">-</span>;
+  const shares = Number(quote.trade_plan?.risk_plan?.shares);
+  if (!Number.isFinite(shares) || shares <= 0) return <span className="trade-mini-empty">-</span>;
+  return <span className="trade-mini-value" title={`${shares} shares`}>{shares}</span>;
+}
+
+function TradeLevel({ quote, field }) {
+  if (!isPlayableQuote(quote)) return <span className="trade-mini-empty">-</span>;
+  const plan = quote.trade_plan;
+  const target = firstTradeTarget(plan);
+  const value = field === "entry" ? plan?.entry : field === "stop" ? plan?.stop : target?.price ?? plan?.target;
+  if (!Number.isFinite(Number(value))) return <span className="trade-mini-empty">-</span>;
+  const title = field === "entry" || field === "stop"
+    ? tradePlanTitle(plan)
+    : `${target?.label || "TP1"}: ${formatPrice(value)}${Number.isFinite(Number(target?.reward_risk)) ? ` = ${Number(target.reward_risk).toFixed(2)}R` : ""}`;
+  return <span className="trade-mini-value" title={title}>{formatPrice(value)}</span>;
+}
+
+function isPlayableQuote(quote) {
+  return String(quote.trade_thesis?.decision || "").toLowerCase() === "playable";
+}
+
 function tradePlanTitle(plan) {
   const lines = [
     `${plan.action || "Trade"} plan`,
@@ -173,6 +202,10 @@ function rewardRiskReason(plan) {
 function bestRewardRiskTarget(plan) {
   const targets = plan.targets || [];
   return targets.find((target) => target.is_acceptable) || targets[0] || null;
+}
+
+function firstTradeTarget(plan) {
+  return (plan?.targets || [])[0] || null;
 }
 
 function scannerDecision(quote, trend) {
