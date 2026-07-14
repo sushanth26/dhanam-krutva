@@ -4,6 +4,7 @@ from typing import Any
 
 
 ALERT_STRATEGIES = [
+    {"key": "scannerEntry", "match_types": ["scanner_entry"]},
     {"key": "curls", "match_types": ["long_mtf_5_12_touch"]},
     {"key": "tenMinute3450Bounce", "match_types": ["10m_34_50_bounce"]},
     {"key": "mtfCloudTouch", "match_types": ["mtf_cloud_price_touch"]},

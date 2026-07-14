@@ -13,6 +13,7 @@ from app.notifications import (
     mtf_signature,
     save_push_alert_history,
     scanner_entry_quotes,
+    setup_alert_quotes,
 )
 from app.watchlists import WatchlistStore
 
@@ -205,6 +206,127 @@ def test_scanner_entry_quotes_keep_only_entry_reads():
     assert [quote["symbol"] for quote in entries] == ["BE"]
     assert entries[0]["mtf_matches"][0]["type"] == "scanner_entry"
     assert entries[0]["mtf_matches"][0]["display_label"] == "Entry: in 5/12"
+
+
+def test_setup_alert_quotes_keep_direct_bullish_and_bearish_alerts():
+    quotes = [
+        {
+            "symbol": "BE",
+            "mtf_matches": [
+                {
+                    "type": "mtf_cloud_price_touch",
+                    "status": "confirmed",
+                    "trade_action": "Long",
+                    "label": "Hourly 34/50",
+                }
+            ],
+        },
+        {
+            "symbol": "AAOI",
+            "mtf_matches": [
+                {
+                    "type": "10m_34_50_bounce",
+                    "status": "confirmed",
+                    "trade_action": "Short",
+                    "label": "10m 34/50 Bounce",
+                    "display_label": "Good 34/50 Rejection",
+                    "setup_quality": "good",
+                }
+            ],
+        },
+        {
+            "symbol": "MU",
+            "mtf_matches": [
+                {
+                    "type": "10m_34_50_bounce",
+                    "status": "confirmed",
+                    "trade_action": "Long",
+                    "label": "10m 34/50 Bounce",
+                    "display_label": "Bad 34/50 Bounce",
+                    "setup_quality": "bad",
+                }
+            ],
+        },
+    ]
+
+    alerts = setup_alert_quotes(quotes)
+
+    assert [quote["symbol"] for quote in alerts] == ["BE", "AAOI"]
+    assert alerts[0]["mtf_matches"][0]["trade_action"] == "Long"
+    assert alerts[1]["mtf_matches"][0]["trade_action"] == "Short"
+
+
+def test_setup_alert_quotes_dedupes_scanner_entry_source_match():
+    quotes = [
+        {
+            "symbol": "BE",
+            "price": 12.5,
+            "scanner_read": {
+                "kind": "entry",
+                "reason": "in 5/12",
+                "source_match_type": "10m_34_50_bounce",
+                "entry_price": 12.5,
+                "candle_time": "2026-07-13T15:10:00",
+            },
+            "mtf_matches": [
+                {
+                    "type": "10m_34_50_bounce",
+                    "status": "confirmed",
+                    "trade_action": "Long",
+                    "label": "10m 34/50 Bounce",
+                    "display_label": "Good 34/50 Bounce",
+                    "setup_quality": "good",
+                    "entry_price": 12.5,
+                    "candle_time": "2026-07-13T15:10:00",
+                }
+            ],
+        },
+    ]
+
+    alerts = setup_alert_quotes(quotes)
+
+    assert len(alerts) == 1
+    assert [match["type"] for match in alerts[0]["mtf_matches"]] == ["scanner_entry"]
+
+
+def test_setup_alert_quotes_respects_scanner_entry_toggle_independently():
+    quotes = [
+        {
+            "symbol": "BE",
+            "price": 12.5,
+            "scanner_read": {
+                "kind": "entry",
+                "reason": "in 5/12",
+                "source_match_type": "10m_34_50_bounce",
+                "entry_price": 12.5,
+                "candle_time": "2026-07-13T15:10:00",
+            },
+            "mtf_matches": [
+                {
+                    "type": "10m_34_50_bounce",
+                    "status": "confirmed",
+                    "trade_action": "Long",
+                    "label": "10m 34/50 Bounce",
+                    "display_label": "Good 34/50 Bounce",
+                    "setup_quality": "good",
+                    "entry_price": 12.5,
+                    "candle_time": "2026-07-13T15:10:00",
+                }
+            ],
+        },
+    ]
+
+    entry_off = setup_alert_quotes(
+        quotes,
+        {"scannerEntry": False, "tenMinute3450Bounce": True, "curls": True, "mtfCloudTouch": True},
+    )
+    setup_off = setup_alert_quotes(
+        quotes,
+        {"scannerEntry": True, "tenMinute3450Bounce": False, "curls": True, "mtfCloudTouch": True},
+    )
+
+    assert [match["type"] for match in entry_off[0]["mtf_matches"]] == ["10m_34_50_bounce"]
+    assert [match["type"] for match in setup_off[0]["mtf_matches"]] == ["scanner_entry"]
 
 
 def test_monitored_symbols_use_saved_watchlists_not_static_og(tmp_path):

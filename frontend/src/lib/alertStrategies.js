@@ -2,6 +2,12 @@ import { getJson, postJson } from "./api";
 
 export const ALERT_STRATEGIES = [
   {
+    key: "scannerEntry",
+    name: "Entry Alerts",
+    matchTypes: ["scanner_entry"],
+    description: "Scanner says Entry after the setup clears its read filters.",
+  },
+  {
     key: "curls",
     name: "Curls",
     matchTypes: ["long_mtf_5_12_touch"],
@@ -9,9 +15,9 @@ export const ALERT_STRATEGIES = [
   },
   {
     key: "tenMinute3450Bounce",
-    name: "10m 34/50 Bounce",
+    name: "10m 34/50 Bounce/Rejection",
     matchTypes: ["10m_34_50_bounce"],
-    description: "Confirmed 10m close back above the 34/50 cloud after touching it.",
+    description: "Confirmed 10m close back above or below the 34/50 cloud after touching it.",
   },
   {
     key: "mtfCloudTouch",

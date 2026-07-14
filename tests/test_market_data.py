@@ -733,6 +733,98 @@ def test_mtf_signal_matches_marks_10m_34_50_bounce_bad_when_mtf_cloud_is_overhea
     assert [match["direction"] for match in mtf_touch_matches] == ["reject_down"]
 
 
+def test_mtf_signal_matches_includes_confirmed_bearish_10m_34_50_rejection_as_short_setup():
+    candles = [
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T09:30:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T09:40:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T09:50:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:00:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:10:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:20:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:30:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:40:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:50:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:00:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:10:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:20:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:30:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:40:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:50:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:00:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:10:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:20:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:30:00"},
+        {"low": 114, "high": 119.9, "close": 115, "source_count": 2, "time": "2026-07-02T12:40:00"},
+    ]
+
+    matches = mtf_signal_matches(
+        115,
+        "Chop",
+        candles,
+        {"5": 115, "12": 116, "34": 119, "50": 120},
+        {"34": 130, "50": 135},
+        {"20": 125, "21": 126, "50": 140, "55": 145},
+    )
+
+    assert len(matches) == 1
+    assert matches[0]["label"] == "10m 34/50 Bounce"
+    assert matches[0]["display_label"] == "Good 34/50 Rejection"
+    assert matches[0]["setup_quality"] == "good"
+    assert matches[0]["setup_quality_note"] == "Clear room below 10m 34/50"
+    assert matches[0]["underfoot_clouds"] == []
+    assert matches[0]["risk_plan"]["stop"] == 120.8039
+    assert matches[0]["risk_plan"]["shares"] == 17
+    assert matches[0]["trade_action"] == "Short"
+    assert matches[0]["trend"] == "Bearish"
+    assert matches[0]["direction"] == "reject_below_10m_34_50"
+    assert matches[0]["entry_price"] == 115
+    assert matches[0]["candle_time"] == "2026-07-02T12:40:00"
+
+
+def test_mtf_signal_matches_marks_bearish_10m_34_50_rejection_bad_when_mtf_cloud_is_underfoot():
+    candles = [
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T09:30:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T09:40:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T09:50:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:00:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:10:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:20:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:30:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:40:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:50:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:00:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:10:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:20:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:30:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:40:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:50:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:00:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:10:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:20:00"},
+        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:30:00"},
+        {"low": 114, "high": 119.9, "close": 115, "source_count": 2, "time": "2026-07-02T12:40:00"},
+    ]
+
+    matches = mtf_signal_matches(
+        115,
+        "Chop",
+        candles,
+        {"5": 115, "12": 116, "34": 119, "50": 120},
+        {"34": 113, "50": 114},
+        {"20": 125, "21": 126, "50": 140, "55": 145},
+    )
+
+    bounce_matches = [match for match in matches if match["type"] == "10m_34_50_bounce"]
+
+    assert len(bounce_matches) == 1
+    assert bounce_matches[0]["display_label"] == "Bad 34/50 Rejection"
+    assert bounce_matches[0]["setup_quality"] == "bad"
+    assert bounce_matches[0]["setup_quality_note"] == "Underfoot cloud nearby: Hourly 34/50"
+    assert bounce_matches[0]["underfoot_clouds"] == [
+        {"label": "Hourly 34/50", "cloud_low": 113, "cloud_high": 114, "distance_pct": 0.87}
+    ]
+
+
 def test_mtf_signal_matches_waits_for_confirmed_10m_34_50_bounce_close():
     candles = [
         {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:30:00"},
@@ -1124,3 +1216,46 @@ def test_scanner_read_waits_for_mtf_resistance_and_5_12_pullback():
     assert resistance_read["reason"] == "break D 50/55"
     assert extended_read["kind"] == "wait"
     assert extended_read["reason"] == "pullback 5/12"
+
+
+def test_scanner_read_bearish_entry_uses_short_side_5_12_zone():
+    read = scanner_read(
+        100,
+        "Bearish",
+        {"5": 99, "12": 101},
+        {
+            "clouds": [
+                {"label": "Hourly 34/50", "cloud_low": 101, "cloud_high": 102, "direction": "above", "distance_pct": 1},
+                {"label": "Daily 20/21", "cloud_low": 90, "cloud_high": 91, "direction": "below", "distance_pct": 9},
+            ]
+        },
+        [
+            {
+                "type": "10m_34_50_bounce",
+                "trade_action": "Short",
+                "display_label": "Good 34/50 Rejection",
+                "setup_quality": "good",
+                "entry_price": 100,
+                "candle_time": "2026-07-13T15:10:00",
+            }
+        ],
+    )
+
+    assert read["kind"] == "entry"
+    assert read["label"] == "Entry"
+    assert read["reason"] == "in 5/12"
+    assert read["source_match_type"] == "10m_34_50_bounce"
+    assert read["resistance"]["label"] == "Hourly 34/50"
+
+
+def test_scanner_read_bearish_waits_for_support_break_instead_of_skipping():
+    read = scanner_read(
+        100,
+        "Bearish",
+        {"5": 99, "12": 101},
+        {"clouds": [{"label": "Daily 50/55", "cloud_low": 98, "cloud_high": 99, "direction": "below", "distance_pct": 1}]},
+        [{"type": "10m_34_50_bounce", "trade_action": "Short", "entry_price": 100, "setup_quality": "good"}],
+    )
+
+    assert read["kind"] == "wait"
+    assert read["reason"] == "break D 50/55"

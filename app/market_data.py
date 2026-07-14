@@ -507,11 +507,15 @@ def scanner_read(
     proximity: dict[str, Any],
     matches: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    good_long_match = next(
+    if ten_minute_trend not in {"Bullish", "Bearish"}:
+        return scanner_read_payload("skip", "Skip", f"{ten_minute_trend or 'No'} trend", "Scanner waits for a bullish or bearish 10m trend.")
+
+    trade_action = trade_action_for_trend(ten_minute_trend)
+    good_entry_match = next(
         (
             match
             for match in matches
-            if match.get("trade_action") == "Long"
+            if match.get("trade_action") == trade_action
             and match.get("type") in {"long_mtf_5_12_touch", "10m_34_50_bounce"}
             and match.get("setup_quality") != "bad"
         ),
@@ -530,8 +534,8 @@ def scanner_read(
     resistance = nearest_mtf_resistance(proximity)
     support = nearest_mtf_support(proximity)
 
-    if ten_minute_trend != "Bullish":
-        return scanner_read_payload("skip", "Skip", f"{ten_minute_trend or 'No'} trend", "Long-only read waits for the 10m trend to turn bullish first.")
+    if ten_minute_trend == "Bearish":
+        return bearish_scanner_read(good_entry_match, bad_bounce, touch_match, entry_cloud, resistance, support)
 
     if resistance and resistance.get("direction") == "inside":
         label = short_mtf_label(resistance.get("label"))
@@ -541,7 +545,7 @@ def scanner_read(
         label = short_mtf_label(resistance.get("label"))
         return scanner_read_payload("wait", "Wait", f"break {label}", "Nearest MTF cloud is still overhead resistance. A clean move above it makes the read more bullish.", resistance=resistance)
 
-    if bad_bounce and not good_long_match:
+    if bad_bounce and not good_entry_match:
         return scanner_read_payload("skip", "Skip", "weak bounce", bad_bounce.get("setup_quality_note") or "The 10m 34/50 bounce is marked low quality.", source_match=bad_bounce)
 
     if not entry_cloud:
@@ -558,18 +562,65 @@ def scanner_read(
     if entry_cloud["status"] == "below":
         return scanner_read_payload("wait", "Wait", "reclaim 5/12", "Price is below the 10m 5/12 EMA cloud. Wait for reclaim before considering a long entry.", entry_cloud=entry_cloud)
 
-    if good_long_match:
+    if good_entry_match:
         detail = (
-            f"{display_match_name(good_long_match)} with price inside the 10m 5/12 EMA cloud. MTF cloud below is support."
+            f"{display_match_name(good_entry_match)} with price inside the 10m 5/12 EMA cloud. MTF cloud below is support."
             if support
-            else f"{display_match_name(good_long_match)} with price inside the 10m 5/12 EMA cloud."
+            else f"{display_match_name(good_entry_match)} with price inside the 10m 5/12 EMA cloud."
         )
-        return scanner_read_payload("entry", "Entry", "in 5/12", detail, source_match=good_long_match, support=support, entry_cloud=entry_cloud)
+        return scanner_read_payload("entry", "Entry", "in 5/12", detail, source_match=good_entry_match, support=support, entry_cloud=entry_cloud)
 
     if touch_match:
         return scanner_read_payload("wait", "Wait", "5/12 trigger", "Price has cleared MTF resistance, but wait for the 10m 5/12 EMA cloud entry trigger.", source_match=touch_match, entry_cloud=entry_cloud)
 
     return scanner_read_payload("wait", "Wait", "in 5/12, no trigger", "Price is inside the 10m 5/12 EMA cloud, but no curl or quality 10m bounce trigger is active.", entry_cloud=entry_cloud)
+
+
+def bearish_scanner_read(
+    good_entry_match: dict[str, Any] | None,
+    bad_bounce: dict[str, Any] | None,
+    touch_match: dict[str, Any] | None,
+    entry_cloud: dict[str, Any] | None,
+    resistance: dict[str, Any] | None,
+    support: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if support and support.get("direction") == "inside":
+        label = short_mtf_label(support.get("label"))
+        return scanner_read_payload("wait", "Wait", f"break {label}", "Price is inside an MTF cloud. Treat it as support until price breaks below it.", support=support)
+
+    if support and cloud_distance_pct(support) is not None and cloud_distance_pct(support) <= MTF_RESISTANCE_DISTANCE_PCT:
+        label = short_mtf_label(support.get("label"))
+        return scanner_read_payload("wait", "Wait", f"break {label}", "Nearest MTF cloud is still underfoot support. A clean move below it makes the read more bearish.", support=support)
+
+    if bad_bounce and not good_entry_match:
+        return scanner_read_payload("skip", "Skip", "weak rejection", bad_bounce.get("setup_quality_note") or "The 10m 34/50 rejection is marked low quality.", source_match=bad_bounce)
+
+    if not entry_cloud:
+        return scanner_read_payload("wait", "Wait", "need 5/12", "The scanner needs the 10m 5/12 EMA cloud to judge the short entry.")
+
+    if entry_cloud["status"] == "below":
+        detail = (
+            f"Price is below MTF support and {short_mtf_label(resistance.get('label'))} is overhead resistance, but entry should wait for the 10m 5/12 EMA cloud."
+            if resistance
+            else "Price is bearish but extended below the 10m 5/12 EMA cloud. Wait for the entry pullback."
+        )
+        return scanner_read_payload("wait", "Wait", "pullback 5/12", detail, resistance=resistance, entry_cloud=entry_cloud)
+
+    if entry_cloud["status"] == "extended":
+        return scanner_read_payload("wait", "Wait", "reject 5/12", "Price is above the 10m 5/12 EMA cloud. Wait for rejection back into the short entry zone.", entry_cloud=entry_cloud)
+
+    if good_entry_match:
+        detail = (
+            f"{display_match_name(good_entry_match)} with price inside the 10m 5/12 EMA cloud. MTF cloud above is resistance."
+            if resistance
+            else f"{display_match_name(good_entry_match)} with price inside the 10m 5/12 EMA cloud."
+        )
+        return scanner_read_payload("entry", "Entry", "in 5/12", detail, source_match=good_entry_match, resistance=resistance, entry_cloud=entry_cloud)
+
+    if touch_match:
+        return scanner_read_payload("wait", "Wait", "5/12 trigger", "Price has broken MTF support, but wait for the 10m 5/12 EMA cloud short entry trigger.", source_match=touch_match, entry_cloud=entry_cloud)
+
+    return scanner_read_payload("wait", "Wait", "in 5/12, no trigger", "Price is inside the 10m 5/12 EMA cloud, but no quality 10m rejection trigger is active.", entry_cloud=entry_cloud)
 
 
 def scanner_read_payload(
@@ -644,7 +695,7 @@ def nearest_mtf_support(proximity: dict[str, Any]) -> dict[str, Any] | None:
     candidates = [
         cloud
         for cloud in proximity.get("clouds", [])
-        if cloud.get("direction") == "below" and cloud_distance_pct(cloud) is not None
+        if cloud.get("direction") in {"below", "inside"} and cloud_distance_pct(cloud) is not None
     ]
     candidates.sort(key=lambda cloud: (cloud_distance_pct(cloud) or 0, cloud.get("label") or ""))
     return candidates[0] if candidates else None
@@ -848,8 +899,6 @@ def ten_minute_34_50_bounce_matches(
     previous_close = previous_candle.get("close") if previous_candle else None
     if None in (candle_low, candle_high, candle_close):
         return []
-    if previous_close is not None and candle_close <= previous_close:
-        return []
 
     ema_by_time = historical_ema_values_by_candle_time(ten_minute_candles, [34, 50])
     ema_values_at_candle = ema_by_time.get(candle_time_key(candle))
@@ -864,21 +913,40 @@ def ten_minute_34_50_bounce_matches(
     cloud_high = max(ema34, ema50)
     if not candle_touches_cloud(candle_low, candle_high, cloud_low, cloud_high):
         return []
-    if candle_close <= cloud_high:
+
+    if candle_close > cloud_high and (previous_close is None or candle_close > previous_close):
+        trend = "Bullish"
+        trade_action = "Long"
+        direction = "bounce_above_10m_34_50"
+        setup_word = "Bounce"
+        quality_clouds = nearby_mtf_clouds(candle_close, ema_1h or {}, ema_daily or {}, side="overhead")
+        setup_quality_note = (
+            f"Overhead cloud nearby: {', '.join(cloud['label'] for cloud in quality_clouds)}"
+            if quality_clouds
+            else "Clear room above 10m 34/50"
+        )
+        stop = cloud_low - fixed_stop_buffer
+    elif candle_close < cloud_low and (previous_close is None or candle_close < previous_close):
+        trend = "Bearish"
+        trade_action = "Short"
+        direction = "reject_below_10m_34_50"
+        setup_word = "Rejection"
+        quality_clouds = nearby_mtf_clouds(candle_close, ema_1h or {}, ema_daily or {}, side="underfoot")
+        setup_quality_note = (
+            f"Underfoot cloud nearby: {', '.join(cloud['label'] for cloud in quality_clouds)}"
+            if quality_clouds
+            else "Clear room below 10m 34/50"
+        )
+        stop = cloud_high + fixed_stop_buffer
+    else:
         return []
 
     candle_time = candle_time_key(candle)
-    overhead_clouds = nearby_overhead_mtf_clouds(candle_close, ema_1h or {}, ema_daily or {})
-    setup_quality = "bad" if overhead_clouds else "good"
+    setup_quality = "bad" if quality_clouds else "good"
     setup_quality_label = "Bad" if setup_quality == "bad" else "Good"
-    setup_quality_note = (
-        f"Overhead cloud nearby: {', '.join(cloud['label'] for cloud in overhead_clouds)}"
-        if overhead_clouds
-        else "Clear room above 10m 34/50"
-    )
     risk_plan = fixed_stop_risk_plan(
         entry=candle_close,
-        stop=cloud_low - fixed_stop_buffer,
+        stop=stop,
         max_risk=risk_amount,
         stop_buffer=fixed_stop_buffer,
         stop_mode="10m-34-50-cloud",
@@ -886,13 +954,14 @@ def ten_minute_34_50_bounce_matches(
     return [
         {
             "label": "10m 34/50 Bounce",
-            "display_label": f"{setup_quality_label} 34/50 Bounce",
+            "display_label": f"{setup_quality_label} 34/50 {setup_word}",
             "timeframe": "10m",
             "mtf_label": "10m 34/50",
             "cloud_label": "10m 34/50",
             "setup_quality": setup_quality,
             "setup_quality_note": setup_quality_note,
-            "overhead_clouds": overhead_clouds,
+            "overhead_clouds": quality_clouds if trend == "Bullish" else [],
+            "underfoot_clouds": quality_clouds if trend == "Bearish" else [],
             "stop_cloud_low": round(cloud_low, 4),
             "stop_cloud_high": round(cloud_high, 4),
             "cloud_low": round(cloud_low, 4),
@@ -904,9 +973,9 @@ def ten_minute_34_50_bounce_matches(
             "candle_time": candle_time,
             "type": "10m_34_50_bounce",
             "status": "confirmed",
-            "direction": "bounce_above_10m_34_50",
-            "trend": "Bullish",
-            "trade_action": "Long",
+            "direction": direction,
+            "trend": trend,
+            "trade_action": trade_action,
             **({"risk_plan": risk_plan} if risk_plan else {}),
         }
     ]
@@ -917,10 +986,19 @@ def nearby_overhead_mtf_clouds(
     ema_1h: dict[str, float | None],
     ema_daily: dict[str, float | None],
 ) -> list[dict[str, Any]]:
+    return nearby_mtf_clouds(entry_price, ema_1h, ema_daily, side="overhead")
+
+
+def nearby_mtf_clouds(
+    entry_price: float,
+    ema_1h: dict[str, float | None],
+    ema_daily: dict[str, float | None],
+    side: str,
+) -> list[dict[str, Any]]:
     if entry_price <= 0:
         return []
 
-    overhead_clouds = []
+    nearby_clouds = []
     for check in LONG_MTF_CLOUDS:
         ema_set = ema_1h if check["source"] == "hourly" else ema_daily
         first = ema_set.get(check["keys"][0])
@@ -929,13 +1007,15 @@ def nearby_overhead_mtf_clouds(
             continue
         cloud_low = min(first, second)
         cloud_high = max(first, second)
-        if cloud_high < entry_price:
+        if side == "overhead" and cloud_high < entry_price:
             continue
-        distance = max(cloud_low - entry_price, 0)
+        if side == "underfoot" and cloud_low > entry_price:
+            continue
+        distance = max(cloud_low - entry_price, 0) if side == "overhead" else max(entry_price - cloud_high, 0)
         distance_ratio = distance / entry_price
         if distance_ratio > BOUNCE_OVERHEAD_CLOUD_BUFFER:
             continue
-        overhead_clouds.append(
+        nearby_clouds.append(
             {
                 "label": check["label"],
                 "cloud_low": round(cloud_low, 4),
@@ -943,7 +1023,7 @@ def nearby_overhead_mtf_clouds(
                 "distance_pct": round(distance_ratio * 100, 2),
             }
         )
-    return overhead_clouds
+    return nearby_clouds
 
 
 def historical_fast_clouds_by_candle_time(candles: list[dict[str, Any]]) -> dict[Any, tuple[float, float]]:

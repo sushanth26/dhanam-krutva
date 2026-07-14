@@ -20,7 +20,7 @@ import { showDeviceNotification } from "./lib/notifications";
 import { loadAutoTradeSettings, loadRiskSettings, normalizeRiskSettings, saveAutoTradeSettings, saveRiskSettings } from "./lib/settings";
 import { initialTabState, loadWatchlists, normalizeSymbols, normalizeWatchlists, OG_WATCHLIST_ID, saveWatchlists, shouldPromoteLocalWatchlists, slugify, uniqueId } from "./lib/watchlists";
 
-const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
+const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 30 * 1000;
 const ACCOUNT_KEEPALIVE_INTERVAL_MS = 2 * 60 * 1000;
 const WATCHLIST_SYNC_INTERVAL_MS = 2 * 60 * 1000;
 const LIVE_DATA_UNLOCK_KEY = "dhanam-live-data-unlock-date";
@@ -56,6 +56,7 @@ export default function App() {
   const passiveMarketTimer = useRef(null);
   const accountKeepaliveTimer = useRef(null);
   const watchlistSyncTimer = useRef(null);
+  const startupPriceRefreshStarted = useRef(false);
   const lastMtfSignature = useRef(initialTabState(loadWatchlists(), null));
   const lastMtfRows = useRef(initialTabState(loadWatchlists(), {}));
   const riskSettingsRef = useLatestRef(riskSettings);
@@ -416,7 +417,15 @@ export default function App() {
   useEffect(() => {
     refreshShell({ includeAccounts: true });
     loadMtfAlertHistory();
-    refreshWatchlists();
+    refreshWatchlists().finally(() => {
+      if (startupPriceRefreshStarted.current) return;
+      startupPriceRefreshStarted.current = true;
+      refreshAllPrices({
+        showLoading: false,
+        manual: shouldUseManualRefresh(),
+        userInitiated: true,
+      });
+    });
     if (canKeepPassiveRefreshArmed()) startPassiveMarketRefresh();
     if (isRegularMarketHours()) refreshShell({ includeAccounts: true, showLoading: false });
     startAccountKeepalive();
