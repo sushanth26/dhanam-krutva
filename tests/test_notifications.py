@@ -348,6 +348,52 @@ def test_setup_alert_quotes_respects_scanner_entry_toggle_independently():
     assert [match["type"] for match in setup_off[0]["mtf_matches"]] == ["scanner_entry"]
 
 
+def test_setup_alert_quotes_prioritizes_playable_trade_when_enabled():
+    quotes = [
+        {
+            "symbol": "BE",
+            "price": 12.5,
+            "scanner_read": {
+                "kind": "entry",
+                "reason": "in 5/12",
+                "source_match_type": "10m_34_50_bounce",
+                "entry_price": 12.5,
+            },
+            "mtf_matches": [
+                {
+                    "type": "10m_34_50_bounce",
+                    "status": "confirmed",
+                    "trade_action": "Long",
+                    "label": "10m 34/50 Bounce",
+                    "display_label": "Good 34/50 Bounce",
+                    "setup_quality": "good",
+                    "entry_price": 12.5,
+                },
+                {
+                    "type": "playable_trade",
+                    "status": "confirmed",
+                    "trade_action": "Long",
+                    "label": "Playable Trade",
+                    "display_label": "Playable: Long 2.50R",
+                    "entry_price": 12.5,
+                },
+            ],
+        },
+    ]
+
+    alerts = setup_alert_quotes(
+        quotes,
+        {"playableTrades": True, "scannerEntry": True, "tenMinute3450Bounce": True, "curls": True, "mtfCloudTouch": True},
+    )
+    playable_off = setup_alert_quotes(
+        quotes,
+        {"playableTrades": False, "scannerEntry": True, "tenMinute3450Bounce": True, "curls": True, "mtfCloudTouch": True},
+    )
+
+    assert [match["type"] for match in alerts[0]["mtf_matches"]] == ["playable_trade", "10m_34_50_bounce"]
+    assert [match["type"] for match in playable_off[0]["mtf_matches"]] == ["scanner_entry"]
+
+
 def test_monitored_symbols_use_saved_watchlists_not_static_og(tmp_path):
     watchlist_file = tmp_path / "watchlists.json"
     WatchlistStore(watchlist_file).replace(

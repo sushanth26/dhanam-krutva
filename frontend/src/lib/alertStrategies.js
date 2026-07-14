@@ -2,6 +2,12 @@ import { getJson, postJson } from "./api";
 
 export const ALERT_STRATEGIES = [
   {
+    key: "playableTrades",
+    name: "Playable Trades",
+    matchTypes: ["playable_trade"],
+    description: "Trade thesis is Playable with confirmation and acceptable R:R.",
+  },
+  {
     key: "scannerEntry",
     name: "Entry Alerts",
     matchTypes: ["scanner_entry"],

@@ -305,14 +305,21 @@ def setup_alert_matches(quote: dict[str, Any], strategies: dict[str, bool] | Non
     matches = []
     read = quote.get("scanner_read") if isinstance(quote.get("scanner_read"), dict) else {}
     source_match = entry_source_match(quote, read) if read.get("kind") == "entry" else None
+    playable_match = next((match for match in quote.get("mtf_matches", []) if match.get("type") == "playable_trade"), None)
+    emitted_playable = False
+    if playable_match and (strategies is None or filter_enabled_matches([playable_match], strategies)):
+        matches.append(playable_match)
+        emitted_playable = True
     emitted_entry = False
-    if source_match:
+    if source_match and not emitted_playable:
         entry_match = entry_alert_match(quote, read, source_match)
         if strategies is None or filter_enabled_matches([entry_match], strategies):
             matches.append(entry_match)
             emitted_entry = True
 
     for match in quote.get("mtf_matches", []):
+        if emitted_playable and match is playable_match:
+            continue
         if not direct_alert_match(match):
             continue
         if emitted_entry and source_match and same_setup_match(match, source_match):

@@ -23,6 +23,7 @@ function rowSymbol(row) {
 }
 
 function setupName(match) {
+  if (match.type === "playable_trade") return "Playable";
   if (match.type === "scanner_entry") return "Entry";
   if (match.type === "10m_34_50_bounce" || match.type === "10m_cloud_bounce") {
     return cleanSetupLabel(match.display_label || match.label || "10m 34/50 Bounce");
@@ -32,6 +33,13 @@ function setupName(match) {
 }
 
 function setupMessage(match) {
+  if (match.type === "playable_trade") {
+    const rr = Number(match.reward_risk);
+    const rrText = Number.isFinite(rr) ? `, ${rr.toFixed(2)}R` : "";
+    const targetText = Number.isFinite(Number(match.target_price)) ? `, TP ${formatPrice(match.target_price)}` : "";
+    const stopText = Number.isFinite(Number(match.stop_price)) ? `, SL ${formatPrice(match.stop_price)}` : "";
+    return `Playable ${match.trade_action || "trade"} at ${formatPrice(match.entry_price)}${stopText}${targetText}${rrText}`;
+  }
   if (match.type === "scanner_entry") {
     return `Entry at ${formatPrice(match.entry_price)}: ${match.scanner_read?.detail || "Scanner says Entry"}`;
   }

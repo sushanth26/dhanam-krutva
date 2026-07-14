@@ -42,7 +42,12 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
 function PriceRow({ quote, onRemoveSymbol }) {
   const tenMinuteStatus = cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
   return (
-    <BaseRow quote={quote} trend={tenMinuteStatus} action={onRemoveSymbol ? <RemoveCell onRemove={() => onRemoveSymbol(quote.symbol)} symbol={quote.symbol} /> : null}>
+    <BaseRow
+      quote={quote}
+      trend={tenMinuteStatus}
+      className={decisionRowClass(quote)}
+      action={onRemoveSymbol ? <RemoveCell onRemove={() => onRemoveSymbol(quote.symbol)} symbol={quote.symbol} /> : null}
+    >
       <td className="mtf-cell" data-label="Read"><ScannerDecision quote={quote} trend={tenMinuteStatus} /></td>
       <td className="rr-cell" data-label="R:R"><RewardRisk quote={quote} /></td>
       <td className="qty-cell" data-label="Qty"><TradeQuantity quote={quote} /></td>
@@ -175,6 +180,11 @@ function TradeLevel({ quote, field }) {
 
 function isPlayableQuote(quote) {
   return String(quote.trade_thesis?.decision || "").toLowerCase() === "playable";
+}
+
+function decisionRowClass(quote) {
+  const decision = String(quote.trade_thesis?.decision || "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  return decision ? `decision-${decision}` : "";
 }
 
 function tradePlanTitle(plan) {
@@ -597,10 +607,10 @@ function compareTenMinuteFastCloud(left, right) {
 function tradePlanSortScore(quote) {
   const plan = quote.trade_plan;
   const rr = Number(bestRewardRiskTarget(plan || {})?.reward_risk ?? plan?.reward_risk);
-  if (!Number.isFinite(rr)) return Number.POSITIVE_INFINITY;
   const decision = String(quote.trade_thesis?.decision || "").toLowerCase();
-  const kindBonus = decision === "playable" ? 0 : decision === "wait" ? 10 : quote.scanner_read?.kind === "entry" ? 2 : 20;
-  return kindBonus - rr;
+  const decisionRank = decision === "playable" ? 0 : decision === "wait" ? 100 : quote.scanner_read?.kind === "entry" ? 150 : 200;
+  const rrScore = Number.isFinite(rr) ? Math.min(rr, 20) : 0;
+  return decisionRank - rrScore;
 }
 
 function fastEmaSortScore(quote) {

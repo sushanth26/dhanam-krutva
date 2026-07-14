@@ -14,6 +14,7 @@ from app.market_data import (
     mtf_signal_matches,
     nine_ema_touch_matches,
     parse_symbols,
+    playable_trade_alert_match,
     scanner_read,
     support_resistance_levels,
     symbol_chunks,
@@ -1308,6 +1309,35 @@ def test_trade_thesis_playable_when_confirmed_and_rr_is_good():
     assert thesis["setup"]["label"] == "Support bounce"
     assert thesis["confirmation"]["status"] is True
     assert thesis["reward_risk"]["status"] is True
+
+
+def test_playable_trade_alert_match_uses_trade_plan_levels():
+    match = playable_trade_alert_match(
+        "AAOI",
+        119.42,
+        "Bullish",
+        {
+            "action": "Long",
+            "entry": 119.42,
+            "stop": 115.5,
+            "targets": [
+                {"label": "T1", "price": 124.78, "reward_risk": 1.84, "is_acceptable": False},
+                {"label": "T2", "price": 127.51, "reward_risk": 2.77, "is_acceptable": True},
+            ],
+            "risk_plan": {"shares": 25},
+            "source_match_type": "long_mtf_5_12_touch",
+        },
+        {"decision": "Playable", "bias": "Long"},
+        {"kind": "entry", "candle_time": "2026-07-13T15:10:00"},
+    )
+
+    assert match["type"] == "playable_trade"
+    assert match["status"] == "confirmed"
+    assert match["entry_price"] == 119.42
+    assert match["stop_price"] == 115.5
+    assert match["target_price"] == 127.51
+    assert match["reward_risk"] == 2.77
+    assert match["risk_plan"]["shares"] == 25
 
 
 def test_scanner_read_entry_requires_price_inside_5_12_after_mtf_resistance_clears():

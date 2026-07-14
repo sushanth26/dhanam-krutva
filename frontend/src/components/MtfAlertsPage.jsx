@@ -6,6 +6,7 @@ import { formatPrice } from "../lib/market";
 
 const LIVE_ENTRY_SETUP_TYPES = new Set(["long_mtf_5_12_touch", "10m_34_50_bounce"]);
 const ALERT_FILTERS = [
+  { key: "playable", label: "Playable" },
   { key: "entry", label: "Entry" },
   { key: "curl", label: "Curl" },
   { key: "bounce", label: "10m Bounce" },
@@ -25,13 +26,20 @@ function setupAlertRows(watchlist, quote, strategies) {
   const rows = [];
   const sourceMatch = quote.scanner_read?.kind === "entry" ? entrySourceMatch(quote) : null;
   const entryMatch = sourceMatch ? entryAlertMatch(quote, sourceMatch) : null;
+  const playableMatch = (quote.mtf_matches || []).find((match) => match.type === "playable_trade") || null;
+  let emittedPlayable = false;
+  if (playableMatch && alertStrategyEnabled(playableMatch, strategies)) {
+    rows.push({ watchlist, quote, match: playableMatch });
+    emittedPlayable = true;
+  }
   let emittedEntry = false;
-  if (entryMatch && alertStrategyEnabled(entryMatch, strategies)) {
+  if (entryMatch && !emittedPlayable && alertStrategyEnabled(entryMatch, strategies)) {
     rows.push({ watchlist, quote, match: entryMatch });
     emittedEntry = true;
   }
 
   for (const match of quote.mtf_matches || []) {
+    if (emittedPlayable && match === playableMatch) continue;
     if (!directAlertMatch(match)) continue;
     if (emittedEntry && sourceMatch && sameMatch(match, sourceMatch)) continue;
     if (!alertStrategyEnabled(match, strategies)) continue;
@@ -104,6 +112,7 @@ export function MtfAlertsPage({ loading, onDeleteAlert, onRefresh, rows }) {
       </div>
       <div className="mtf-alert-legend" aria-label="Setup row color key">
         <span className="mtf-alert-legend-item curl"><b></b>Curl</span>
+        <span className="mtf-alert-legend-item playable"><b></b>Playable</span>
         <span className="mtf-alert-legend-item bounce-good"><b></b>Good 10m bounce</span>
         <span className="mtf-alert-legend-item bounce-bad"><b></b>Weak 10m bounce</span>
         <span className="mtf-alert-legend-item cloud-touch"><b></b>MTF cloud touch</span>
@@ -244,6 +253,7 @@ function searchableText(row) {
 
 function setupClass(match) {
   if (match.type === "scanner_entry") return setupClass({ ...match, type: match.source_type });
+  if (match.type === "playable_trade") return "playable";
   if (match.type === "long_mtf_5_12_touch") return "curl";
   if (match.type === "10m_34_50_bounce") return match.setup_quality === "bad" ? "bounce-bad" : "bounce-good";
   if (match.type === "mtf_cloud_price_touch") return "cloud-touch";
@@ -252,6 +262,7 @@ function setupClass(match) {
 
 function alertFilterKey(match) {
   const labelText = String(`${match.display_label || ""} ${match.label || ""} ${match.direction || ""}`).toLowerCase();
+  if (match.type === "playable_trade") return "playable";
   if (match.type === "scanner_entry") return "entry";
   if (match.type === "long_mtf_5_12_touch") return "curl";
   if (match.type === "10m_34_50_bounce" || match.type === "10m_cloud_bounce") {

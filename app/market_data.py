@@ -151,6 +151,10 @@ def build_live_prices(
             read,
             fixed_stop_buffer=fixed_stop_buffer,
         )
+        alert_matches = [*matches]
+        playable_match = playable_trade_alert_match(symbol, price, ten_minute_trend, plan, thesis, read)
+        if playable_match:
+            alert_matches.append(playable_match)
         quotes.append(
             {
                 "symbol": symbol,
@@ -163,7 +167,7 @@ def build_live_prices(
                 "ema_daily": ema_daily,
                 "mtf_proximity": proximity,
                 "support_resistance": support_resistance,
-                "mtf_matches": matches,
+                "mtf_matches": alert_matches,
                 "trade_plan": plan,
                 "trade_thesis": thesis,
                 "scanner_read": read,
@@ -994,6 +998,64 @@ def reward_risk_label(plan: dict[str, Any] | None) -> str:
     if rr is not None:
         return f"{rr}R"
     return "Needs target"
+
+
+def playable_trade_alert_match(
+    symbol: str,
+    price: float | None,
+    ten_minute_trend: str,
+    plan: dict[str, Any] | None,
+    thesis: dict[str, Any] | None,
+    read: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not plan or not thesis or str(thesis.get("decision") or "").lower() != "playable":
+        return None
+    target = first_acceptable_target(plan) or first_plan_target(plan)
+    entry = plan.get("entry") if plan.get("entry") is not None else price
+    rr = target.get("reward_risk") if target else plan.get("reward_risk")
+    action = plan.get("action") or thesis.get("bias") or trade_action_for_trend(ten_minute_trend)
+    if entry is None:
+        return None
+    parsed_rr = safe_float(rr)
+    rr_text = f"{parsed_rr:.2f}R" if parsed_rr is not None else "R:R ready"
+    target_label = target.get("label") if target else plan.get("target_level", {}).get("label")
+    display_label = f"Playable: {action or 'Trade'} {rr_text}"
+    if target_label:
+        display_label = f"{display_label} to {target_label}"
+    return {
+        "type": "playable_trade",
+        "status": "confirmed",
+        "label": "Playable Trade",
+        "display_label": display_label,
+        "trade_action": action,
+        "trend": ten_minute_trend,
+        "symbol": symbol,
+        "entry_price": round(float(entry), 4),
+        "stop_price": plan.get("stop"),
+        "target_price": target.get("price") if target else plan.get("target"),
+        "reward_risk": round(parsed_rr, 2) if parsed_rr is not None else None,
+        "risk_plan": plan.get("risk_plan"),
+        "source_type": plan.get("source_match_type"),
+        "source_label": plan.get("source_match_label"),
+        "candle_time": (read or {}).get("candle_time"),
+        "scanner_read": read,
+    }
+
+
+def safe_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def first_acceptable_target(plan: dict[str, Any]) -> dict[str, Any] | None:
+    return next((target for target in plan.get("targets", []) if target.get("is_acceptable")), None)
+
+
+def first_plan_target(plan: dict[str, Any]) -> dict[str, Any] | None:
+    targets = plan.get("targets") or []
+    return targets[0] if targets else None
 
 
 def trade_plan_grade(reward_risk: float) -> str:
