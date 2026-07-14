@@ -1632,29 +1632,34 @@ select {
 }
 
 .mtf-mini-chip.radar.inside {
-  background: #f3f0ff;
-  border-color: #cfc4ff;
+  background: var(--mtf-chip-bg, #075747);
+  border-color: var(--mtf-chip-border, #054639);
 }
 
 .mtf-mini-chip.radar.hot {
-  background: #dff4e9;
-  border-color: #afdcc4;
+  background: var(--mtf-chip-bg, #2f806c);
+  border-color: var(--mtf-chip-border, #2a705f);
 }
 
 .mtf-mini-chip.radar.near {
-  background: #fff4d8;
-  border-color: #ecc46f;
+  background: var(--mtf-chip-bg, #82b1a5);
+  border-color: var(--mtf-chip-border, #77a095);
 }
 
 .mtf-mini-chip.radar.reachable {
-  background: #eaf3fb;
-  border-color: #bfd8ee;
+  background: var(--mtf-chip-bg, #d4dfdd);
+  border-color: var(--mtf-chip-border, #c5d1cd);
 }
 
 .mtf-mini-chip.radar.far,
 .mtf-mini-chip.radar.unknown {
-  background: #f8faf7;
-  border-color: #dbe2d8;
+  background: var(--mtf-chip-bg, #eef2f5);
+  border-color: var(--mtf-chip-border, #cfd8cc);
+}
+
+.mtf-mini-chip.radar b,
+.mtf-mini-chip.radar small {
+  color: var(--mtf-chip-text, #184d36);
 }
 
 .mtf-mini-more {

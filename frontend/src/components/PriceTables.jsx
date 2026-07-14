@@ -2,6 +2,7 @@ import { CloudTag } from "./Tags";
 import { cloudStatus, formatPrice } from "../lib/market";
 
 export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
+  const sortedQuotes = [...quotes].sort(compareMtfProximity);
   return (
     <section className="price-bucket">
       <div className="bucket-heading">
@@ -20,7 +21,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
             </tr>
           </thead>
           <tbody>
-            {quotes.length ? quotes.map((quote) => (
+            {sortedQuotes.length ? sortedQuotes.map((quote) => (
               <PriceRow key={quote.symbol} quote={quote} onRemoveSymbol={onRemoveSymbol} />
             )) : (
               <tr><td colSpan={onRemoveSymbol ? "5" : "4"}>No {kind} stocks right now.</td></tr>
@@ -74,7 +75,11 @@ function MtfCloudMiniMap({ quote }) {
   return (
     <div className="mtf-mini-map" title={clouds.map(cloudTitle).join("\n")} aria-label={clouds.map(cloudTitle).join(", ")}>
       {visibleClouds.map((cloud) => (
-        <span className={`mtf-mini-chip ${cloud.kind} ${cloud.status || ""}`} key={`${cloud.label}-${cloud.low}-${cloud.high}`}>
+        <span
+          className={`mtf-mini-chip ${cloud.kind} ${cloud.status || ""}`}
+          key={`${cloud.label}-${cloud.low}-${cloud.high}`}
+          style={cloud.kind === "radar" ? mtfRadarStyle(cloud) : undefined}
+        >
           <b>{shortMtfLabel(cloud.label)} {directionSymbol(cloud.direction)}</b>
           <small>{cloud.rangeRatio == null ? `${formatPrice(cloud.low)}-${formatPrice(cloud.high)}` : `${formatRangeRatio(cloud.rangeRatio)}R`}</small>
         </span>
@@ -149,4 +154,39 @@ function formatRangeRatio(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return "-";
   return parsed.toFixed(2);
+}
+
+function compareMtfProximity(left, right) {
+  const leftScore = mtfSortScore(left);
+  const rightScore = mtfSortScore(right);
+  if (leftScore !== rightScore) return leftScore - rightScore;
+  return String(left.symbol || "").localeCompare(String(right.symbol || ""));
+}
+
+function mtfSortScore(quote) {
+  const nearest = quote.mtf_proximity?.nearest;
+  if (!nearest) return Number.POSITIVE_INFINITY;
+  if (nearest.status === "inside") return -1;
+  const ratio = Number(nearest.range_ratio);
+  if (Number.isFinite(ratio)) return ratio;
+  const distance = Number(nearest.distance);
+  return Number.isFinite(distance) ? 1000 + distance : Number.POSITIVE_INFINITY;
+}
+
+function mtfRadarStyle(cloud) {
+  const ratio = Number(cloud.rangeRatio);
+  const progress = Number.isFinite(ratio) ? Math.min(Math.max(ratio, 0), 1) : 1;
+  const background = mixRgb([7, 87, 71], [238, 242, 245], progress);
+  const border = mixRgb([5, 70, 57], [207, 216, 204], progress);
+  const text = progress < 0.42 ? "#ffffff" : "#184d36";
+  return {
+    "--mtf-chip-bg": background,
+    "--mtf-chip-border": border,
+    "--mtf-chip-text": text,
+  };
+}
+
+function mixRgb(start, end, progress) {
+  const values = start.map((value, index) => Math.round(value + (end[index] - value) * progress));
+  return `rgb(${values.join(", ")})`;
 }
