@@ -503,32 +503,75 @@ class WebullService:
         if guard_response:
             return guard_response
 
+        result = self._call_once(fn)
+        if result.get("ok") or not self._retryable_connection_error(result):
+            return self._guarded_result(result)
+
+        self._reset_clients()
+        result = self._call_once(fn)
+        return self._guarded_result(result)
+
+    def _call_once(self, fn: Callable[[], Any]) -> dict[str, Any]:
         try:
             with self._suppress_sdk_output():
                 response = fn()
             body = self._response_body(response)
-            return self._guarded_result({
+            return {
                 "ok": 200 <= response.status_code < 300,
                 "status_code": response.status_code,
                 "request_id": response.headers.get("x-request-id"),
                 "data": body,
-            })
+            }
         except ServerException as exc:
-            return self._guarded_result({
+            return {
                 "ok": False,
                 "status_code": exc.get_http_status(),
                 "request_id": exc.get_request_id(),
                 "error_code": exc.get_error_code(),
                 "error": exc.get_error_msg() or str(exc),
-            })
+            }
         except ClientException as exc:
-            return self._guarded_result({
+            return {
                 "ok": False,
                 "status_code": None,
                 "request_id": None,
                 "error_code": exc.get_error_code(),
                 "error": exc.get_error_msg() or str(exc),
-            })
+            }
+        except Exception as exc:
+            return {
+                "ok": False,
+                "status_code": None,
+                "request_id": None,
+                "error_code": "WEBULL_CLIENT_ERROR",
+                "error": str(exc),
+            }
+
+    def _reset_clients(self) -> None:
+        self._client = None
+        self._data_client = None
+
+    @staticmethod
+    def _retryable_connection_error(result: dict[str, Any]) -> bool:
+        if result.get("status_code") in {401, 403, 408, 502, 503, 504}:
+            return True
+        error_code = str(result.get("error_code") or "").upper()
+        if error_code in {"VERIFY_FAILURE_EXCEED_LIMIT", "TOO_MANY_REQUESTS", "WEBULL_GUARD_ACTIVE"}:
+            return False
+        text = f"{error_code} {result.get('error') or ''}".lower()
+        return any(
+            phrase in text
+            for phrase in (
+                "disconnect",
+                "connection",
+                "connection aborted",
+                "connection reset",
+                "remote end closed",
+                "timed out",
+                "timeout",
+                "temporarily unavailable",
+            )
+        )
 
     def _guarded_result(self, result: dict[str, Any]) -> dict[str, Any]:
         if result.get("ok"):

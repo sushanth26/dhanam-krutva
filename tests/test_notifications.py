@@ -188,3 +188,46 @@ def test_build_monitored_quotes_omits_deleted_symbols(tmp_path, monkeypatch):
     assert requested_symbols == ["BE", "PLTR"]
     assert "AAOI" not in requested_symbols
     assert [quote["symbol"] for quote in quotes] == ["BE", "PLTR"]
+
+
+def test_build_monitored_quotes_raises_when_webull_refresh_fails(tmp_path, monkeypatch):
+    watchlist_file = tmp_path / "watchlists.json"
+    WatchlistStore(watchlist_file).replace([{"id": "og", "symbols": ["BE"]}])
+    settings = SimpleNamespace(watchlist_file=watchlist_file)
+
+    monkeypatch.setattr(notifications, "service", lambda: object())
+    monkeypatch.setattr(
+        notifications,
+        "build_live_prices",
+        lambda _webull, _symbols: {
+            "ok": False,
+            "quotes": [],
+            "errors": [{"source": "snapshot", "error": {"error": "Connection disconnected"}}],
+        },
+    )
+
+    try:
+        build_monitored_quotes(settings)
+    except RuntimeError as exc:
+        assert "Connection disconnected" in str(exc)
+    else:
+        raise AssertionError("expected Webull refresh failure")
+
+
+def test_monitor_error_push_is_sent_once_until_recovered(tmp_path):
+    settings = SimpleNamespace(
+        push_configured=True,
+        mtf_push_enabled=True,
+        push_subscription_file=tmp_path / "subscriptions.json",
+    )
+    monitor = MtfPushMonitor(settings)
+    sent = []
+    monitor.send = lambda payload: sent.append(payload) or {"sent": 1, "removed": 0}
+
+    monitor.notify_monitor_error()
+    monitor.notify_monitor_error()
+    monitor.last_error_signature = None
+    monitor.notify_monitor_error()
+
+    assert [payload["tag"] for payload in sent] == ["webull-alerts-paused", "webull-alerts-paused"]
+    assert sent[0]["title"] == "Webull alerts paused"
