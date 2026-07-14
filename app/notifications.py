@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,9 @@ from app.dependencies import service
 from app.live_data_gate import POST_MARKET_CLOSE_MINUTES, is_live_data_unlocked_today
 from app.market_data import WEBULL_BATCH_BAR_LIMIT, build_live_prices, symbol_chunks
 from app.watchlists import WatchlistStore
+
+
+logger = logging.getLogger(__name__)
 
 
 class PushSubscriptionStore:
@@ -54,6 +58,7 @@ class MtfPushMonitor:
         self.store = PushSubscriptionStore(settings.push_subscription_file)
         self.task: asyncio.Task | None = None
         self.last_signature: str | None = None
+        self.last_error_signature: str | None = None
 
     def start(self) -> None:
         if self.task or not self.settings.mtf_push_enabled or not self.settings.push_configured:
@@ -79,8 +84,10 @@ class MtfPushMonitor:
                     and is_market_refresh_window(self.settings.mtf_push_timezone)
                 ):
                     await asyncio.to_thread(self.check_once)
+                    self.last_error_signature = None
             except Exception:
-                pass
+                logger.exception("MTF push monitor failed")
+                self.notify_monitor_error()
             await asyncio.sleep(self.settings.mtf_push_poll_seconds)
 
     def check_once(self) -> dict[str, Any] | None:
@@ -119,6 +126,24 @@ class MtfPushMonitor:
                     removed += 1
         return {"sent": sent, "removed": removed}
 
+    def notify_monitor_error(self) -> dict[str, int] | None:
+        signature = "webull-refresh-failed"
+        if self.last_error_signature == signature:
+            return None
+        self.last_error_signature = signature
+        return self.send(
+            {
+                "title": "Webull alerts paused",
+                "body": "Background live-data refresh failed. Open the app and refresh Webull to resume setup alerts.",
+                "badgeCount": 1,
+                "badge_count": 1,
+                "tag": "webull-alerts-paused",
+                "targetSymbol": "",
+                "url": "/",
+                "matches": [],
+            }
+        )
+
 
 def is_market_refresh_window(timezone_name: str, now: datetime | None = None) -> bool:
     if now is None:
@@ -153,13 +178,33 @@ def monitored_symbols(settings: Settings) -> list[str]:
 
 def build_monitored_quotes(settings: Settings) -> list[dict[str, Any]]:
     quotes = []
+    errors = []
     webull = service()
     for chunk in symbol_chunks(monitored_symbols(settings), WEBULL_BATCH_BAR_LIMIT):
         if not chunk:
             continue
         payload = build_live_prices(webull, ",".join(chunk))
+        if payload.get("ok") is False:
+            errors.extend(payload.get("errors") or [{"source": "live prices", "error": payload}])
         quotes.extend(payload.get("quotes", []))
+    if errors:
+        raise RuntimeError(f"Webull live-data refresh failed: {describe_webull_errors(errors)}")
     return quotes
+
+
+def describe_webull_errors(errors: list[dict[str, Any]]) -> str:
+    descriptions = []
+    for item in errors[:3]:
+        source = item.get("source") or "webull"
+        error = item.get("error") if isinstance(item, dict) else item
+        if isinstance(error, dict):
+            message = error.get("error") or error.get("message") or error.get("error_code") or error.get("status_code")
+        else:
+            message = error
+        descriptions.append(f"{source}: {message or 'unknown error'}")
+    if len(errors) > 3:
+        descriptions.append(f"{len(errors) - 3} more")
+    return "; ".join(descriptions)
 
 
 def mtf_notification_payload(quotes: list[dict[str, Any]]) -> dict[str, Any]:

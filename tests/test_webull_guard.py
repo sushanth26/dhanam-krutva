@@ -103,3 +103,43 @@ def test_disabled_webull_guard_does_not_block_future_sdk_calls(tmp_path):
 
     assert service.status()["webull_guard_enabled"] is False
     assert result["ok"] is True
+
+
+def test_disconnected_webull_call_resets_clients_and_retries_once(tmp_path):
+    service = WebullService(settings(tmp_path))
+    service._client = object()
+    service._data_client = object()
+    calls = []
+
+    class FakeResponse:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            return {"ok": True}
+
+    def flaky_call():
+        calls.append((service._client, service._data_client))
+        if len(calls) == 1:
+            raise RuntimeError("Connection disconnected by remote host")
+        return FakeResponse()
+
+    result = service._call(flaky_call)
+
+    assert result["ok"] is True
+    assert len(calls) == 2
+    assert calls[0][0] is not None
+    assert calls[1] == (None, None)
+
+
+def test_verification_failure_is_not_a_retryable_connection_error(tmp_path):
+    service = WebullService(settings(tmp_path))
+
+    assert service._retryable_connection_error(
+        {
+            "ok": False,
+            "status_code": 417,
+            "error_code": "VERIFY_FAILURE_EXCEED_LIMIT",
+            "error": "verification failed too many times",
+        }
+    ) is False
