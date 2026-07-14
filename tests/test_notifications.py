@@ -42,6 +42,20 @@ def test_mtf_push_monitor_does_not_start_when_disabled(tmp_path):
     assert monitor.task is None
 
 
+def test_mtf_push_monitor_polling_does_not_require_manual_live_data_unlock(tmp_path, monkeypatch):
+    settings = SimpleNamespace(
+        push_configured=True,
+        mtf_push_enabled=True,
+        push_subscription_file=tmp_path / "subscriptions.json",
+        mtf_push_timezone="America/Chicago",
+    )
+    monitor = MtfPushMonitor(settings)
+    monitor.store.upsert({"endpoint": "https://push.example/1", "keys": {"p256dh": "a", "auth": "b"}})
+    monkeypatch.setattr(notifications, "is_market_refresh_window", lambda _timezone: True)
+
+    assert monitor.should_poll() is True
+
+
 def test_apply_enabled_strategies_drops_matches_for_disabled_strategy_and_empties_quote():
     quotes = [
         {

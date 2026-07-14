@@ -12,7 +12,7 @@ from app.alert_history import AlertHistoryStore
 from app.alert_strategies import AlertStrategySettingsStore, filter_enabled_matches
 from app.config import Settings
 from app.dependencies import service
-from app.live_data_gate import POST_MARKET_CLOSE_MINUTES, is_live_data_unlocked_today
+from app.live_data_gate import POST_MARKET_CLOSE_MINUTES
 from app.market_data import WEBULL_BATCH_BAR_LIMIT, build_live_prices, symbol_chunks
 from app.watchlists import WatchlistStore
 
@@ -78,17 +78,16 @@ class MtfPushMonitor:
     async def _run(self) -> None:
         while True:
             try:
-                if (
-                    self.store.all()
-                    and is_live_data_unlocked_today(self.settings)
-                    and is_market_refresh_window(self.settings.mtf_push_timezone)
-                ):
+                if self.should_poll():
                     await asyncio.to_thread(self.check_once)
                     self.last_error_signature = None
             except Exception:
                 logger.exception("MTF push monitor failed")
                 self.notify_monitor_error()
             await asyncio.sleep(self.settings.mtf_push_poll_seconds)
+
+    def should_poll(self) -> bool:
+        return bool(self.store.all()) and is_market_refresh_window(self.settings.mtf_push_timezone)
 
     def check_once(self) -> dict[str, Any] | None:
         strategies = AlertStrategySettingsStore(self.settings.alert_strategy_file).get()

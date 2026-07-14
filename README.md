@@ -127,7 +127,7 @@ MTF_PUSH_TIMEZONE=America/Chicago
 
 `MTF_PUSH_ENABLED` defaults to `false`; leave it off to prevent background Webull live-data polling and phone push alerts. Manual app refresh buttons still work.
 
-Background live-data refreshes are also gated by the first successful manual price pull each trading day. If the first manual pull triggers Webull verification and does not complete, the app will not start automatic live-data polling. After a successful manual pull, automatic refreshes can run until post-market close.
+When `MTF_PUSH_ENABLED=true`, background live-data refreshes run during the market refresh window as long as at least one push subscription is saved. The phone push monitor does not require the app to be open first.
 
 Generate VAPID keys with:
 
