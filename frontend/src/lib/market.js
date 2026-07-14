@@ -96,16 +96,57 @@ export function cloudStatus(emaSet, fastKeys, slowKeys) {
   return "Chop";
 }
 
+const EASTERN_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  weekday: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+const WEEKDAY_INDEX = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+function easternMarketTime(date = new Date()) {
+  const parts = Object.fromEntries(EASTERN_TIME_FORMATTER.formatToParts(date).map((part) => [part.type, part.value]));
+  const weekday = WEEKDAY_INDEX[parts.weekday];
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  return {
+    day: parts.day,
+    minutes,
+    month: parts.month,
+    weekday,
+    year: parts.year,
+  };
+}
+
+function isEasternWeekday(parts) {
+  return parts.weekday > 0 && parts.weekday < 6;
+}
+
 export function isMarketRefreshWindow(date = new Date()) {
-  const day = date.getDay();
-  if (day === 0 || day === 6) return false;
-  const minutes = date.getHours() * 60 + date.getMinutes();
-  return minutes >= 3 * 60 && minutes < 19 * 60;
+  const parts = easternMarketTime(date);
+  if (!isEasternWeekday(parts)) return false;
+  return parts.minutes >= 3 * 60 && parts.minutes < 19 * 60;
+}
+
+export function shouldUseManualRefresh(date = new Date()) {
+  const parts = easternMarketTime(date);
+  if (!isEasternWeekday(parts)) return true;
+  return parts.minutes < 9 * 60 || parts.minutes >= 16 * 60;
 }
 
 export function marketDateKey(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  const parts = easternMarketTime(date);
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }

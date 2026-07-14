@@ -15,7 +15,7 @@ import { pageFromLocationHash, hashForPage } from "./lib/appNavigation";
 import { trendBucketsForQuotes } from "./lib/appSelectors";
 import { formatMarketTime } from "./lib/dates";
 import { longAlertNotification, longAlertSignature } from "./lib/longAlertNotifications";
-import { isMarketRefreshWindow, marketDateKey, marginTradingAccountId } from "./lib/market";
+import { isMarketRefreshWindow, marketDateKey, marginTradingAccountId, shouldUseManualRefresh } from "./lib/market";
 import { showDeviceNotification } from "./lib/notifications";
 import { loadAutoTradeSettings, loadRiskSettings, normalizeRiskSettings, saveAutoTradeSettings, saveRiskSettings } from "./lib/settings";
 import { initialTabState, loadWatchlists, normalizeSymbols, normalizeWatchlists, OG_WATCHLIST_ID, saveWatchlists, shouldPromoteLocalWatchlists, slugify, uniqueId } from "./lib/watchlists";
@@ -93,8 +93,8 @@ export default function App() {
     }
   }
 
-  async function loadLivePrices({ manual = false, showLoading = true } = {}) {
-    if (!manual && !isLiveDataApprovedToday()) {
+  async function loadLivePrices({ manual = shouldUseManualRefresh(), showLoading = true, userInitiated = true } = {}) {
+    if (!manual && !userInitiated && !isLiveDataApprovedToday()) {
       setUpdatedTextForTab(watchlistTabRef.current, "Auto-refresh waits for your first manual pull today");
       return;
     }
@@ -117,8 +117,8 @@ export default function App() {
     }
   }
 
-  async function refreshAllPrices({ showLoading = true, manual = true } = {}) {
-    if (!manual && !isLiveDataApprovedToday()) {
+  async function refreshAllPrices({ showLoading = true, manual = shouldUseManualRefresh(), userInitiated = true } = {}) {
+    if (!manual && !userInitiated && !isLiveDataApprovedToday()) {
       setLiveAlert("Auto-refresh waits for your first manual pull today.");
       return;
     }
@@ -370,10 +370,7 @@ export default function App() {
   }
 
   function canKeepPassiveRefreshArmed(date = new Date()) {
-    const day = date.getDay();
-    if (day === 0 || day === 6) return false;
-    const minutes = date.getHours() * 60 + date.getMinutes();
-    return isLiveDataApprovedToday(date) && minutes < 19 * 60;
+    return isLiveDataApprovedToday(date) && isMarketRefreshWindow(date);
   }
 
   function unlockLiveDataForToday() {
@@ -389,7 +386,7 @@ export default function App() {
         return;
       }
       if (isMarketRefreshWindow()) {
-        refreshAllPrices({ showLoading: false, manual: false });
+        refreshAllPrices({ showLoading: false, manual: false, userInitiated: false });
       }
     }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
   }
@@ -466,7 +463,7 @@ export default function App() {
             accountId={tradingAccountId}
             autoTrade={autoTrade}
             disabled={loading.prices}
-            onApplyRisk={refreshAllPrices}
+            onApplyRisk={() => refreshAllPrices()}
             onAutoTradeChange={updateAutoTradeSettings}
             onRiskChange={updateRiskSettings}
             riskSettings={riskSettings}
@@ -488,7 +485,7 @@ export default function App() {
           <MtfAlertsPage
             loading={loading.prices}
             onDeleteAlert={deleteMtfAlert}
-            onRefresh={refreshAllPrices}
+            onRefresh={() => refreshAllPrices()}
             rows={mtfAlertRows}
           />
         ) : (
@@ -499,8 +496,8 @@ export default function App() {
             onAddSymbols={addSymbolsToActiveWatchlist}
             onAddTab={addWatchlist}
             onDeleteTab={deleteWatchlist}
-            onRefreshAll={refreshAllPrices}
-            onRefreshPrices={() => loadLivePrices({ manual: true })}
+            onRefreshAll={() => refreshAllPrices()}
+            onRefreshPrices={() => loadLivePrices()}
             onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)}
             onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
             onSwitchTab={switchWatchlistTab}
