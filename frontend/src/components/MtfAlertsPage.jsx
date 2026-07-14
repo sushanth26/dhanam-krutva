@@ -39,6 +39,12 @@ export function MtfAlertsPage({ loading, onDeleteAlert, onRefresh, rows }) {
           {loading ? "Refreshing" : "Refresh"}
         </button>
       </div>
+      <div className="mtf-alert-legend" aria-label="Setup row color key">
+        <span className="mtf-alert-legend-item curl"><b></b>Curl</span>
+        <span className="mtf-alert-legend-item bounce-good"><b></b>Good 10m bounce</span>
+        <span className="mtf-alert-legend-item bounce-bad"><b></b>Weak 10m bounce</span>
+        <span className="mtf-alert-legend-item cloud-touch"><b></b>MTF cloud touch</span>
+      </div>
       <label className="mtf-alert-search">
         <span>Search alerts</span>
         <input
