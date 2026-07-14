@@ -150,9 +150,10 @@ function RewardRisk({ quote }) {
   const rr = Number(target?.reward_risk ?? plan.reward_risk);
   const detail = tradePlanTitle(plan);
   const label = Number.isFinite(rr) ? `${rr.toFixed(2)}R` : "Plan";
-  const reason = Number.isFinite(rr) ? rewardRiskReason(plan) : "needs S/R";
+  const reason = Number.isFinite(rr) ? rewardRiskReason(quote) : "needs S/R";
+  const grade = rewardRiskGrade(quote, target);
   return (
-    <span className={`rr-chip ${target?.grade || plan.grade || "incomplete"}`} title={detail} aria-label={detail}>
+    <span className={`rr-chip ${grade}`} title={detail} aria-label={detail}>
       <b>{label}</b>
       <small>{reason}</small>
     </span>
@@ -203,11 +204,22 @@ function tradePlanTitle(plan) {
   return lines.filter(Boolean).join("\n");
 }
 
-function rewardRiskReason(plan) {
+function rewardRiskReason(quote) {
+  const plan = quote.trade_plan || {};
+  const decision = String(quote.trade_thesis?.decision || "").toLowerCase();
+  if (decision === "wait") return "wait";
+  if (decision === "skip") return "skip";
   const target = firstTradeTarget(plan);
   if (target?.is_acceptable || (!target && plan.is_acceptable)) return (target?.grade || plan.grade) === "excellent" ? "great room" : "good room";
   if (plan.grade === "thin") return "thin";
   return "skip";
+}
+
+function rewardRiskGrade(quote, target) {
+  const decision = String(quote.trade_thesis?.decision || "").toLowerCase();
+  if (decision === "wait") return "thin";
+  if (decision === "skip") return "poor";
+  return target?.grade || quote.trade_plan?.grade || "incomplete";
 }
 
 function bestRewardRiskTarget(plan) {

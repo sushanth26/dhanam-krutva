@@ -874,7 +874,7 @@ def trade_thesis_from_gates(
 
     source_match = best_trade_plan_match(matches, action)
     setup_ok = bool(plan or source_match or read.get("kind") in {"wait", "entry"})
-    confirmation_ok = read.get("kind") == "entry" or bool(source_match)
+    confirmation_ok = read.get("kind") == "entry"
     primary_target = first_plan_target(plan) if plan else None
     rr_ok = bool(plan and (primary_target.get("is_acceptable") if primary_target else plan.get("is_acceptable")))
     invalidated = trade_plan_invalidated(price, action, plan)
@@ -898,7 +898,7 @@ def trade_thesis_from_gates(
     else:
         decision = "Playable"
         reason = "confirmed + R:R"
-        detail = "Setup is confirmed and TP1 gives acceptable reward-to-risk."
+        detail = "MTF setup is confirmed, the 10m cloud entry trigger is active, and TP1 gives acceptable reward-to-risk."
 
     return trade_thesis_payload(
         decision=decision,

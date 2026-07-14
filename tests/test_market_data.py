@@ -1311,6 +1311,28 @@ def test_trade_thesis_playable_when_confirmed_and_rr_is_good():
     assert thesis["reward_risk"]["status"] is True
 
 
+def test_trade_thesis_waits_when_mtf_setup_has_rr_but_no_10m_cloud_entry():
+    thesis = trade_thesis_from_gates(
+        119.42,
+        "Bullish",
+        {"support": [{"label": "Prior resistance", "low": 116.5, "high": 118.2}], "resistance": [{"label": "Target", "low": 127.51, "high": 127.51}]},
+        [{"type": "mtf_cloud_price_touch", "trade_action": "Long", "entry_price": 119.42, "display_label": "Daily 20/21 bounced up from"}],
+        {
+            "action": "Long",
+            "entry": 119.42,
+            "stop": 115.5,
+            "targets": [{"label": "Target", "price": 127.51, "reward_risk": 2.1, "is_acceptable": True}],
+            "has_acceptable_target": True,
+        },
+        {"kind": "wait", "reason": "5/12 trigger", "detail": "Wait for the 10m 5/12 cloud entry trigger."},
+    )
+
+    assert thesis["decision"] == "Wait"
+    assert thesis["confirmation"]["status"] is False
+    assert thesis["reward_risk"]["status"] is True
+    assert thesis["reason"] == "5/12 trigger"
+
+
 def test_trade_thesis_waits_when_tp1_reward_risk_is_thin_even_if_later_target_is_good():
     thesis = trade_thesis_from_gates(
         119.42,
