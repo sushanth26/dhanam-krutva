@@ -38,7 +38,7 @@ function PriceRow({ quote, onRemoveSymbol }) {
   return (
     <BaseRow quote={quote} trend={tenMinuteStatus} action={onRemoveSymbol ? <RemoveCell onRemove={() => onRemoveSymbol(quote.symbol)} symbol={quote.symbol} /> : null}>
       <td><CloudTag status={tenMinuteStatus} /></td>
-      <td className="mtf-cell"><MtfCloudMiniMap quote={quote} /></td>
+      <td className="mtf-cell"><MtfCloudMiniMap quote={quote} trend={tenMinuteStatus} /></td>
     </BaseRow>
   );
 }
@@ -65,7 +65,7 @@ function RemoveCell({ onRemove, symbol }) {
   );
 }
 
-function MtfCloudMiniMap({ quote }) {
+function MtfCloudMiniMap({ quote, trend }) {
   const proximity = quote.mtf_proximity?.nearest;
   const clouds = proximity ? [mtfCloudFromProximity(proximity)] : mtfCloudsForQuote(quote);
   if (!clouds.length) return <span className="mtf-empty">-</span>;
@@ -78,7 +78,7 @@ function MtfCloudMiniMap({ quote }) {
         <span
           className={`mtf-mini-chip ${cloud.kind} ${cloud.status || ""}`}
           key={`${cloud.label}-${cloud.low}-${cloud.high}`}
-          style={cloud.kind === "radar" ? mtfRadarStyle(cloud) : undefined}
+          style={cloud.kind === "radar" ? mtfRadarStyle(cloud, trend) : undefined}
         >
           <b>{shortMtfLabel(cloud.label)} {directionSymbol(cloud.direction)}</b>
           <small>{cloud.rangeRatio == null ? `${formatPrice(cloud.low)}-${formatPrice(cloud.high)}` : `${formatRangeRatio(cloud.rangeRatio)}R`}</small>
@@ -173,16 +173,57 @@ function mtfSortScore(quote) {
   return Number.isFinite(distance) ? 1000 + distance : Number.POSITIVE_INFINITY;
 }
 
-function mtfRadarStyle(cloud) {
+function mtfRadarStyle(cloud, trend) {
   const ratio = Number(cloud.rangeRatio);
   const progress = Number.isFinite(ratio) ? Math.min(Math.max(ratio, 0), 1) : 1;
-  const background = mixRgb([7, 87, 71], [238, 242, 245], progress);
-  const border = mixRgb([5, 70, 57], [207, 216, 204], progress);
-  const text = progress < 0.42 ? "#ffffff" : "#184d36";
+  const palette = mtfRadarPalette(cloud.direction, trend);
+  const background = mixRgb(palette.start, [238, 242, 245], progress);
+  const border = mixRgb(palette.border, [207, 216, 204], progress);
+  const text = progress < palette.lightTextUntil ? "#ffffff" : palette.text;
   return {
     "--mtf-chip-bg": background,
     "--mtf-chip-border": border,
     "--mtf-chip-text": text,
+  };
+}
+
+function mtfRadarPalette(direction, trend) {
+  if (direction === "inside") {
+    return {
+      start: [20, 101, 113],
+      border: [15, 81, 91],
+      text: "#184d36",
+      lightTextUntil: 0.48,
+    };
+  }
+
+  const isBullish = trend === "Bullish";
+  const isBearish = trend === "Bearish";
+  const isTrendBarrier = (isBullish && direction === "above") || (isBearish && direction === "below");
+  if (isTrendBarrier) {
+    return {
+      start: [164, 92, 24],
+      border: [134, 72, 16],
+      text: "#5a4211",
+      lightTextUntil: 0.42,
+    };
+  }
+
+  const isTrendSupport = (isBullish && direction === "below") || (isBearish && direction === "above");
+  if (isTrendSupport) {
+    return {
+      start: [7, 87, 71],
+      border: [5, 70, 57],
+      text: "#184d36",
+      lightTextUntil: 0.42,
+    };
+  }
+
+  return {
+    start: [66, 90, 112],
+    border: [54, 73, 91],
+    text: "#34404c",
+    lightTextUntil: 0.42,
   };
 }
 
