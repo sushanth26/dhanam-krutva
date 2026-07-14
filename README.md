@@ -108,6 +108,7 @@ Optional local/server persistence:
 WEBULL_TOKEN_DIR=.webull-token
 WATCHLIST_FILE=.watchlists.json
 ALERT_HISTORY_FILE=.mtf-alert-history.sqlite3
+LIVE_DATA_UNLOCK_FILE=.live-data-unlock.json
 WEBULL_GUARD_ENABLED=true
 WEBULL_GUARD_FILE=.webull-guard.json
 ```
@@ -119,9 +120,14 @@ VAPID_PUBLIC_KEY=...
 VAPID_PRIVATE_KEY=...
 VAPID_SUBJECT=mailto:you@example.com
 PUSH_SUBSCRIPTION_FILE=.web-push-subscriptions.json
+MTF_PUSH_ENABLED=false
 MTF_PUSH_POLL_SECONDS=300
 MTF_PUSH_TIMEZONE=America/Chicago
 ```
+
+`MTF_PUSH_ENABLED` defaults to `false`; leave it off to prevent background Webull live-data polling and phone push alerts. Manual app refresh buttons still work.
+
+Background live-data refreshes are also gated by the first successful manual price pull each trading day. If the first manual pull triggers Webull verification and does not complete, the app will not start automatic live-data polling. After a successful manual pull, automatic refreshes can run until post-market close.
 
 Generate VAPID keys with:
 
@@ -163,6 +169,7 @@ WEBULL_REGION=us
 WEBULL_TOKEN_DIR=/data/.webull-token
 WATCHLIST_FILE=/data/watchlists.json
 ALERT_HISTORY_FILE=/data/mtf-alert-history.sqlite3
+LIVE_DATA_UNLOCK_FILE=/data/live-data-unlock.json
 WEBULL_GUARD_ENABLED=true
 WEBULL_GUARD_FILE=/data/webull-guard.json
 APP_USERNAME=sushanth
@@ -176,6 +183,7 @@ VAPID_PUBLIC_KEY=...
 VAPID_PRIVATE_KEY=...
 VAPID_SUBJECT=mailto:you@example.com
 PUSH_SUBSCRIPTION_FILE=/data/push-subscriptions.json
+MTF_PUSH_ENABLED=false
 MTF_PUSH_POLL_SECONDS=60
 MTF_PUSH_TIMEZONE=America/Chicago
 ```

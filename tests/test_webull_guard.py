@@ -21,10 +21,12 @@ def settings(tmp_path: Path) -> Settings:
         watchlist_file=tmp_path / "watchlists.json",
         alert_strategy_file=tmp_path / "alert-strategies.json",
         alert_history_file=tmp_path / "mtf-alert-history.sqlite3",
+        live_data_unlock_file=tmp_path / "live-data-unlock.json",
         webull_guard_enabled=True,
         webull_guard_file=tmp_path / "webull-guard.json",
         webull_verify_cooldown_seconds=3600,
         webull_rate_limit_cooldown_seconds=300,
+        mtf_push_enabled=False,
         mtf_push_poll_seconds=300,
         mtf_push_timezone="America/Chicago",
     )

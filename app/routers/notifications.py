@@ -28,6 +28,7 @@ def notification_config():
     settings = get_settings()
     return {
         "web_push_configured": settings.push_configured,
+        "mtf_push_enabled": settings.mtf_push_enabled,
         "vapid_public_key": settings.vapid_public_key,
         "poll_seconds": settings.mtf_push_poll_seconds,
     }

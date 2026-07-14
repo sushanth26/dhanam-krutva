@@ -35,10 +35,12 @@ class Settings:
     watchlist_file: Path
     alert_strategy_file: Path
     alert_history_file: Path
+    live_data_unlock_file: Path
     webull_guard_enabled: bool
     webull_guard_file: Path
     webull_verify_cooldown_seconds: int
     webull_rate_limit_cooldown_seconds: int
+    mtf_push_enabled: bool
     mtf_push_poll_seconds: int
     mtf_push_timezone: str
 
@@ -81,10 +83,12 @@ def get_settings() -> Settings:
         watchlist_file=Path(os.getenv("WATCHLIST_FILE", "").strip() or default_watchlist_file()),
         alert_strategy_file=Path(os.getenv("ALERT_STRATEGY_FILE", "").strip() or default_alert_strategy_file()),
         alert_history_file=Path(os.getenv("ALERT_HISTORY_FILE", "").strip() or default_alert_history_file()),
+        live_data_unlock_file=Path(os.getenv("LIVE_DATA_UNLOCK_FILE", "").strip() or default_live_data_unlock_file()),
         webull_guard_enabled=env_bool("WEBULL_GUARD_ENABLED", True),
         webull_guard_file=Path(os.getenv("WEBULL_GUARD_FILE", "").strip() or default_webull_guard_file()),
         webull_verify_cooldown_seconds=max(300, int(os.getenv("WEBULL_VERIFY_COOLDOWN_SECONDS", "43200") or "43200")),
         webull_rate_limit_cooldown_seconds=max(60, int(os.getenv("WEBULL_RATE_LIMIT_COOLDOWN_SECONDS", "1800") or "1800")),
+        mtf_push_enabled=env_bool("MTF_PUSH_ENABLED", False),
         mtf_push_poll_seconds=max(30, int(os.getenv("MTF_PUSH_POLL_SECONDS", "300") or "300")),
         mtf_push_timezone=os.getenv("MTF_PUSH_TIMEZONE", "America/Chicago").strip() or "America/Chicago",
     )
@@ -118,6 +122,12 @@ def default_alert_history_file() -> str:
     if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
         return "/data/mtf-alert-history.sqlite3"
     return ".mtf-alert-history.sqlite3"
+
+
+def default_live_data_unlock_file() -> str:
+    if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
+        return "/data/live-data-unlock.json"
+    return ".live-data-unlock.json"
 
 
 def default_webull_guard_file() -> str:
