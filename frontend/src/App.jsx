@@ -4,7 +4,7 @@ import { AlertStrategies } from "./components/AlertStrategies";
 import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PreMarketScannerTable, PriceBucket } from "./components/PriceTables";
-import { getJson, postJson } from "./lib/api";
+import { deleteJson, getJson, postJson } from "./lib/api";
 import { ALERT_STRATEGIES, filterQuotesByStrategy, loadStrategyState, saveStrategyState, strategyIdForMatch } from "./lib/alertStrategies";
 import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, flattenAccounts, formatPrice, isMarketRefreshWindow, marginTradingAccountId, matchEntryPrice, notificationMatchText, mtfSignature, preferredAccountId } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
@@ -389,45 +389,91 @@ function formatDateTime(value) {
 function loadAlertLog() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(ALERT_LOG_KEY) || "[]");
-    return Array.isArray(saved) ? saved.filter((item) => item?.symbol && item?.alertedAt) : [];
+    return Array.isArray(saved) ? normalizeAlertHistoryItems(saved) : [];
   } catch {
     return [];
   }
 }
 
 function saveAlertLog(items) {
-  window.localStorage.setItem(ALERT_LOG_KEY, JSON.stringify(items.slice(0, MAX_ALERT_LOG)));
+  window.localStorage.setItem(ALERT_LOG_KEY, JSON.stringify(normalizeAlertHistoryItems(items).slice(0, MAX_ALERT_LOG)));
 }
 
-function alertLogEntries(tab, quotes, watchlists, riskSettings) {
-  const alertedAt = new Date().toISOString();
-  const watchlist = watchlists.find((item) => item.id === tab);
-  return quotes.flatMap((quote) => (
-    (quote.mtf_matches || []).map((match) => {
-      const outcomePlan = alertOutcomePlan(match, quote.price, riskSettings);
-      return {
-        id: `${alertedAt}-${tab}-${quote.symbol}-${match.label}`,
-        alertedAt,
-        candleTime: match.candle_time || "",
-        symbol: quote.symbol,
-        watchlistId: tab,
-        watchlistName: watchlist?.name || tab,
-        action: match.trade_action || "",
-        label: match.label || "",
-        reason: displayMtfLabel(match),
-        entryPrice: matchEntryPrice(match),
-        status: match.status || "confirmed",
-        price: quote.price ?? null,
-        lastPrice: quote.price ?? null,
-        riskPlan: match.risk_plan || null,
-        stopPrice: outcomePlan?.stop ?? null,
-        targetPrice: outcomePlan?.target ?? null,
-        outcome: "",
-        outcomeAt: "",
-        trend: match.trend || "",
-      };
-    })
-  ));
+function normalizeAlertHistoryItems(items) {
+  const byId = new Map();
+  for (const item of items || []) {
+    const normalized = normalizeAlertHistoryItem(item);
+    if (normalized && isNotificationHistoryItem(normalized)) byId.set(normalized.id, normalized);
+  }
+  return [...byId.values()]
+    .sort((left, right) => alertHistoryTimestamp(right) - alertHistoryTimestamp(left))
+    .slice(0, MAX_ALERT_LOG);
+}
+
+function normalizeAlertHistoryItem(item) {
+  if (!item || typeof item !== "object") return null;
+  const createdAt = item.createdAt || item.created_at || item.alertedAt || new Date().toISOString();
+  const symbol = String(item.symbol || "").trim().toUpperCase();
+  const title = String(item.title || item.reason || item.label || "Alert triggered");
+  const body = String(item.body || item.message || item.reason || "");
+  return {
+    ...item,
+    id: String(item.id || `${createdAt}:${symbol}:${title}`),
+    createdAt,
+    alertedAt: item.alertedAt || createdAt,
+    kind: item.kind || "alert",
+    title,
+    body,
+    symbol,
+    reason: String(item.reason || body || title),
+    action: item.action || "",
+    watchlistName: item.watchlistName || item.watchlist_name || item.watchlistId || "",
+    status: item.status || "triggered",
+  };
+}
+
+function alertHistoryTimestamp(item) {
+  const parsed = new Date(item.alertedAt || item.createdAt || 0).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function alertHistoryDedupeKey(item) {
+  return item.id || `${item.symbol}:${item.title}:${item.body}:${item.alertedAt}`;
+}
+
+function alertHistoryNotification(item) {
+  return {
+    id: `history-${item.id}`,
+    title: item.title || item.reason || "Alert triggered",
+    message: item.body || item.reason || item.label || "",
+    kind: item.kind || "history",
+    read: true,
+    createdAt: item.alertedAt || item.createdAt,
+  };
+}
+
+function isNotificationHistoryItem(item) {
+  const kind = String(item.kind || "").toLowerCase();
+  if (["notification", "push"].includes(kind)) return true;
+  if (["server-push", "app-notification", "service-worker"].includes(String(item.source || ""))) return true;
+  return Boolean(item.title || item.body) && !item.action && !item.outcome && item.targetPrice == null && item.stopPrice == null;
+}
+
+function notificationHistoryEntry({ title, message, kind = "notification", symbol = "", source = "app-notification", payload = null }) {
+  const createdAt = new Date().toISOString();
+  const normalizedSymbol = String(symbol || payload?.targetSymbol || payload?.target_symbol || "").trim().toUpperCase();
+  return {
+    id: `${createdAt}:${source}:${normalizedSymbol}:${title}`,
+    createdAt,
+    alertedAt: createdAt,
+    kind: kind === "push" ? "push" : "notification",
+    source,
+    title,
+    body: message || "",
+    symbol: normalizedSymbol,
+    reason: message || title,
+    payload,
+  };
 }
 
 function autoTradeKey(tab, symbol, match) {
@@ -521,8 +567,16 @@ function preMarketScannerRowsFromWatchlists(watchlists, quotesByTab) {
     }
   }
   return [...rowsBySymbol.values()].sort((left, right) => (
-    right.distancePct - left.distancePct || left.action.localeCompare(right.action) || left.symbol.localeCompare(right.symbol)
+    scannerTrendRank(left.trend) - scannerTrendRank(right.trend)
+    || right.distancePct - left.distancePct
+    || left.symbol.localeCompare(right.symbol)
   ));
+}
+
+function scannerTrendRank(trend) {
+  if (trend === "Bullish") return 0;
+  if (trend === "Bearish") return 1;
+  return 2;
 }
 
 function scannerRefreshStats(updatedTextByTab, watchlists) {
@@ -588,6 +642,7 @@ export default function App() {
   const riskSettingsRef = useRef(riskSettings);
   const autoTradeRef = useRef(autoTrade);
   const autoTradeExecutionsRef = useRef(new Set(loadAutoTradeExecutions()));
+  const alertLogRef = useRef(alertLog);
   const selectedAccountIdRef = useRef(selectedAccountId);
   const accountsRef = useRef(accounts);
   const watchlistTabRef = useRef(watchlistTab);
@@ -600,7 +655,6 @@ export default function App() {
   const updatedText = updatedTextByTab[contextWatchlist?.id] || "";
   const pageLoading = loading.shell || loading.watchlists || loading.prices || loading.notifications || loading.trades;
   const tradingAccountId = useMemo(() => marginTradingAccountId(accounts, selectedAccountId), [accounts, selectedAccountId]);
-  const autoTradeOrderCount = autoTradeOrders.counts?.open ?? autoTradeOrders.buckets?.open?.length ?? 0;
 
   const trendBuckets = useMemo(() => {
     return quotes.reduce(
@@ -643,6 +697,15 @@ export default function App() {
     [autoTrade.strategies],
   );
   const unreadNotificationCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
+  const bellNotifications = useMemo(() => {
+    const localItems = notifications.slice(0, MAX_NOTIFICATIONS);
+    const historyItems = alertLog.slice(0, MAX_NOTIFICATIONS).map(alertHistoryNotification);
+    const seen = new Set(localItems.map((item) => item.id));
+    return [
+      ...localItems,
+      ...historyItems.filter((item) => !seen.has(item.id)),
+    ].slice(0, MAX_NOTIFICATIONS);
+  }, [alertLog, notifications]);
 
   async function refreshShell() {
     setLoadingKey("shell", true);
@@ -691,6 +754,28 @@ export default function App() {
       return null;
     } finally {
       if (showLoading) setLoadingKey("watchlists", false);
+    }
+  }
+
+  async function loadAlertHistory({ showLoading = false } = {}) {
+    if (showLoading) setLoadingKey("notifications", true);
+    try {
+      const payload = await getJson("/api/notifications/history?limit=500");
+      const serverItems = normalizeAlertHistoryItems(payload.items || []);
+      const localItems = normalizeAlertHistoryItems(alertLogRef.current);
+      const merged = normalizeAlertHistoryItems([...serverItems, ...localItems]);
+      alertLogRef.current = merged;
+      setAlertLog(merged);
+      saveAlertLog(merged);
+      const serverIds = new Set(serverItems.map((item) => item.id));
+      const localOnly = merged.filter((item) => !serverIds.has(item.id));
+      if (localOnly.length) {
+        postJson("/api/notifications/history", { items: localOnly }).catch(() => {});
+      }
+    } catch (error) {
+      setLiveAlert(error.message);
+    } finally {
+      if (showLoading) setLoadingKey("notifications", false);
     }
   }
 
@@ -778,7 +863,6 @@ export default function App() {
     setRetainedMtfQuotesByTab({});
     clearRetainedMtfQuotes();
     setQuotesForTab(watchlist.id, nextQuotes);
-    updateAlertOutcomes(nextQuotes);
     setUpdatedTextForTab(watchlist.id, `Updated ${updatedAt} from ${payload.source || "webull"}`);
     notifyMtfUpdate(watchlist.id, currentMtfs);
 
@@ -816,8 +900,16 @@ export default function App() {
       }));
     }
 
-    appendAlertLog(alertLogEntries(tab, nextMtfs, watchlistsRef.current, riskSettingsRef.current));
     const notification = mtfNotificationDetails(nextMtfs);
+    appendAlertLog([
+      notificationHistoryEntry({
+        title: notification.title,
+        message: notification.body,
+        kind: "notification",
+        symbol: notification.targetSymbol,
+        payload: notification,
+      }),
+    ]);
     addNotification({
       title: notification.title,
       message: notification.body,
@@ -830,49 +922,23 @@ export default function App() {
   function appendAlertLog(entries) {
     if (!entries.length) return;
     setAlertLog((current) => {
-      const seen = new Set(current.map((item) => `${item.symbol}:${item.label || item.reason}:${item.candleTime}:${item.watchlistId}`));
-      const freshEntries = entries.filter((item) => !seen.has(`${item.symbol}:${item.label || item.reason}:${item.candleTime}:${item.watchlistId}`));
+      const normalizedEntries = normalizeAlertHistoryItems(entries);
+      const seen = new Set(current.map(alertHistoryDedupeKey));
+      const freshEntries = normalizedEntries.filter((item) => !seen.has(alertHistoryDedupeKey(item)));
       if (!freshEntries.length) return current;
-      const next = [...freshEntries, ...current].slice(0, MAX_ALERT_LOG);
+      const next = normalizeAlertHistoryItems([...freshEntries, ...current]);
+      alertLogRef.current = next;
       saveAlertLog(next);
+      postJson("/api/notifications/history", { items: freshEntries }).catch(() => {});
       return next;
     });
   }
 
   function clearAlertLog() {
+    alertLogRef.current = [];
     setAlertLog([]);
     saveAlertLog([]);
-  }
-
-  function updateAlertOutcomes(nextQuotes) {
-    const prices = Object.fromEntries(nextQuotes.map((quote) => [quote.symbol, Number(quote.price)]));
-    setAlertLog((current) => {
-      let changed = false;
-      const next = current.map((item) => {
-        if (item.outcome || !["Long", "Short"].includes(item.action)) return item;
-        const price = prices[item.symbol];
-        const stop = Number(item.stopPrice ?? item.riskPlan?.stop);
-        const target = Number(item.targetPrice);
-        if (!Number.isFinite(price) || !Number.isFinite(stop) || !Number.isFinite(target)) return item;
-        const hitTarget = item.action === "Long" ? price >= target : price <= target;
-        const hitStop = item.action === "Long" ? price <= stop : price >= stop;
-        if (!hitTarget && !hitStop) {
-          if (item.lastPrice === price) return item;
-          changed = true;
-          return { ...item, lastPrice: price };
-        }
-        changed = true;
-        return {
-          ...item,
-          outcome: hitTarget ? "Target" : "SL",
-          outcomeAt: new Date().toISOString(),
-          outcomePrice: price > 0 ? price : (hitTarget ? target : stop),
-          lastPrice: price,
-        };
-      });
-      if (changed) saveAlertLog(next);
-      return changed ? next : current;
-    });
+    deleteJson("/api/notifications/history").catch((error) => setLiveAlert(error.message));
   }
 
   function navigatePage(page) {
@@ -1245,6 +1311,7 @@ export default function App() {
   useEffect(() => {
     refreshShell();
     refreshAppMarketData();
+    loadAlertHistory();
     passiveMarketTimer.current = setInterval(() => {
       if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false });
     }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
@@ -1266,8 +1333,24 @@ export default function App() {
       if (event.data?.type !== "MTF_PUSH_UPDATE") return;
       const targetSymbol = event.data.payload?.targetSymbol;
       if (targetSymbol) focusMtfSymbol(targetSymbol);
+      addNotification({
+        title: event.data.payload?.title || "Push alert received",
+        message: event.data.payload?.body || "MTF push update received.",
+        kind: "push",
+      });
+      appendAlertLog([
+        notificationHistoryEntry({
+          title: event.data.payload?.title || "Push alert received",
+          message: event.data.payload?.body || "MTF push update received.",
+          kind: "push",
+          symbol: targetSymbol,
+          source: "service-worker",
+          payload: event.data.payload || null,
+        }),
+      ]);
       navigatePage("mtfs");
       refreshAppMarketData({ showLoading: false });
+      loadAlertHistory({ showLoading: false });
     }
 
     navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
@@ -1294,6 +1377,10 @@ export default function App() {
     const canBadge = notificationState.appEnabled && notificationState.permission === "granted";
     setAppBadgeCount(canBadge ? unreadNotificationCount : 0).catch(() => {});
   }, [notificationState.appEnabled, notificationState.permission, unreadNotificationCount]);
+
+  useEffect(() => {
+    alertLogRef.current = alertLog;
+  }, [alertLog]);
 
   useEffect(() => {
     strategyStateRef.current = strategyState;
@@ -1342,20 +1429,16 @@ export default function App() {
         status={status}
         accounts={accounts}
         selectedAccountId={selectedAccountId}
-        loading={loading}
         pageLoading={pageLoading}
-        onRefresh={refreshShell}
         onSelectAccount={(accountId) => setSelectedAccountId(preferredAccountId(accounts, accountId))}
         notificationState={notificationState}
         onEnableNotifications={enableAppNotifications}
         onDisableNotifications={disableAppNotifications}
-        notifications={notifications}
+        notifications={bellNotifications}
         onMarkNotificationsRead={markNotificationsRead}
         activePage={activePage}
-        alertLogCount={alertLog.length}
-        autoTradeOrderCount={autoTradeOrderCount}
-        mtfCount={longMtfs.length + shortMtfs.length}
         onNavigate={navigatePage}
+        alertLogCount={alertLog.length}
         settingsBadge={autoTrade.enabled ? "Auto" : enabledStrategyCount}
         settingsControls={(
           <SettingsMenu
@@ -1421,7 +1504,7 @@ export default function App() {
                 </div>
                 <div className="live-price-actions">
                   <button type="button" onClick={() => refreshAllPrices()} disabled={loading.prices}>
-                    {loading.prices ? "Refreshing" : "Refresh All"}
+                    {loading.prices ? "Updating" : "Update Market Data"}
                   </button>
                 </div>
               </div>
@@ -1444,7 +1527,6 @@ export default function App() {
                 onAddSymbols={addSymbolsToActiveWatchlist}
                 onAddTab={addWatchlist}
                 onDeleteTab={deleteWatchlist}
-                onRefreshAll={refreshAllPrices}
                 loading={loading.watchlists || loading.prices}
                 onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
                 onSwitchTab={switchWatchlistTab}
@@ -1463,11 +1545,6 @@ export default function App() {
                   <p className="eyebrow">Intraday context</p>
                   <h2>{contextWatchlist?.name || "Watchlist"}</h2>
                   <p className="muted">10m EMA cloud state for the selected list. Use this after the premarket shortlist is narrowed.</p>
-                </div>
-                <div className="live-price-actions">
-                  <button type="button" onClick={() => loadLivePrices({ manual: true })} disabled={loading.prices || !contextWatchlist}>
-                    Refresh List
-                  </button>
                 </div>
               </div>
               <div className="active-watchlist-tables">
@@ -1756,44 +1833,23 @@ function orderTimeText(item) {
 
 function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
   const [query, setQuery] = useState("");
-  const [outcomeFilter, setOutcomeFilter] = useState("all");
-  const [tableView, setTableView] = useState("long");
   const searched = useMemo(() => {
     const needle = query.trim().toUpperCase();
     if (!needle) return alertLog;
     return alertLog.filter((item) => (
-      item.symbol.includes(needle)
-      || item.reason.toUpperCase().includes(needle)
-      || item.action.toUpperCase().includes(needle)
-      || item.watchlistName.toUpperCase().includes(needle)
-      || String(item.outcome || "").toUpperCase().includes(needle)
+      String(item.symbol || "").toUpperCase().includes(needle)
+      || String(item.reason || item.title || "").toUpperCase().includes(needle)
+      || String(item.body || "").toUpperCase().includes(needle)
+      || String(item.kind || "").toUpperCase().includes(needle)
     ));
   }, [alertLog, query]);
-  const outcomeCounts = useMemo(() => ({
-    all: searched.length,
-    open: searched.filter((item) => !item.outcome).length,
-    target: searched.filter((item) => item.outcome === "Target").length,
-    sl: searched.filter((item) => item.outcome === "SL").length,
-  }), [searched]);
-  const filtered = useMemo(() => {
-    if (outcomeFilter === "open") return searched.filter((item) => !item.outcome);
-    if (outcomeFilter === "target") return searched.filter((item) => item.outcome === "Target");
-    if (outcomeFilter === "sl") return searched.filter((item) => item.outcome === "SL");
-    return searched;
-  }, [outcomeFilter, searched]);
-  const longAlerts = useMemo(() => filtered.filter((item) => item.action === "Long"), [filtered]);
-  const shortAlerts = useMemo(() => filtered.filter((item) => item.action === "Short"), [filtered]);
-  const tableViews = [
-    { id: "long", label: "Long", count: longAlerts.length },
-    { id: "short", label: "Short", count: shortAlerts.length },
-  ];
 
   return (
     <section className="alert-log-page">
       <div className="alert-log-header">
         <div>
-          <h2>Alert Log</h2>
-          <p className="muted">Search past MTF alerts by stock, setup, action, or list.</p>
+          <h2>Alerts</h2>
+          <p className="muted">Synced history of notifications that actually fired.</p>
         </div>
         <button type="button" className="secondary-button" onClick={onClear} disabled={!alertLog.length}>Clear</button>
       </div>
@@ -1805,127 +1861,59 @@ function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
           placeholder="Search ticker or setup"
           aria-label="Search alert log"
         />
-        <strong>{filtered.length}</strong>
-      </div>
-      <div className="alert-log-tabs" role="tablist" aria-label="Alert outcome filter">
-        <button
-          type="button"
-          className={outcomeFilter === "all" ? "active" : ""}
-          onClick={() => setOutcomeFilter("all")}
-          role="tab"
-          aria-selected={outcomeFilter === "all"}
-        >
-          All <span>{outcomeCounts.all}</span>
-        </button>
-        <button
-          type="button"
-          className={outcomeFilter === "open" ? "active open" : "open"}
-          onClick={() => setOutcomeFilter("open")}
-          role="tab"
-          aria-selected={outcomeFilter === "open"}
-        >
-          Open <span>{outcomeCounts.open}</span>
-        </button>
-        <button
-          type="button"
-          className={outcomeFilter === "target" ? "active target" : "target"}
-          onClick={() => setOutcomeFilter("target")}
-          role="tab"
-          aria-selected={outcomeFilter === "target"}
-        >
-          Target <span>{outcomeCounts.target}</span>
-        </button>
-        <button
-          type="button"
-          className={outcomeFilter === "sl" ? "active sl" : "sl"}
-          onClick={() => setOutcomeFilter("sl")}
-          role="tab"
-          aria-selected={outcomeFilter === "sl"}
-        >
-          SL <span>{outcomeCounts.sl}</span>
-        </button>
-      </div>
-      <div className="table-view-tabs" role="tablist" aria-label="Alert table view">
-        {tableViews.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={tableView === item.id ? "active" : ""}
-            onClick={() => setTableView(item.id)}
-            role="tab"
-            aria-selected={tableView === item.id}
-          >
-            {item.label} <span>{item.count}</span>
-          </button>
-        ))}
+        <strong>{searched.length}</strong>
       </div>
       <AlertLogTable
-        title={tableView === "short" ? "Short" : "Long"}
-        items={tableView === "short" ? shortAlerts : longAlerts}
+        items={searched}
         onSelectSymbol={onSelectSymbol}
       />
     </section>
   );
 }
 
-function AlertLogTable({ title, items, onSelectSymbol }) {
+function AlertLogTable({ items, onSelectSymbol }) {
   return (
-    <section className={`alert-log-table-card ${title.toLowerCase()}`}>
+    <section className="alert-log-table-card history">
       <div className="alert-log-table-heading">
-        <h3>{title}</h3>
+        <h3>Notification History</h3>
         <span>{items.length}</span>
-        <em>R:R 1:1</em>
+        <em>Synced</em>
       </div>
       <div className="alert-log-table-wrap">
         <table className="alert-log-table">
           <thead>
             <tr>
               <th>Symbol</th>
-              <th>Entry</th>
-              <th>Exit</th>
-              <th>Alert</th>
-              <th>Timestamp</th>
+              <th>Type</th>
+              <th>Notification</th>
+              <th>Time</th>
             </tr>
           </thead>
           <tbody>
             {items.length ? items.map((item) => (
-              <tr key={item.id} className={alertOutcomeRowClass(item)}>
+              <tr key={item.id}>
                 <td data-label="Symbol">
-                  <button type="button" onClick={() => onSelectSymbol(item.symbol)}>{item.symbol}</button>
+                  {item.symbol ? (
+                    <button type="button" onClick={() => onSelectSymbol(item.symbol)}>{item.symbol}</button>
+                  ) : "-"}
                 </td>
-                <td data-label="Entry">{item.entryPrice != null ? formatPrice(item.entryPrice) : "-"}</td>
-                <td data-label="Exit">
-                  <div className="alert-log-exit">
-                    {item.outcome ? (
-                      <>
-                        <span>{alertExitPrice(item)}</span>
-                        <em className={`outcome-tag ${String(item.outcome).toLowerCase()}`}>{item.outcome}</em>
-                      </>
-                    ) : (
-                      <>
-                        <span>{alertLastPrice(item)}</span>
-                        {item.targetPrice != null ? <small>Target {formatPrice(item.targetPrice)}</small> : null}
-                        {item.stopPrice != null ? <small>SL {formatPrice(item.stopPrice)}</small> : null}
-                      </>
-                    )}
-                  </div>
-                </td>
-                <td data-label="Alert">
+                <td data-label="Type">{item.kind || "notification"}</td>
+                <td data-label="Notification">
                   <div className="alert-log-alert">
-                    <strong>{item.reason}</strong>
-                    <span>{item.watchlistName}</span>
+                    <strong>{item.title || item.reason || "-"}</strong>
+                    <span>{item.body || item.reason || "-"}</span>
                   </div>
                 </td>
-                <td data-label="Timestamp">
+                <td data-label="Time">
                   <div className="alert-log-time">
-                    <time dateTime={item.alertedAt}>{formatDateTime(item.alertedAt)}</time>
-                    {item.outcomeAt ? <small>Hit {formatDateTime(item.outcomeAt)}</small> : null}
+                    <time dateTime={item.alertedAt || item.createdAt}>{formatDateTime(item.alertedAt || item.createdAt)}</time>
+                    {item.source ? <small>{item.source}</small> : null}
                   </div>
                 </td>
               </tr>
             )) : (
               <tr>
-                <td colSpan="5" className="alert-log-empty-cell">No {title.toLowerCase()} alerts found</td>
+                <td colSpan="4" className="alert-log-empty-cell">No notifications saved yet</td>
               </tr>
             )}
           </tbody>
@@ -1933,23 +1921,6 @@ function AlertLogTable({ title, items, onSelectSymbol }) {
       </div>
     </section>
   );
-}
-
-function alertExitPrice(item) {
-  const fallback = item.outcome === "Target" ? item.targetPrice : item.stopPrice;
-  const outcomePrice = Number(item.outcomePrice);
-  const exitPrice = Number.isFinite(outcomePrice) && outcomePrice > 0 ? outcomePrice : fallback;
-  return exitPrice != null ? formatPrice(exitPrice) : "-";
-}
-
-function alertLastPrice(item) {
-  const lastPrice = item.lastPrice ?? item.price;
-  return lastPrice != null ? `Last ${formatPrice(lastPrice)}` : "-";
-}
-
-function alertOutcomeRowClass(item) {
-  const outcome = String(item.outcome || "").toLowerCase();
-  return outcome === "target" || outcome === "sl" ? `hit-${outcome}` : "";
 }
 
 function RiskSettingsPanel({ disabled, riskSettings, onApply, onChange }) {
@@ -2115,7 +2086,6 @@ function WatchlistTabs({
   onAddSymbols,
   onAddTab,
   onDeleteTab,
-  onRefreshAll,
   loading,
   onSwitchTab,
   onSymbolInput,
@@ -2172,14 +2142,6 @@ function WatchlistTabs({
           title="Add watchlist tab"
         >
           +
-        </button>
-        <button
-          type="button"
-          className="watchlist-refresh-all"
-          onClick={onRefreshAll}
-          disabled={loading}
-        >
-          Refresh All
         </button>
       </div>
       {scannerSelected ? null : (

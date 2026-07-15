@@ -6,9 +6,7 @@ export function Header({
   status,
   accounts,
   selectedAccountId,
-  loading,
   pageLoading,
-  onRefresh,
   onSelectAccount,
   notificationState,
   onEnableNotifications,
@@ -16,10 +14,8 @@ export function Header({
   notifications,
   onMarkNotificationsRead,
   activePage,
-  alertLogCount,
-  autoTradeOrderCount,
-  mtfCount,
   onNavigate,
+  alertLogCount,
   settingsBadge,
   settingsControls,
 }) {
@@ -89,33 +85,11 @@ export function Header({
             className={`account-menu-button secondary-button ${activePage === "alerts" ? "active" : ""}`}
             disabled={pageLoading}
             onClick={() => onNavigate("alerts")}
-            aria-label="Open alert log"
-            title="Alert Log"
+            aria-label="Open alerts history"
+            title="Alerts"
           >
             <span>Alerts</span>
-            <b>{alertLogCount}</b>
-          </button>
-          <button
-            type="button"
-            className={`account-menu-button secondary-button ${activePage === "mtfs" ? "active" : ""}`}
-            disabled={pageLoading}
-            onClick={() => onNavigate("mtfs")}
-            aria-label="Open MTFs"
-            title="MTFs"
-          >
-            <span>MTFs</span>
-            <b>{mtfCount}</b>
-          </button>
-          <button
-            type="button"
-            className={`account-menu-button secondary-button ${activePage === "trades" ? "active" : ""}`}
-            disabled={pageLoading}
-            onClick={() => onNavigate("trades")}
-            aria-label="Open auto trades"
-            title="Auto Trades"
-          >
-            <span>Trades</span>
-            <b>{autoTradeOrderCount}</b>
+            <b>{alertLogCount || 0}</b>
           </button>
           <div className="settings-menu-anchor" ref={settingsAnchorRef}>
             <button
@@ -197,9 +171,6 @@ export function Header({
               />
             ) : null}
           </div>
-          <button type="button" className="icon-button" onClick={onRefresh} disabled={pageLoading} aria-label="Refresh" title="Refresh">
-            <span aria-hidden="true">{loading?.shell ? "…" : "↻"}</span>
-          </button>
         </div>
       </section>
     </header>

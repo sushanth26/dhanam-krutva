@@ -12,6 +12,7 @@
 body {
   margin: 0;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 button {
@@ -951,13 +952,6 @@ select {
   min-height: 36px;
   min-width: 38px;
   padding: 0;
-}
-
-.watchlist-refresh-all {
-  background: #12664f;
-  color: #ffffff;
-  min-height: 36px;
-  padding: 0 12px;
 }
 
 .daily-list-editor {
@@ -3206,6 +3200,11 @@ button:disabled {
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(0, 1fr) 340px;
+  min-width: 0;
+}
+
+.market-command-center > * {
+  min-width: 0;
 }
 
 .premarket-focus-panel,
@@ -3224,6 +3223,8 @@ button:disabled {
 .premarket-focus-panel {
   display: grid;
   gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
   padding: 16px;
 }
 
@@ -3238,6 +3239,7 @@ button:disabled {
   display: grid;
   gap: 14px;
   grid-column: 1 / -1;
+  overflow: hidden;
   padding: 16px;
 }
 
@@ -3362,8 +3364,7 @@ button:disabled {
   padding: 0;
 }
 
-.watchlist-add-tab,
-.watchlist-refresh-all {
+.watchlist-add-tab {
   width: 100%;
 }
 
@@ -3564,6 +3565,173 @@ select {
 
   .trend-price-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Single-refresh mobile cleanup */
+.top-actions {
+  align-items: center;
+}
+
+@media (max-width: 760px) {
+  .app-header {
+    position: sticky;
+    top: 0;
+    z-index: 120;
+  }
+
+  .topbar {
+    gap: 10px;
+  }
+
+  .top-actions {
+    display: grid;
+    gap: 6px;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) 40px;
+  }
+
+  .top-actions button {
+    min-height: 36px;
+    padding: 0 8px;
+  }
+
+  .top-actions .account-menu-button {
+    justify-content: center;
+  }
+
+  .top-actions .account-menu-button span {
+    font-size: 11px;
+  }
+
+  .market-command-center {
+    gap: 10px;
+  }
+
+  .premarket-focus-panel,
+  .watchlist-control-rail,
+  .intraday-context-panel {
+    padding: 12px;
+  }
+
+  .watchlist-control-rail {
+    order: 2;
+  }
+
+  .intraday-context-panel {
+    order: 3;
+  }
+
+  .watchlist-tabs {
+    display: grid;
+    gap: 6px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .watchlist-tab {
+    width: 100%;
+  }
+
+  .watchlist-tab > button:first-child {
+    min-width: 0;
+  }
+
+  .watchlist-add-tab {
+    min-height: 36px;
+  }
+
+  .scanner-hero {
+    gap: 10px;
+  }
+
+  .scanner-hero h2 {
+    font-size: 22px;
+  }
+
+  .scanner-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .scanner-metric.risk {
+    grid-column: span 2;
+  }
+
+  .premarket-scanner-table {
+    min-width: 0;
+  }
+
+  .premarket-scanner-table thead {
+    display: none;
+  }
+
+  .premarket-scanner-table,
+  .premarket-scanner-table tbody,
+  .premarket-scanner-table tr,
+  .premarket-scanner-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .premarket-scanner-table tbody {
+    display: grid;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .premarket-scanner-table tr {
+    background: #0b121a;
+    border: 1px solid #1f2a37;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .premarket-scanner-table td {
+    align-items: center;
+    border-bottom: 1px solid #1f2a37;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 92px minmax(0, 1fr);
+    padding: 8px 10px;
+    text-align: left;
+  }
+
+  .premarket-scanner-table th:first-child,
+  .premarket-scanner-table td:first-child {
+    width: auto;
+  }
+
+  .premarket-scanner-table td::before {
+    color: #8b9aad;
+    content: attr(data-label);
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .premarket-scanner-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .premarket-scanner-table .price-cell,
+  .premarket-scanner-table th:nth-child(n + 2),
+  .premarket-scanner-table td:nth-child(n + 2),
+  .premarket-scanner-table th:last-child,
+  .premarket-scanner-table td:last-child {
+    text-align: left;
+  }
+
+  .premarket-scanner-table .scanner-empty-row td {
+    display: block;
+    line-height: 1.45;
+    width: 100%;
+  }
+
+  .premarket-scanner-table .scanner-empty-row td::before {
+    display: none;
+  }
+
+  .live-price-table-wrap {
+    overflow-x: auto;
   }
 }
 
@@ -3777,5 +3945,37 @@ select {
   .auto-trade-table td:before,
   .alert-log-table td::before {
     color: #8b9aad;
+  }
+}
+
+/* Final scanner layout guardrails */
+@media (max-width: 1180px) {
+  .market-command-center {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .premarket-focus-panel,
+  .watchlist-control-rail,
+  .intraday-context-panel,
+  .price-bucket,
+  .live-price-table-wrap {
+    max-width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .premarket-scanner-table {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .scanner-hero > *,
+  .scanner-metric,
+  .scanner-metric > *,
+  .live-price-actions,
+  .live-price-actions button {
+    max-width: 100%;
+    min-width: 0;
   }
 }

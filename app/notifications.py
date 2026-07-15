@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -57,6 +57,50 @@ class PushSubscriptionStore:
         self.path.write_text(json.dumps(subscriptions, indent=2), encoding="utf-8")
 
 
+class AlertHistoryStore:
+    def __init__(self, path: Path, max_items: int = 1000):
+        self.path = path
+        self.max_items = max_items
+
+    def all(self, limit: int | None = None) -> list[dict[str, Any]]:
+        items = self._read()
+        if limit is None:
+            return items
+        return items[: max(0, limit)]
+
+    def append(self, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        normalized_entries = [normalize_alert_history_entry(entry) for entry in entries if isinstance(entry, dict)]
+        if not normalized_entries:
+            return self.all()
+
+        current = self._read()
+        seen = {str(item.get("id") or "") for item in normalized_entries}
+        merged = normalized_entries + [item for item in current if str(item.get("id") or "") not in seen]
+        merged = sorted(merged, key=alert_history_sort_key, reverse=True)[: self.max_items]
+        self._write(merged)
+        return merged
+
+    def clear(self) -> None:
+        self._write([])
+
+    def _read(self) -> list[dict[str, Any]]:
+        if not self.path.exists():
+            return []
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return []
+        if isinstance(data, dict):
+            data = data.get("items", [])
+        if not isinstance(data, list):
+            return []
+        return [normalize_alert_history_entry(item) for item in data if isinstance(item, dict)]
+
+    def _write(self, items: list[dict[str, Any]]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(items, indent=2), encoding="utf-8")
+
+
 class MtfPushMonitor:
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -97,6 +141,7 @@ class MtfPushMonitor:
             return None
 
         notification = mtf_notification_payload(quotes)
+        AlertHistoryStore(self.settings.alert_history_file).append(alert_history_entries_from_push(notification))
         self.send(notification)
         return notification
 
@@ -298,6 +343,61 @@ def format_price(value: Any) -> str:
         return f"{float(value):.2f}"
     except (TypeError, ValueError):
         return str(value)
+
+
+def alert_history_entries_from_push(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    created_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    title = str(payload.get("title") or "Push notification")
+    body = str(payload.get("body") or "")
+    matches = payload.get("matches", [])
+    target_symbol = str(payload.get("targetSymbol") or payload.get("target_symbol") or "").upper()
+    if not target_symbol and matches:
+        target_symbol = str(matches[0].get("symbol") or "").upper()
+    return [
+        {
+            "id": f"{created_at}:push:{payload.get('tag') or title}",
+            "createdAt": created_at,
+            "alertedAt": created_at,
+            "kind": "push",
+            "source": "server-push",
+            "title": title,
+            "body": body,
+            "symbol": target_symbol,
+            "reason": body or title,
+            "payload": payload,
+            "status": "triggered",
+        }
+    ]
+
+
+def normalize_alert_history_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    created_at = str(
+        entry.get("createdAt")
+        or entry.get("created_at")
+        or entry.get("alertedAt")
+        or datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    )
+    title = str(entry.get("title") or entry.get("reason") or entry.get("label") or "Alert triggered")
+    body = str(entry.get("body") or entry.get("message") or entry.get("reason") or "")
+    symbol = str(entry.get("symbol") or "").upper()
+    normalized = {
+        **entry,
+        "id": str(entry.get("id") or f"{created_at}:{symbol}:{title}"),
+        "createdAt": created_at,
+        "alertedAt": str(entry.get("alertedAt") or created_at),
+        "kind": str(entry.get("kind") or "alert"),
+        "title": title,
+        "body": body,
+        "symbol": symbol,
+        "reason": str(entry.get("reason") or body or title),
+        "status": str(entry.get("status") or "triggered"),
+    }
+    normalized.pop("created_at", None)
+    return normalized
+
+
+def alert_history_sort_key(item: dict[str, Any]) -> str:
+    return str(item.get("alertedAt") or item.get("createdAt") or "")
 
 
 def mtf_signature(quotes: list[dict[str, Any]]) -> str:
