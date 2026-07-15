@@ -608,7 +608,6 @@ export default function App() {
   const updatedText = updatedTextByTab[contextWatchlist?.id] || "";
   const pageLoading = loading.shell || loading.watchlists || loading.prices || loading.notifications || loading.trades;
   const tradingAccountId = useMemo(() => marginTradingAccountId(accounts, selectedAccountId), [accounts, selectedAccountId]);
-  const autoTradeOrderCount = autoTradeOrders.counts?.open ?? autoTradeOrders.buckets?.open?.length ?? 0;
 
   const trendBuckets = useMemo(() => {
     return quotes.reduce(
@@ -1360,9 +1359,6 @@ export default function App() {
         notifications={notifications}
         onMarkNotificationsRead={markNotificationsRead}
         activePage={activePage}
-        alertLogCount={alertLog.length}
-        autoTradeOrderCount={autoTradeOrderCount}
-        mtfCount={longMtfs.length + shortMtfs.length}
         onNavigate={navigatePage}
         settingsBadge={autoTrade.enabled ? "Auto" : enabledStrategyCount}
         settingsControls={(
