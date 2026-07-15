@@ -1406,18 +1406,28 @@ function MtfPage({
 }) {
   const [tableView, setTableView] = useState("long");
   const tableViews = [
-    { id: "long", label: "Long", count: longMtfs.length },
-    { id: "short", label: "Short", count: shortMtfs.length },
+    { id: "long", label: "Long signals", direction: "Long", count: longMtfs.length },
+    { id: "short", label: "Short signals", direction: "Short", count: shortMtfs.length },
   ];
   const selectedQuotes = tableView === "short" ? shortMtfs : longMtfs;
   const selectedView = tableViews.find((item) => item.id === tableView) || tableViews[0];
   const totalCount = longMtfs.length + shortMtfs.length;
 
+  useEffect(() => {
+    if (!focusedSymbol) return;
+    const symbol = focusedSymbol.toUpperCase();
+    if (shortMtfs.some((quote) => quote.symbol === symbol)) {
+      setTableView("short");
+    } else if (longMtfs.some((quote) => quote.symbol === symbol)) {
+      setTableView("long");
+    }
+  }, [focusedSymbol, longMtfs, shortMtfs]);
+
   return (
     <section className="mtf-page global-mtf-panel">
       <div className="mtf-page-header">
         <div>
-          <h2>MTFs</h2>
+          <h2>MTF Signals</h2>
           <p className="muted">Long and short signals from every watchlist.</p>
         </div>
         <strong>{totalCount}</strong>
@@ -1440,6 +1450,7 @@ function MtfPage({
       <MtfSignalGroup
         buyState={buyState}
         focusedSymbol={focusedSymbol}
+        direction={selectedView.direction}
         label={selectedView.label}
         onBuy={onBuy}
         onDismissNew={onDismissNew}
@@ -1451,6 +1462,7 @@ function MtfPage({
 
 function MtfSignalGroup({
   buyState,
+  direction,
   focusedSymbol,
   label,
   onBuy,
@@ -1471,13 +1483,13 @@ function MtfSignalGroup({
             key={section.id}
             quotes={section.quotes}
             title={section.name}
+            subtitle={`${direction} setup`}
             showWatchlist
             buyState={buyState}
             emptyText="None"
             focusedSymbol={focusedSymbol}
             onBuy={onBuy}
             onDismissNew={onDismissNew}
-            showSignalTags={false}
           />
         )) : (
           <div className="mtf-empty-state">No {label.toLowerCase()} MTFs right now.</div>
