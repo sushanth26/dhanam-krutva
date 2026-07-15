@@ -96,63 +96,61 @@ export function cloudStatus(emaSet, fastKeys, slowKeys) {
   return "Chop";
 }
 
-const EASTERN_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  weekday: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-
-const WEEKDAY_INDEX = {
-  Sun: 0,
-  Mon: 1,
-  Tue: 2,
-  Wed: 3,
-  Thu: 4,
-  Fri: 5,
-  Sat: 6,
-};
-
-function easternMarketTime(date = new Date()) {
-  const parts = Object.fromEntries(EASTERN_TIME_FORMATTER.formatToParts(date).map((part) => [part.type, part.value]));
-  const weekday = WEEKDAY_INDEX[parts.weekday];
-  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-  return {
-    day: parts.day,
-    minutes,
-    month: parts.month,
-    weekday,
-    year: parts.year,
-  };
+export function mtfTagClass(label) {
+  const normalized = String(label || "").toLowerCase();
+  if (normalized.includes("10m bounce") || normalized.includes("10m rejection")) return "touch";
+  if (normalized.includes("hourly")) return "hourly";
+  if (normalized.includes("daily 20/21")) return "daily-fast";
+  if (normalized.includes("daily 50/55")) return "daily-slow";
+  return "default";
 }
 
-function isEasternWeekday(parts) {
-  return parts.weekday > 0 && parts.weekday < 6;
+export function displayMtfLabel(match) {
+  const label = String(match?.display_label || match?.label || "");
+  if (match?.trade_action === "Short" && label.includes("bounce")) {
+    return label.replace("bounce", "rejection");
+  }
+  return label;
+}
+
+export function matchEntryPrice(match) {
+  return match?.entry_price ?? match?.risk_plan?.entry ?? null;
+}
+
+export function notificationMatchText(match) {
+  const label = displayMtfLabel(match);
+  const entry = matchEntryPrice(match);
+  return entry == null ? label : `${label} @ ${formatPrice(entry)}`;
+}
+
+export function confirmedMtfQuotes(quotes) {
+  return quotes
+    .map((quote) => ({
+      ...quote,
+      mtf_matches: (quote.mtf_matches || []).filter((match) => (match.status || "confirmed") === "confirmed"),
+    }))
+    .filter((quote) => quote.mtf_matches.length);
+}
+
+export function describeMtfMatches(quotes) {
+  return quotes
+    .map((quote) => {
+      const labels = (quote.mtf_matches || []).map((match) => notificationMatchText(match)).join(" + ");
+      return labels ? `${quote.symbol} ${labels}` : quote.symbol;
+    })
+    .join(" • ");
+}
+
+export function mtfSignature(quotes) {
+  return quotes
+    .map((quote) => `${quote.symbol}:${(quote.mtf_matches || []).map((match) => match.label).join("|")}`)
+    .sort()
+    .join(",");
 }
 
 export function isMarketRefreshWindow(date = new Date()) {
-  const parts = easternMarketTime(date);
-  if (!isEasternWeekday(parts)) return false;
-  return parts.minutes >= 3 * 60 && parts.minutes < 19 * 60;
-}
-
-export function shouldUseManualRefresh(date = new Date()) {
-  const parts = easternMarketTime(date);
-  if (!isEasternWeekday(parts)) return true;
-  return parts.minutes < 9 * 60 || parts.minutes >= 16 * 60;
-}
-
-export function isRegularMarketHours(date = new Date()) {
-  const parts = easternMarketTime(date);
-  if (!isEasternWeekday(parts)) return false;
-  return parts.minutes >= 9 * 60 && parts.minutes < 16 * 60;
-}
-
-export function marketDateKey(date = new Date()) {
-  const parts = easternMarketTime(date);
-  return `${parts.year}-${parts.month}-${parts.day}`;
+  const day = date.getDay();
+  if (day === 0 || day === 6) return false;
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  return minutes >= 3 * 60 && minutes < 15 * 60;
 }

@@ -19,12 +19,3 @@ export async function postJson(path, payload) {
   }
   return body;
 }
-
-export async function deleteJson(path) {
-  const response = await fetch(path, { method: "DELETE" });
-  const body = await response.json();
-  if (!response.ok) {
-    throw new Error(body.detail || `Request failed: ${response.status}`);
-  }
-  return body;
-}

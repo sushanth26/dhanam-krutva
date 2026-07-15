@@ -73,6 +73,39 @@ class WebullService:
     def order_detail(self, account_id: str, client_order_id: str) -> dict[str, Any]:
         return self._call(lambda: self._trade_client().order_v3.get_order_detail(account_id, client_order_id))
 
+    def auto_trade_orders(self, account_id: str, page_size: int = 50, days: int = 1) -> dict[str, Any]:
+        trade_date = date.today()
+        history = self.order_history(account_id, page_size=page_size, days=days)
+        if not history.get("ok"):
+            return {**history, "orders": [], "buckets": self._empty_order_buckets(), "counts": self._empty_order_counts()}
+        time.sleep(1.1)
+        open_orders = self.open_orders(account_id, page_size=page_size)
+        if not open_orders.get("ok"):
+            return {**open_orders, "orders": [], "buckets": self._empty_order_buckets(), "counts": self._empty_order_counts()}
+        history_orders = self._normalized_order_records(history.get("data"), source="history")
+        open_order_records = self._normalized_order_records(open_orders.get("data"), source="open")
+        history_trade_date = self._history_trade_date(history_orders, trade_date)
+        selected_history_orders = [order for order in history_orders if self._is_order_on_date(order, history_trade_date)]
+        selected_open_orders = [order for order in open_order_records if self._is_order_on_date(order, trade_date)]
+        orders = self._dedupe_orders([*selected_open_orders, *selected_history_orders])
+        buckets = {
+            "buy": [order for order in orders if order.get("side") == "BUY"],
+            "sell": [order for order in orders if order.get("side") == "SELL"],
+            "open": [order for order in orders if self._is_open_order_status(order.get("status"))],
+            "filled": [order for order in orders if self._is_filled_order_status(order.get("status"))],
+        }
+        return {
+            "ok": bool(history.get("ok") or open_orders.get("ok")),
+            "account_id": account_id,
+            "trade_date": trade_date.isoformat(),
+            "history_trade_date": history_trade_date.isoformat() if history_trade_date else None,
+            "orders": orders,
+            "buckets": buckets,
+            "counts": {key: len(value) for key, value in buckets.items()},
+            "history": history,
+            "open_orders": open_orders,
+        }
+
     def history_bars(
         self,
         symbol: str,
@@ -503,79 +536,35 @@ class WebullService:
         if guard_response:
             return guard_response
 
-        result = self._call_once(fn)
-        if result.get("ok") or not self._retryable_connection_error(result):
-            return self._guarded_result(result)
-
-        self._reset_clients()
-        result = self._call_once(fn)
-        return self._guarded_result(result)
-
-    def _call_once(self, fn: Callable[[], Any]) -> dict[str, Any]:
         try:
             with self._suppress_sdk_output():
                 response = fn()
             body = self._response_body(response)
-            return {
+            return self._guarded_result({
                 "ok": 200 <= response.status_code < 300,
                 "status_code": response.status_code,
                 "request_id": response.headers.get("x-request-id"),
                 "data": body,
-            }
+            })
         except ServerException as exc:
-            return {
+            return self._guarded_result({
                 "ok": False,
                 "status_code": exc.get_http_status(),
                 "request_id": exc.get_request_id(),
                 "error_code": exc.get_error_code(),
                 "error": exc.get_error_msg() or str(exc),
-            }
+            })
         except ClientException as exc:
-            return {
+            return self._guarded_result({
                 "ok": False,
                 "status_code": None,
                 "request_id": None,
                 "error_code": exc.get_error_code(),
                 "error": exc.get_error_msg() or str(exc),
-            }
-        except Exception as exc:
-            return {
-                "ok": False,
-                "status_code": None,
-                "request_id": None,
-                "error_code": "WEBULL_CLIENT_ERROR",
-                "error": str(exc),
-            }
-
-    def _reset_clients(self) -> None:
-        self._client = None
-        self._data_client = None
-
-    @staticmethod
-    def _retryable_connection_error(result: dict[str, Any]) -> bool:
-        if result.get("status_code") in {401, 403, 408, 502, 503, 504}:
-            return True
-        error_code = str(result.get("error_code") or "").upper()
-        if error_code in {"VERIFY_FAILURE_EXCEED_LIMIT", "TOO_MANY_REQUESTS", "WEBULL_GUARD_ACTIVE"}:
-            return False
-        text = f"{error_code} {result.get('error') or ''}".lower()
-        return any(
-            phrase in text
-            for phrase in (
-                "disconnect",
-                "connection",
-                "connection aborted",
-                "connection reset",
-                "remote end closed",
-                "timed out",
-                "timeout",
-                "temporarily unavailable",
-            )
-        )
+            })
 
     def _guarded_result(self, result: dict[str, Any]) -> dict[str, Any]:
         if result.get("ok"):
-            self._clear_guard()
             return result
         settings = self._guard_settings()
         if not settings:
@@ -660,15 +649,6 @@ class WebullService:
         except OSError:
             logging.getLogger(__name__).exception("Failed to write Webull guard file")
 
-    def _clear_guard(self) -> None:
-        settings = self._guard_settings()
-        if not settings:
-            return
-        try:
-            settings.webull_guard_file.unlink(missing_ok=True)
-        except OSError:
-            logging.getLogger(__name__).exception("Failed to clear Webull guard file")
-
     def _guard_settings(self) -> Settings | None:
         settings = getattr(self, "settings", None)
         if not settings or not hasattr(settings, "webull_guard_file"):
@@ -676,6 +656,14 @@ class WebullService:
         if not getattr(settings, "webull_guard_enabled", True):
             return None
         return settings
+
+    @staticmethod
+    def _empty_order_buckets() -> dict[str, list[Any]]:
+        return {"buy": [], "sell": [], "open": [], "filled": []}
+
+    @staticmethod
+    def _empty_order_counts() -> dict[str, int]:
+        return {"buy": 0, "sell": 0, "open": 0, "filled": 0}
 
     @staticmethod
     @contextlib.contextmanager
@@ -1113,6 +1101,66 @@ class WebullService:
             return False
         order_type = str(order.get("order_type") or "")
         return order.get("stop_price") is not None or order_type in {"STOP LOSS", "STOP LOSS LIMIT", "STOP_LOSS", "STOP_LOSS_LIMIT"}
+
+    @classmethod
+    def _is_order_on_date(cls, order: dict[str, Any], target_date: date) -> bool:
+        dates = [
+            cls._parse_order_date(order.get("created_at")),
+            cls._parse_order_date(order.get("updated_at")),
+        ]
+        return any(parsed == target_date for parsed in dates if parsed is not None)
+
+    @classmethod
+    def _history_trade_date(cls, orders: list[dict[str, Any]], preferred_date: date) -> date:
+        order_dates = [
+            parsed
+            for order in orders
+            for parsed in (cls._parse_order_date(order.get("created_at")), cls._parse_order_date(order.get("updated_at")))
+            if parsed is not None
+        ]
+        if preferred_date in order_dates:
+            return preferred_date
+        return max(order_dates, default=preferred_date)
+
+    @staticmethod
+    def _parse_order_date(value: Any) -> date | None:
+        if value in (None, ""):
+            return None
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, (int, float)):
+            timestamp = float(value)
+            if timestamp > 10_000_000_000:
+                timestamp /= 1000
+            try:
+                return datetime.fromtimestamp(timestamp).date()
+            except (OSError, OverflowError, ValueError):
+                return None
+
+        text = str(value).strip()
+        if not text:
+            return None
+        if text.replace(".", "", 1).isdigit():
+            try:
+                timestamp = float(text)
+                if timestamp > 10_000_000_000:
+                    timestamp /= 1000
+                return datetime.fromtimestamp(timestamp).date()
+            except (OSError, OverflowError, ValueError):
+                return None
+        normalized = text.replace("Z", "+00:00")
+        try:
+            return datetime.fromisoformat(normalized).date()
+        except ValueError:
+            pass
+        for pattern in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y"):
+            try:
+                return datetime.strptime(text, pattern).date()
+            except ValueError:
+                continue
+        return None
 
     @staticmethod
     def _is_filled_order_status(status: str | None) -> bool:

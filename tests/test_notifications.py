@@ -2,18 +2,14 @@ from types import SimpleNamespace
 
 import app.notifications as notifications
 from app.notifications import (
-    MtfPushMonitor,
     PushSubscriptionStore,
-    apply_enabled_strategies,
     build_monitored_quotes,
     confirmed_mtf_quotes,
     describe_mtf_matches,
+    filter_payload_by_strategies,
     monitored_symbols,
     mtf_notification_payload,
     mtf_signature,
-    save_push_alert_history,
-    scanner_entry_quotes,
-    setup_alert_quotes,
 )
 from app.watchlists import WatchlistStore
 
@@ -30,76 +26,6 @@ def test_push_subscription_store_upserts_and_removes_by_endpoint(tmp_path):
     assert store.all() == []
 
 
-def test_mtf_push_monitor_does_not_start_when_disabled(tmp_path):
-    settings = SimpleNamespace(
-        push_configured=True,
-        mtf_push_enabled=False,
-        push_subscription_file=tmp_path / "subscriptions.json",
-    )
-    monitor = MtfPushMonitor(settings)
-
-    monitor.start()
-
-    assert monitor.task is None
-
-
-def test_mtf_push_monitor_polling_does_not_require_manual_live_data_unlock(tmp_path, monkeypatch):
-    settings = SimpleNamespace(
-        push_configured=True,
-        mtf_push_enabled=True,
-        push_subscription_file=tmp_path / "subscriptions.json",
-        mtf_push_timezone="America/Chicago",
-    )
-    monitor = MtfPushMonitor(settings)
-    monitor.store.upsert({"endpoint": "https://push.example/1", "keys": {"p256dh": "a", "auth": "b"}})
-    monkeypatch.setattr(notifications, "is_market_refresh_window", lambda _timezone: True)
-
-    assert monitor.should_poll() is True
-
-
-def test_apply_enabled_strategies_drops_matches_for_disabled_strategy_and_empties_quote():
-    quotes = [
-        {
-            "symbol": "MU",
-            "mtf_matches": [
-                {"type": "mtf_cloud_price_touch", "label": "Hourly 34/50"},
-                {"type": "long_mtf_5_12_touch", "label": "Curl"},
-            ],
-        },
-        {"symbol": "BE", "mtf_matches": [{"type": "mtf_cloud_price_touch", "label": "Daily 20/21"}]},
-    ]
-
-    filtered = apply_enabled_strategies(quotes, {"mtfCloudTouch": False, "curls": True})
-
-    assert [quote["symbol"] for quote in filtered] == ["MU"]
-    assert [match["type"] for match in filtered[0]["mtf_matches"]] == ["long_mtf_5_12_touch"]
-
-
-def test_save_push_alert_history_persists_background_alerts(tmp_path):
-    settings = SimpleNamespace(alert_history_file=tmp_path / "alerts.sqlite3")
-    quotes = [
-        {
-            "symbol": "MU",
-            "price": 92.5,
-            "mtf_matches": [
-                {
-                    "type": "mtf_cloud_price_touch",
-                    "display_label": "Hourly 34/50 Touch",
-                    "candle_time": "2026-07-13T14:10:00",
-                    "cloud_label": "Hourly 34/50",
-                }
-            ],
-        }
-    ]
-
-    alerts = save_push_alert_history(settings, quotes)
-
-    assert len(alerts) == 1
-    assert alerts[0]["symbol"] == "MU"
-    assert alerts[0]["watchlist"]["id"] == "push-monitor"
-    assert alerts[0]["match"]["type"] == "mtf_cloud_price_touch"
-
-
 def test_mtf_notification_payload_lists_symbols_and_clouds():
     quotes = [
         {"symbol": "BE", "mtf_matches": [{"label": "Hourly 34/50"}]},
@@ -108,7 +34,7 @@ def test_mtf_notification_payload_lists_symbols_and_clouds():
 
     payload = mtf_notification_payload(quotes)
 
-    assert payload["title"] == "2 Setup alerts: BE, LLY"
+    assert payload["title"] == "2 MTF alerts: BE, LLY"
     assert payload["body"] == "BE Hourly 34/50 • LLY Daily 20/21"
     assert payload["badgeCount"] == 2
     assert payload["badge_count"] == 2
@@ -137,7 +63,7 @@ def test_mtf_notification_payload_uses_rejection_wording_and_entry_price():
     payload = mtf_notification_payload(quotes)
 
     assert payload["title"] == "AAOI: 10m rejection 34/50 @ 104.00"
-    assert payload["body"] == "Tap to open this setup row."
+    assert payload["body"] == "Tap to open this MTF row."
     assert payload["matches"][0]["labels"] == ["10m bounce 34/50"]
     assert payload["matches"][0]["details"] == [
         {
@@ -170,228 +96,6 @@ def test_confirmed_mtf_quotes_removes_waiting_matches():
         {"label": "Daily 20/21", "status": "waiting", "type": "mtf_cloud_inside"},
         {"label": "Daily 50/55", "status": "confirmed"},
     ]
-
-
-def test_scanner_entry_quotes_keep_only_entry_reads():
-    quotes = [
-        {
-            "symbol": "BE",
-            "price": 12.5,
-            "scanner_read": {
-                "kind": "entry",
-                "reason": "in 5/12",
-                "source_match_type": "long_mtf_5_12_touch",
-                "entry_price": 12.5,
-                "candle_time": "2026-07-13T15:10:00",
-            },
-            "mtf_matches": [
-                {
-                    "type": "long_mtf_5_12_touch",
-                    "trade_action": "Long",
-                    "label": "Curl",
-                    "display_label": "Curl: Hourly 34/50 -> above 10m 5/12",
-                    "entry_price": 12.5,
-                }
-            ],
-        },
-        {
-            "symbol": "AAOI",
-            "scanner_read": {"kind": "wait", "reason": "pullback 5/12"},
-            "mtf_matches": [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "label": "Curl"}],
-        },
-    ]
-
-    entries = scanner_entry_quotes(quotes)
-
-    assert [quote["symbol"] for quote in entries] == ["BE"]
-    assert entries[0]["mtf_matches"][0]["type"] == "scanner_entry"
-    assert entries[0]["mtf_matches"][0]["display_label"] == "Entry: in 5/12"
-
-
-def test_setup_alert_quotes_keep_all_confirmed_registered_direct_alerts():
-    quotes = [
-        {
-            "symbol": "CURL",
-            "mtf_matches": [
-                {
-                    "type": "long_mtf_5_12_touch",
-                    "status": "confirmed",
-                    "trade_action": "Long",
-                    "label": "Curl",
-                    "display_label": "Curl: Daily 50/55 -> above 10m 5/12",
-                }
-            ],
-        },
-        {
-            "symbol": "BE",
-            "mtf_matches": [
-                {
-                    "type": "mtf_cloud_price_touch",
-                    "status": "confirmed",
-                    "trade_action": "Long",
-                    "label": "Hourly 34/50",
-                }
-            ],
-        },
-        {
-            "symbol": "AAOI",
-            "mtf_matches": [
-                {
-                    "type": "10m_34_50_bounce",
-                    "status": "confirmed",
-                    "trade_action": "Short",
-                    "label": "10m 34/50 Bounce",
-                    "display_label": "Good 34/50 Rejection",
-                    "setup_quality": "good",
-                }
-            ],
-        },
-        {
-            "symbol": "MU",
-            "mtf_matches": [
-                {
-                    "type": "10m_34_50_bounce",
-                    "status": "confirmed",
-                    "trade_action": "Long",
-                    "label": "10m 34/50 Bounce",
-                    "display_label": "Bad 34/50 Bounce",
-                    "setup_quality": "bad",
-                }
-            ],
-        },
-    ]
-
-    alerts = setup_alert_quotes(quotes)
-
-    assert [quote["symbol"] for quote in alerts] == ["CURL", "BE", "AAOI", "MU"]
-    assert [match["type"] for quote in alerts for match in quote["mtf_matches"]] == [
-        "long_mtf_5_12_touch",
-        "mtf_cloud_price_touch",
-        "10m_34_50_bounce",
-        "10m_34_50_bounce",
-    ]
-    assert alerts[0]["mtf_matches"][0]["trade_action"] == "Long"
-    assert alerts[2]["mtf_matches"][0]["trade_action"] == "Short"
-    assert alerts[3]["mtf_matches"][0]["setup_quality"] == "bad"
-
-
-def test_setup_alert_quotes_dedupes_scanner_entry_source_match():
-    quotes = [
-        {
-            "symbol": "BE",
-            "price": 12.5,
-            "scanner_read": {
-                "kind": "entry",
-                "reason": "in 5/12",
-                "source_match_type": "10m_34_50_bounce",
-                "entry_price": 12.5,
-                "candle_time": "2026-07-13T15:10:00",
-            },
-            "mtf_matches": [
-                {
-                    "type": "10m_34_50_bounce",
-                    "status": "confirmed",
-                    "trade_action": "Long",
-                    "label": "10m 34/50 Bounce",
-                    "display_label": "Good 34/50 Bounce",
-                    "setup_quality": "good",
-                    "entry_price": 12.5,
-                    "candle_time": "2026-07-13T15:10:00",
-                }
-            ],
-        },
-    ]
-
-    alerts = setup_alert_quotes(quotes)
-
-    assert len(alerts) == 1
-    assert [match["type"] for match in alerts[0]["mtf_matches"]] == ["scanner_entry"]
-
-
-def test_setup_alert_quotes_respects_scanner_entry_toggle_independently():
-    quotes = [
-        {
-            "symbol": "BE",
-            "price": 12.5,
-            "scanner_read": {
-                "kind": "entry",
-                "reason": "in 5/12",
-                "source_match_type": "10m_34_50_bounce",
-                "entry_price": 12.5,
-                "candle_time": "2026-07-13T15:10:00",
-            },
-            "mtf_matches": [
-                {
-                    "type": "10m_34_50_bounce",
-                    "status": "confirmed",
-                    "trade_action": "Long",
-                    "label": "10m 34/50 Bounce",
-                    "display_label": "Good 34/50 Bounce",
-                    "setup_quality": "good",
-                    "entry_price": 12.5,
-                    "candle_time": "2026-07-13T15:10:00",
-                }
-            ],
-        },
-    ]
-
-    entry_off = setup_alert_quotes(
-        quotes,
-        {"scannerEntry": False, "tenMinute3450Bounce": True, "curls": True, "mtfCloudTouch": True},
-    )
-    setup_off = setup_alert_quotes(
-        quotes,
-        {"scannerEntry": True, "tenMinute3450Bounce": False, "curls": True, "mtfCloudTouch": True},
-    )
-
-    assert [match["type"] for match in entry_off[0]["mtf_matches"]] == ["10m_34_50_bounce"]
-    assert [match["type"] for match in setup_off[0]["mtf_matches"]] == ["scanner_entry"]
-
-
-def test_setup_alert_quotes_prioritizes_playable_trade_when_enabled():
-    quotes = [
-        {
-            "symbol": "BE",
-            "price": 12.5,
-            "scanner_read": {
-                "kind": "entry",
-                "reason": "in 5/12",
-                "source_match_type": "10m_34_50_bounce",
-                "entry_price": 12.5,
-            },
-            "mtf_matches": [
-                {
-                    "type": "10m_34_50_bounce",
-                    "status": "confirmed",
-                    "trade_action": "Long",
-                    "label": "10m 34/50 Bounce",
-                    "display_label": "Good 34/50 Bounce",
-                    "setup_quality": "good",
-                    "entry_price": 12.5,
-                },
-                {
-                    "type": "playable_trade",
-                    "status": "confirmed",
-                    "trade_action": "Long",
-                    "label": "Playable Trade",
-                    "display_label": "Playable: Long 2.50R",
-                    "entry_price": 12.5,
-                },
-            ],
-        },
-    ]
-
-    alerts = setup_alert_quotes(
-        quotes,
-        {"playableTrades": True, "scannerEntry": True, "tenMinute3450Bounce": True, "curls": True, "mtfCloudTouch": True},
-    )
-    playable_off = setup_alert_quotes(
-        quotes,
-        {"playableTrades": False, "scannerEntry": True, "tenMinute3450Bounce": True, "curls": True, "mtfCloudTouch": True},
-    )
-
-    assert [match["type"] for match in alerts[0]["mtf_matches"]] == ["playable_trade", "10m_34_50_bounce"]
-    assert [match["type"] for match in playable_off[0]["mtf_matches"]] == ["scanner_entry"]
 
 
 def test_monitored_symbols_use_saved_watchlists_not_static_og(tmp_path):
@@ -428,44 +132,112 @@ def test_build_monitored_quotes_omits_deleted_symbols(tmp_path, monkeypatch):
     assert [quote["symbol"] for quote in quotes] == ["BE", "PLTR"]
 
 
-def test_build_monitored_quotes_raises_when_webull_refresh_fails(tmp_path, monkeypatch):
-    watchlist_file = tmp_path / "watchlists.json"
-    WatchlistStore(watchlist_file).replace([{"id": "og", "symbols": ["BE"]}])
-    settings = SimpleNamespace(watchlist_file=watchlist_file)
+def test_filter_payload_by_strategies_removes_disabled_alerts():
+    payload = {
+        "title": "MTFs changed",
+        "body": "old body",
+        "matches": [
+            {"symbol": "BE", "labels": ["Hourly 34/50", "10m bounce Hourly 34/50"]},
+            {"symbol": "LLY", "labels": ["Daily 50/55"]},
+        ],
+    }
 
-    monkeypatch.setattr(notifications, "service", lambda: object())
-    monkeypatch.setattr(
-        notifications,
-        "build_live_prices",
-        lambda _webull, _symbols: {
-            "ok": False,
-            "quotes": [],
-            "errors": [{"source": "snapshot", "error": {"error": "Connection disconnected"}}],
-        },
+    filtered = filter_payload_by_strategies(
+        payload,
+        {"hourly-cloud": False, "daily-slow-cloud": True, "ten-minute-bounce-hourly": True},
     )
 
-    try:
-        build_monitored_quotes(settings)
-    except RuntimeError as exc:
-        assert "Connection disconnected" in str(exc)
-    else:
-        raise AssertionError("expected Webull refresh failure")
+    assert filtered["title"] == "2 MTF alerts: BE, LLY"
+    assert filtered["body"] == "BE 10m bounce Hourly 34/50 • LLY Daily 50/55"
+    assert filtered["badgeCount"] == 2
+    assert filtered["targetSymbol"] == "BE"
+    assert filtered["url"] == "/?mtf=BE"
+    assert filtered["matches"][0]["labels"] == ["10m bounce Hourly 34/50"]
 
 
-def test_monitor_error_push_is_sent_once_until_recovered(tmp_path):
-    settings = SimpleNamespace(
-        push_configured=True,
-        mtf_push_enabled=True,
-        push_subscription_file=tmp_path / "subscriptions.json",
+def test_filter_payload_by_strategies_migrates_old_10m_touch_setting():
+    payload = {
+        "matches": [
+            {"symbol": "BE", "labels": ["10m bounce 34/50"]},
+        ],
+    }
+
+    assert filter_payload_by_strategies(payload, {"ten-minute-touch": False}) is None
+
+
+def test_filter_payload_by_strategies_can_disable_10m_hourly_bounces_only():
+    payload = {
+        "matches": [
+            {
+                "symbol": "BE",
+                "labels": [
+                    "10m bounce 34/50",
+                    "10m bounce Hourly 34/50",
+                    "10m bounce Daily 20/21",
+                    "10m bounce Daily 50/55",
+                ],
+            },
+        ],
+    }
+
+    filtered = filter_payload_by_strategies(payload, {"ten-minute-bounce-hourly": False})
+
+    assert filtered["matches"][0]["labels"] == [
+        "10m bounce 34/50",
+        "10m bounce Daily 20/21",
+        "10m bounce Daily 50/55",
+    ]
+
+
+def test_filter_payload_by_strategies_can_disable_9ema_touch_only():
+    payload = {
+        "matches": [
+            {"symbol": "BE", "labels": ["10m bounce 34/50", "10m 9 EMA touch"]},
+        ],
+    }
+
+    filtered = filter_payload_by_strategies(payload, {"ten-minute-9ema-touch": False})
+
+    assert filtered["matches"][0]["labels"] == ["10m bounce 34/50"]
+
+
+def test_filter_payload_by_strategies_can_disable_daily_bounces_only():
+    payload = {
+        "matches": [
+            {
+                "symbol": "BE",
+                "labels": [
+                    "10m bounce 34/50",
+                    "10m bounce Hourly 34/50",
+                    "10m bounce Daily 20/21",
+                    "10m bounce Daily 50/55",
+                ],
+            },
+        ],
+    }
+
+    filtered = filter_payload_by_strategies(
+        payload,
+        {"ten-minute-bounce-daily-fast": False, "ten-minute-bounce-daily-slow": False},
     )
-    monitor = MtfPushMonitor(settings)
-    sent = []
-    monitor.send = lambda payload: sent.append(payload) or {"sent": 1, "removed": 0}
 
-    monitor.notify_monitor_error()
-    monitor.notify_monitor_error()
-    monitor.last_error_signature = None
-    monitor.notify_monitor_error()
+    assert filtered["matches"][0]["labels"] == [
+        "10m bounce 34/50",
+        "10m bounce Hourly 34/50",
+    ]
 
-    assert [payload["tag"] for payload in sent] == ["webull-alerts-paused", "webull-alerts-paused"]
-    assert sent[0]["title"] == "Webull alerts paused"
+
+def test_filter_payload_by_strategies_skips_push_when_all_alerts_disabled():
+    payload = {
+        "matches": [
+            {"symbol": "BE", "labels": ["Hourly 34/50"]},
+        ],
+    }
+
+    assert filter_payload_by_strategies(payload, {"hourly-cloud": False}) is None
+
+
+def test_filter_payload_by_strategies_keeps_generic_test_payloads():
+    payload = {"title": "MTF notification test", "body": "Testing"}
+
+    assert filter_payload_by_strategies(payload, {"hourly-cloud": False}) == payload

@@ -15,8 +15,10 @@ export function Header({
   onDisableNotifications,
   notifications,
   onMarkNotificationsRead,
-  onTestPushNotifications,
   activePage,
+  alertLogCount,
+  autoTradeOrderCount,
+  mtfCount,
   onNavigate,
   settingsBadge,
   settingsControls,
@@ -84,6 +86,17 @@ export function Header({
           </button>
           <button
             type="button"
+            className={`account-menu-button secondary-button ${activePage === "alerts" ? "active" : ""}`}
+            disabled={pageLoading}
+            onClick={() => onNavigate("alerts")}
+            aria-label="Open alert log"
+            title="Alert Log"
+          >
+            <span>Alerts</span>
+            <b>{alertLogCount}</b>
+          </button>
+          <button
+            type="button"
             className={`account-menu-button secondary-button ${activePage === "mtfs" ? "active" : ""}`}
             disabled={pageLoading}
             onClick={() => onNavigate("mtfs")}
@@ -91,6 +104,18 @@ export function Header({
             title="MTFs"
           >
             <span>MTFs</span>
+            <b>{mtfCount}</b>
+          </button>
+          <button
+            type="button"
+            className={`account-menu-button secondary-button ${activePage === "trades" ? "active" : ""}`}
+            disabled={pageLoading}
+            onClick={() => onNavigate("trades")}
+            aria-label="Open auto trades"
+            title="Auto Trades"
+          >
+            <span>Trades</span>
+            <b>{autoTradeOrderCount}</b>
           </button>
           <div className="settings-menu-anchor" ref={settingsAnchorRef}>
             <button
@@ -163,13 +188,11 @@ export function Header({
             {notificationsOpen ? (
               <NotificationDrawer
                 notificationLabel={notificationLabel}
-                notificationState={notificationState}
                 notifications={notifications}
                 canEnableNotifications={notificationState.permission !== "denied"}
                 onDisableNotifications={onDisableNotifications}
                 onEnableNotifications={onEnableNotifications}
                 onMarkNotificationsRead={onMarkNotificationsRead}
-                onTestPushNotifications={onTestPushNotifications}
                 pushEnabled={pushEnabled}
               />
             ) : null}
@@ -245,15 +268,12 @@ function MetaLine({ badge, badgeKind = "test", label, value }) {
 function NotificationDrawer({
   canEnableNotifications,
   notificationLabel,
-  notificationState,
   notifications,
   onDisableNotifications,
   onEnableNotifications,
   onMarkNotificationsRead,
-  onTestPushNotifications,
   pushEnabled,
 }) {
-  const closedAppStatus = closedAppPushStatus(notificationState || {}, pushEnabled);
   return (
     <section className="notification-drawer" aria-label="Notifications">
       <div className="notification-drawer-header">
@@ -271,11 +291,6 @@ function NotificationDrawer({
           {pushEnabled ? "Turn off" : notificationLabel}
         </button>
       </div>
-      <ClosedAppPushPanel
-        canSendTest={pushEnabled && closedAppStatus.ready}
-        onTestPushNotifications={onTestPushNotifications}
-        status={closedAppStatus}
-      />
       <div className="notification-list">
         {notifications.length ? notifications.map((item) => (
           <article key={item.id} className={`notification-item ${item.read ? "read" : "unread"}`}>
@@ -295,79 +310,6 @@ function NotificationDrawer({
       </div>
     </section>
   );
-}
-
-function ClosedAppPushPanel({ canSendTest, onTestPushNotifications, status }) {
-  return (
-    <section className={`closed-push-panel ${status.ready ? "ready" : "blocked"}`} aria-label="Closed app push status">
-      <div>
-        <span>Closed-app push</span>
-        <strong>{status.label}</strong>
-      </div>
-      <p>{status.detail}</p>
-      <ul>
-        {status.items.map((item) => (
-          <li className={item.ok ? "ok" : "missing"} key={item.label}>
-            <b aria-hidden="true"></b>
-            <span>{item.label}</span>
-          </li>
-        ))}
-      </ul>
-      <button type="button" onClick={onTestPushNotifications} disabled={!canSendTest}>
-        Send test push
-      </button>
-    </section>
-  );
-}
-
-function closedAppPushStatus(state, pushEnabled) {
-  const items = [
-    { label: "VAPID keys", ok: state.webPushConfigured },
-    { label: "Background monitor", ok: state.mtfPushEnabled && state.monitorRunning },
-    { label: "This device subscribed", ok: state.subscribed || state.subscriptions > 0 },
-    { label: "Market window", ok: state.marketWindow },
-  ];
-  const ready = pushEnabled && items.slice(0, 3).every((item) => item.ok);
-  if (!state.webPushConfigured) {
-    return {
-      ready: false,
-      label: "Needs VAPID keys",
-      detail: "Browser alerts can work while the app is open, but closed-app phone push needs VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.",
-      items,
-    };
-  }
-  if (!state.mtfPushEnabled) {
-    return {
-      ready: false,
-      label: "Monitor off",
-      detail: "Set MTF_PUSH_ENABLED=true and restart the server so the backend can poll while the app is closed.",
-      items,
-    };
-  }
-  if (!state.monitorRunning) {
-    return {
-      ready: false,
-      label: "Restart needed",
-      detail: "The background monitor is not running. Restart FastAPI after changing push environment variables.",
-      items,
-    };
-  }
-  if (!pushEnabled || !state.subscribed) {
-    return {
-      ready: false,
-      label: "Subscribe this device",
-      detail: "Tap the notification enable button once on the device that should receive phone alerts.",
-      items,
-    };
-  }
-  return {
-    ready: true,
-    label: "Ready",
-    detail: state.marketWindow
-      ? `Backend polling is active about every ${state.pollSeconds || 300}s.`
-      : "Configured and subscribed. Polling resumes during the market refresh window.",
-    items,
-  };
 }
 
 function relativeTime(value) {
