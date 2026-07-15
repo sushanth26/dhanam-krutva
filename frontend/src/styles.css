@@ -1332,6 +1332,14 @@ select {
   padding: 2px 6px;
 }
 
+.mtf-view-tabs {
+  max-width: 420px;
+}
+
+.mtf-view-tabs button {
+  justify-content: center;
+}
+
 .auto-trade-buckets {
   display: grid;
   gap: 14px;

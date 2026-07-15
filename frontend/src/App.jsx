@@ -1387,7 +1387,6 @@ function MtfPage({
   onDismissNew,
   shortMtfs,
 }) {
-  const [showAllTables, setShowAllTables] = useState(() => window.matchMedia("(min-width: 900px)").matches);
   const [tableView, setTableView] = useState("long");
   const tableViews = [
     { id: "long", label: "Long", count: longMtfs.length },
@@ -1396,14 +1395,6 @@ function MtfPage({
   const selectedQuotes = tableView === "short" ? shortMtfs : longMtfs;
   const selectedView = tableViews.find((item) => item.id === tableView) || tableViews[0];
   const totalCount = longMtfs.length + shortMtfs.length;
-
-  useEffect(() => {
-    const query = window.matchMedia("(min-width: 900px)");
-    const updateLayout = () => setShowAllTables(query.matches);
-    updateLayout();
-    query.addEventListener("change", updateLayout);
-    return () => query.removeEventListener("change", updateLayout);
-  }, []);
 
   return (
     <section className="mtf-page global-mtf-panel">
@@ -1415,51 +1406,28 @@ function MtfPage({
         <strong>{totalCount}</strong>
       </div>
 
-      {showAllTables ? (
-        <div className="mtf-desktop-grid">
-          <MtfSignalGroup
-            buyState={buyState}
-            focusedSymbol={focusedSymbol}
-            label="Long"
-            onBuy={onBuy}
-            onDismissNew={onDismissNew}
-            quotes={longMtfs}
-          />
-          <MtfSignalGroup
-            buyState={buyState}
-            focusedSymbol={focusedSymbol}
-            label="Short"
-            onBuy={onBuy}
-            onDismissNew={onDismissNew}
-            quotes={shortMtfs}
-          />
-        </div>
-      ) : (
-        <>
-          <div className="table-view-tabs" role="tablist" aria-label="MTF table view">
-            {tableViews.map((view) => (
-              <button
-                key={view.id}
-                type="button"
-                className={tableView === view.id ? "active" : ""}
-                onClick={() => setTableView(view.id)}
-                role="tab"
-                aria-selected={tableView === view.id}
-              >
-                {view.label} <span>{view.count}</span>
-              </button>
-            ))}
-          </div>
-          <MtfSignalGroup
-            buyState={buyState}
-            focusedSymbol={focusedSymbol}
-            label={selectedView.label}
-            onBuy={onBuy}
-            onDismissNew={onDismissNew}
-            quotes={selectedQuotes}
-          />
-        </>
-      )}
+      <div className="table-view-tabs mtf-view-tabs" role="tablist" aria-label="MTF table view">
+        {tableViews.map((view) => (
+          <button
+            key={view.id}
+            type="button"
+            className={tableView === view.id ? "active" : ""}
+            onClick={() => setTableView(view.id)}
+            role="tab"
+            aria-selected={tableView === view.id}
+          >
+            {view.label} <span>{view.count}</span>
+          </button>
+        ))}
+      </div>
+      <MtfSignalGroup
+        buyState={buyState}
+        focusedSymbol={focusedSymbol}
+        label={selectedView.label}
+        onBuy={onBuy}
+        onDismissNew={onDismissNew}
+        quotes={selectedQuotes}
+      />
     </section>
   );
 }
