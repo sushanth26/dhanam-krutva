@@ -18,6 +18,7 @@ def settings(tmp_path: Path) -> Settings:
         vapid_private_key=None,
         vapid_subject="mailto:test@example.com",
         push_subscription_file=tmp_path / "push.json",
+        alert_history_file=tmp_path / "alerts.json",
         watchlist_file=tmp_path / "watchlists.json",
         webull_guard_enabled=True,
         webull_guard_file=tmp_path / "webull-guard.json",
