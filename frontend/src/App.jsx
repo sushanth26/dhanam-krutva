@@ -507,22 +507,33 @@ function preMarketScannerRowsFromWatchlists(watchlists, quotesByTab) {
       rowsBySymbol.set(quote.symbol, {
         symbol: quote.symbol,
         action,
+        price,
+        previousHigh,
+        previousLow,
         trigger: price > previousHigh ? "Above YH" : "Below YL",
+        distancePct: price > previousHigh
+          ? ((price - previousHigh) / previousHigh) * 100
+          : ((previousLow - price) / previousLow) * 100,
+        watchlistName: watchlist.name,
       });
     }
   }
   return [...rowsBySymbol.values()].sort((left, right) => (
-    left.action.localeCompare(right.action) || left.symbol.localeCompare(right.symbol)
+    right.distancePct - left.distancePct || left.action.localeCompare(right.action) || left.symbol.localeCompare(right.symbol)
   ));
 }
 
-function scannerUpdatedText(updatedTextByTab, watchlists) {
+function scannerRefreshStats(updatedTextByTab, watchlists) {
   const updatedLists = watchlists
     .map((watchlist) => updatedTextByTab[watchlist.id])
     .filter((text) => text?.startsWith("Updated "));
-  return updatedLists.length
-    ? `Scanner uses ${updatedLists.length}/${watchlists.length} refreshed watchlists`
-    : "Refresh all watchlists to scan premarket moves";
+  return {
+    refreshed: updatedLists.length,
+    total: watchlists.length,
+    text: updatedLists.length
+      ? `${updatedLists.length}/${watchlists.length} lists fresh`
+      : "Refresh all watchlists",
+  };
 }
 
 export default function App() {
@@ -555,7 +566,7 @@ export default function App() {
   const [strategyState, setStrategyState] = useState(loadStrategyState);
   const [riskSettings, setRiskSettings] = useState(loadRiskSettings);
   const [autoTrade, setAutoTrade] = useState(loadAutoTradeSettings);
-  const [watchlistTab, setWatchlistTab] = useState(OG_WATCHLIST_ID);
+  const [watchlistTab, setWatchlistTab] = useState(PRE_MARKET_SCANNER_TAB);
   const [symbolInputs, setSymbolInputs] = useState({});
   const [newMtfRows, setNewMtfRows] = useState({});
   const [focusedMtfSymbol, setFocusedMtfSymbol] = useState("");
@@ -582,8 +593,9 @@ export default function App() {
   const retainedMtfQuotesRef = useRef(retainedMtfQuotesByTab);
   const scannerSelected = watchlistTab === PRE_MARKET_SCANNER_TAB;
   const activeWatchlist = scannerSelected ? null : (watchlists.find((item) => item.id === watchlistTab) || watchlists[0]);
-  const quotes = scannerSelected ? [] : (quotesByTab[watchlistTab] || []);
-  const updatedText = scannerSelected ? scannerUpdatedText(updatedTextByTab, watchlists) : (updatedTextByTab[watchlistTab] || "");
+  const contextWatchlist = activeWatchlist || watchlists[0];
+  const quotes = quotesByTab[contextWatchlist?.id] || [];
+  const updatedText = updatedTextByTab[contextWatchlist?.id] || "";
   const pageLoading = loading.shell || loading.watchlists || loading.prices || loading.notifications || loading.trades;
   const tradingAccountId = useMemo(() => marginTradingAccountId(accounts, selectedAccountId), [accounts, selectedAccountId]);
   const autoTradeOrderCount = autoTradeOrders.counts?.open ?? autoTradeOrders.buckets?.open?.length ?? 0;
@@ -601,6 +613,9 @@ export default function App() {
     );
   }, [quotes]);
   const preMarketScannerRows = useMemo(() => preMarketScannerRowsFromWatchlists(watchlists, quotesByTab), [watchlists, quotesByTab]);
+  const scannerStats = useMemo(() => scannerRefreshStats(updatedTextByTab, watchlists), [updatedTextByTab, watchlists]);
+  const scannerLongCount = useMemo(() => preMarketScannerRows.filter((row) => row.action === "Long").length, [preMarketScannerRows]);
+  const scannerShortCount = useMemo(() => preMarketScannerRows.filter((row) => row.action === "Short").length, [preMarketScannerRows]);
   const allMtfQuotes = useMemo(() => {
     const matches = watchlists.flatMap((watchlist) => (
       (quotesByTab[watchlist.id] || [])
@@ -1394,8 +1409,34 @@ export default function App() {
             onRefresh={refreshAutoTrades}
           />
         ) : (
-          <div className="homepage-market-grid">
-            <section className="live-prices-panel">
+          <div className="market-command-center">
+            <section className="premarket-focus-panel">
+              <div className="scanner-hero">
+                <div>
+                  <p className="eyebrow">Premarket shortlist</p>
+                  <h2>Breaks of yesterday's range</h2>
+                  <p className="muted">Scan every watchlist for clean long/short candidates before the open.</p>
+                </div>
+                <div className="live-price-actions">
+                  <button type="button" onClick={() => refreshAllPrices()} disabled={loading.prices}>
+                    {loading.prices ? "Refreshing" : "Refresh All"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="scanner-metric-grid" aria-label="Premarket scanner summary">
+                <ScannerMetric label="Candidates" value={preMarketScannerRows.length} tone="neutral" />
+                <ScannerMetric label="Long" value={scannerLongCount} tone="long" />
+                <ScannerMetric label="Short" value={scannerShortCount} tone="short" />
+                <ScannerMetric label="Data" value={scannerStats.text} tone="neutral" />
+                <ScannerMetric label="Risk" value={`$${riskSettings.riskAmount}`} tone="risk" />
+              </div>
+
+              {liveAlert ? <div className="alert">{liveAlert}</div> : null}
+              <PreMarketScannerTable rows={preMarketScannerRows} />
+            </section>
+
+            <aside className="watchlist-control-rail">
               <WatchlistTabs
                 activeTab={watchlistTab}
                 onAddSymbols={addSymbolsToActiveWatchlist}
@@ -1408,38 +1449,31 @@ export default function App() {
                 onToggleAutoTrade={toggleWatchlistAutoTrade}
                 preMarketScannerCount={preMarketScannerRows.length}
                 preMarketScannerTabId={PRE_MARKET_SCANNER_TAB}
-                selectedWatchlist={activeWatchlist}
+                selectedWatchlist={contextWatchlist}
                 symbolInput={symbolInputs[watchlistTab] || ""}
                 watchlists={watchlists}
               />
+            </aside>
+
+            <section className="intraday-context-panel">
               <div className="section-heading">
                 <div>
-                  <h2>{scannerSelected ? "Pre Market Scanner" : (activeWatchlist?.name || "Watchlist")}</h2>
-                  <p className="muted">
-                    {scannerSelected
-                      ? "All watchlist stocks above yesterday's high or below yesterday's low."
-                      : "Live Webull prices with clock-aligned EMA levels."}
-                  </p>
+                  <p className="eyebrow">Intraday context</p>
+                  <h2>{contextWatchlist?.name || "Watchlist"}</h2>
+                  <p className="muted">10m EMA cloud state for the selected list. Use this after the premarket shortlist is narrowed.</p>
                 </div>
                 <div className="live-price-actions">
-                  <button type="button" onClick={() => loadLivePrices({ manual: true })} disabled={loading.prices}>
-                    {scannerSelected ? "Refresh All" : "Refresh Prices"}
+                  <button type="button" onClick={() => loadLivePrices({ manual: true })} disabled={loading.prices || !contextWatchlist}>
+                    Refresh List
                   </button>
                 </div>
               </div>
-
-              {liveAlert ? <div className="alert">{liveAlert}</div> : null}
-
               <div className="active-watchlist-tables">
-                {scannerSelected ? (
-                  <PreMarketScannerTable rows={preMarketScannerRows} />
-                ) : (
-                  <div className="trend-price-grid">
-                    <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
-                    <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
-                    <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
-                  </div>
-                )}
+                <div className="trend-price-grid">
+                  <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol, contextWatchlist?.id)} />
+                  <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol, contextWatchlist?.id)} />
+                  <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol, contextWatchlist?.id)} />
+                </div>
                 <p className="muted">{updatedText}</p>
               </div>
             </section>
@@ -2062,6 +2096,15 @@ function AutoTradePanel({ accountId, autoTrade, disabled, onChange }) {
         ))}
       </div>
     </section>
+  );
+}
+
+function ScannerMetric({ label, value, tone }) {
+  return (
+    <article className={`scanner-metric ${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
   );
 }
 

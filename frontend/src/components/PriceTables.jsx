@@ -99,6 +99,11 @@ export function PreMarketScannerTable({ rows }) {
               <th>Stock</th>
               <th>Short or Long</th>
               <th>Above/Below YH/YL</th>
+              <th className="price-col">Last</th>
+              <th className="price-col">YH</th>
+              <th className="price-col">YL</th>
+              <th className="price-col">Move</th>
+              <th>List</th>
             </tr>
           </thead>
           <tbody>
@@ -109,15 +114,25 @@ export function PreMarketScannerTable({ rows }) {
                   <span className={`scanner-action ${row.action.toLowerCase()}`}>{row.action}</span>
                 </td>
                 <td>{row.trigger}</td>
+                <td className="price-cell">{formatPrice(row.price)}</td>
+                <td className="price-cell">{formatPrice(row.previousHigh)}</td>
+                <td className="price-cell">{formatPrice(row.previousLow)}</td>
+                <td className="price-cell">{formatPercent(row.distancePct)}</td>
+                <td>{row.watchlistName || "-"}</td>
               </tr>
             )) : (
-              <tr><td colSpan="3">No stocks are above yesterday's high or below yesterday's low right now.</td></tr>
+              <tr><td colSpan="8">No stocks are above yesterday's high or below yesterday's low right now.</td></tr>
             )}
           </tbody>
         </table>
       </div>
     </section>
   );
+}
+
+function formatPercent(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? `${numeric.toFixed(2)}%` : "-";
 }
 
 function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }) {
