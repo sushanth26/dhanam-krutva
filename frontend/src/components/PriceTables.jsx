@@ -12,6 +12,8 @@ export function MtfTable({
   onBuy,
   onDismissNew,
 }) {
+  const sortedQuotes = [...quotes].sort(compareMtfQuoteRecency);
+
   return (
     <section className="price-bucket mtf-bucket">
       <div className="bucket-heading">
@@ -33,7 +35,7 @@ export function MtfTable({
             </tr>
           </thead>
           <tbody>
-            {quotes.length ? quotes.map((quote) => (
+            {sortedQuotes.length ? sortedQuotes.map((quote) => (
               <MtfRow
                 key={`${quote.watchlist_id || "tab"}-${quote.symbol}`}
                 buyState={buyState[quote.symbol]}
@@ -119,6 +121,20 @@ function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }
       <td className="trigger-time">{triggerTime}</td>
     </BaseRow>
   );
+}
+
+function compareMtfQuoteRecency(left, right) {
+  const rightTime = latestMtfTime(right);
+  const leftTime = latestMtfTime(left);
+  if (rightTime !== leftTime) return rightTime - leftTime;
+  return String(left.symbol || "").localeCompare(String(right.symbol || ""));
+}
+
+function latestMtfTime(quote) {
+  const times = (quote.mtf_matches || [])
+    .map((match) => Date.parse(match.candle_time || ""))
+    .filter(Number.isFinite);
+  return times.length ? Math.max(...times) : 0;
 }
 
 function RiskPlan({ plan }) {
