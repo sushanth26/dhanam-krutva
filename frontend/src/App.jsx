@@ -502,11 +502,13 @@ function preMarketScannerRowsFromWatchlists(watchlists, quotesByTab) {
       const previousHigh = Number(quote.previous_day?.high);
       const previousLow = Number(quote.previous_day?.low);
       if (!Number.isFinite(price) || !Number.isFinite(previousHigh) || !Number.isFinite(previousLow)) continue;
-      const action = price > previousHigh ? "Long" : price < previousLow ? "Short" : "";
+      const trend = cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
+      const action = price > previousHigh && trend === "Bullish" ? "Long" : price < previousLow && trend === "Bearish" ? "Short" : "";
       if (!action || rowsBySymbol.has(quote.symbol)) continue;
       rowsBySymbol.set(quote.symbol, {
         symbol: quote.symbol,
         action,
+        trend,
         price,
         previousHigh,
         previousLow,

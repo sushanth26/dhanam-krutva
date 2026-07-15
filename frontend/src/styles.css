@@ -3566,3 +3566,216 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+/* Dark-mode repair pass for secondary pages and overlays */
+.account-menu-header,
+.push-row,
+.notification-item.unread,
+.risk-settings-panel,
+.alert-strategies,
+.strategy-toggle,
+.auto-trade-summary-tile,
+.auto-trade-bucket,
+.auto-trade-bucket-heading,
+.alert-log-table-card,
+.alert-log-table-heading,
+.alert-log-search strong,
+.risk-plan,
+.order-row,
+.metric,
+.panel,
+.sidebar,
+.content,
+.strategy-panel,
+.tradingview-panel,
+.auto-trade-panel {
+  background: #0f1722;
+  border-color: #1f2a37;
+  color: #e6edf3;
+}
+
+.account-menu-status,
+.account-meta-line + .account-meta-line,
+.alert-log-table-card,
+.auto-trade-bucket,
+.auto-trade-table th,
+.auto-trade-table td,
+.alert-log-table th,
+.alert-log-table td {
+  border-color: #1f2a37;
+}
+
+.notification-item p,
+.notification-item time,
+.push-row p,
+.push-row strong,
+.account-meta-line span,
+.account-menu-header span,
+.account-menu-list > span,
+.auto-trade-summary-tile span,
+.auto-trade-order-detail span,
+.auto-trade-order-detail small,
+.alert-log-alert span,
+.alert-log-time small,
+.alert-log-exit small,
+.trigger-time,
+.watchlist-cell,
+.confirmed-setup,
+.quote-size,
+.order-row span,
+.risk-plan span,
+.risk-plan small {
+  color: #8b9aad;
+}
+
+.notification-item h3,
+.account-menu-header strong,
+.account-meta-line strong,
+.auto-trades-header h2,
+.alert-log-header h2,
+.alert-log-table-heading h3,
+.auto-trade-bucket-heading h3,
+.auto-trade-summary-tile strong,
+.alert-log-alert strong,
+.risk-plan {
+  color: #f8fafc;
+}
+
+.notification-icon,
+.mode-badge.test,
+.mode-badge.live,
+.alert-log-table-heading span,
+.alert-log-table-heading em,
+.auto-trade-bucket-heading span {
+  background: #111a24;
+  border: 1px solid #263547;
+  color: #cbd5e1;
+}
+
+.cloud-tag.bullish,
+.trade-tag.long,
+.buy-one.success {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.42);
+  color: #86efac;
+}
+
+.cloud-tag.bearish,
+.trade-tag.short,
+.buy-one.short-signal,
+.buy-one.error {
+  background: rgba(248, 113, 113, 0.18);
+  border-color: rgba(248, 113, 113, 0.44);
+  color: #fca5a5;
+}
+
+.cloud-tag.chop,
+.trade-tag.unknown,
+.cloud-tag.unknown,
+.row-delete-button,
+.buy-one:disabled {
+  background: #172033;
+  border-color: #263547;
+  color: #cbd5e1;
+}
+
+.mtf-tag {
+  background: #172033;
+  border-color: #334155;
+  color: #cbd5e1;
+}
+
+.mtf-tag.hourly {
+  --mtf-bg: rgba(245, 158, 11, 0.15);
+  --mtf-border: rgba(245, 158, 11, 0.42);
+  --mtf-color: #fcd34d;
+}
+
+.mtf-tag.daily-fast {
+  --mtf-bg: rgba(234, 179, 8, 0.15);
+  --mtf-border: rgba(234, 179, 8, 0.42);
+  --mtf-color: #fde047;
+}
+
+.mtf-tag.daily-slow {
+  --mtf-bg: rgba(59, 130, 246, 0.15);
+  --mtf-border: rgba(59, 130, 246, 0.42);
+  --mtf-color: #93c5fd;
+}
+
+.mtf-tag.touch {
+  --mtf-bg: rgba(20, 184, 166, 0.15);
+  --mtf-border: rgba(20, 184, 166, 0.42);
+  --mtf-color: #5eead4;
+}
+
+.risk-field label,
+.risk-field input,
+.risk-field select,
+.alert-log-search input {
+  background: #0b121a;
+  border-color: #263547;
+  color: #e6edf3;
+}
+
+.auto-trade-panel.enabled {
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.auto-trade-panel em {
+  background: #111a24;
+  color: #cbd5e1;
+}
+
+.alert-log-table tr.hit-target td {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.alert-log-table tr.hit-sl td {
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.alert-log-table-card.long .alert-log-table-heading {
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.alert-log-table-card.short .alert-log-table-heading {
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.strategy-toggle.disabled {
+  background: #111a24;
+  color: #8b9aad;
+}
+
+.global-mtf-panel .global-mtf-table .focused-mtf-row {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+@keyframes focused-mtf-pulse {
+  0%, 100% {
+    background: rgba(245, 158, 11, 0.08);
+  }
+  50% {
+    background: rgba(245, 158, 11, 0.2);
+  }
+}
+
+@media (max-width: 759px) {
+  .auto-trade-table tr,
+  .alert-log-table tr {
+    background: #0f1722;
+    border-color: #1f2a37;
+  }
+
+  .auto-trade-table td,
+  .alert-log-table th,
+  .alert-log-table td {
+    border-color: #1f2a37;
+  }
+
+  .auto-trade-table td:before,
+  .alert-log-table td::before {
+    color: #8b9aad;
+  }
+}
