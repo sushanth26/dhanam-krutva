@@ -98,6 +98,7 @@ export function PreMarketScannerTable({ rows }) {
             <tr>
               <th>Stock</th>
               <th>Short or Long</th>
+              <th>10m Trend</th>
               <th>Above/Below YH/YL</th>
               <th className="price-col">Last</th>
               <th className="price-col">YH</th>
@@ -113,6 +114,7 @@ export function PreMarketScannerTable({ rows }) {
                 <td>
                   <span className={`scanner-action ${row.action.toLowerCase()}`}>{row.action}</span>
                 </td>
+                <td><CloudTag status={row.trend} /></td>
                 <td>{row.trigger}</td>
                 <td className="price-cell">{formatPrice(row.price)}</td>
                 <td className="price-cell">{formatPrice(row.previousHigh)}</td>
@@ -121,7 +123,7 @@ export function PreMarketScannerTable({ rows }) {
                 <td>{row.watchlistName || "-"}</td>
               </tr>
             )) : (
-              <tr><td colSpan="8">No stocks are above yesterday's high or below yesterday's low right now.</td></tr>
+              <tr><td colSpan="9">No aligned breakouts: longs need above YH + bullish 10m cloud; shorts need below YL + bearish 10m cloud.</td></tr>
             )}
           </tbody>
         </table>
