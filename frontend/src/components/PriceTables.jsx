@@ -1,21 +1,26 @@
-import { CloudTag, MtfTag, TradeTag } from "./Tags";
+import { CloudTag } from "./Tags";
 import { cloudStatus, formatPrice } from "../lib/market";
 
 export function MtfTable({
   quotes,
   showWatchlist = false,
-  showSignalTags = true,
   title = "MTFs",
+  subtitle = "",
   buyState = {},
   emptyText = "No stocks are on hourly or daily EMA clouds right now.",
   focusedSymbol = "",
   onBuy,
   onDismissNew,
 }) {
+  const sortedQuotes = [...quotes].sort(compareMtfQuoteRecency);
+
   return (
     <section className="price-bucket mtf-bucket">
       <div className="bucket-heading">
-        <h3>{title}</h3>
+        <div className="bucket-title">
+          <h3>{title}</h3>
+          {subtitle ? <p>{subtitle}</p> : null}
+        </div>
         <span>{quotes.length}</span>
       </div>
       <div className="live-price-table-wrap">
@@ -23,20 +28,19 @@ export function MtfTable({
           <thead>
             <tr>
               <th>Symbol</th>
-              {showWatchlist ? <th>List</th> : null}
-              <th>On EMA</th>
+              {showWatchlist ? <th>Watchlist</th> : null}
+              <th>Trade plan</th>
               <th>Time</th>
               <th className="action-col" aria-label="Actions"></th>
             </tr>
           </thead>
           <tbody>
-            {quotes.length ? quotes.map((quote) => (
+            {sortedQuotes.length ? sortedQuotes.map((quote) => (
               <MtfRow
                 key={`${quote.watchlist_id || "tab"}-${quote.symbol}`}
                 buyState={buyState[quote.symbol]}
                 focused={quote.symbol === focusedSymbol}
                 quote={quote}
-                showSignalTags={showSignalTags}
                 showWatchlist={showWatchlist}
                 onBuy={onBuy}
                 onDismissNew={onDismissNew}
@@ -81,7 +85,7 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
   );
 }
 
-function MtfRow({ buyState, focused, quote, showSignalTags, showWatchlist, onBuy, onDismissNew }) {
+function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }) {
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
   const riskPlan = aPlusPlusRiskPlan(quote.mtf_matches);
   const tradeAction = tradeActionForMatches(quote.mtf_matches);
@@ -111,19 +115,26 @@ function MtfRow({ buyState, focused, quote, showSignalTags, showWatchlist, onBuy
           {quote.is_new ? <NewTag onDismiss={dismissNew} symbol={quote.symbol} /> : null}
         </td>
       ) : null}
-      <td className="mtf-tags">
-        {quote.mtf_matches.map((match, index) => (
-          <span key={[match.label, match.trade_action, match.type, match.candle_time, index].join(":")} className="mtf-tag-group">
-            <MtfTag label={match.label} match={match} />
-            {showSignalTags && match.trade_action ? <TradeTag action={match.trade_action} /> : null}
-            {showSignalTags && !match.trade_action && match.trend ? <CloudTag status={match.trend} /> : null}
-          </span>
-        ))}
-        {riskPlan ? <RiskPlan plan={riskPlan} /> : null}
+      <td className="mtf-plan-cell">
+        {riskPlan ? <RiskPlan plan={riskPlan} /> : <span className="confirmed-setup">Confirmed</span>}
       </td>
       <td className="trigger-time">{triggerTime}</td>
     </BaseRow>
   );
+}
+
+function compareMtfQuoteRecency(left, right) {
+  const rightTime = latestMtfTime(right);
+  const leftTime = latestMtfTime(left);
+  if (rightTime !== leftTime) return rightTime - leftTime;
+  return String(left.symbol || "").localeCompare(String(right.symbol || ""));
+}
+
+function latestMtfTime(quote) {
+  const times = (quote.mtf_matches || [])
+    .map((match) => Date.parse(match.candle_time || ""))
+    .filter(Number.isFinite);
+  return times.length ? Math.max(...times) : 0;
 }
 
 function RiskPlan({ plan }) {
