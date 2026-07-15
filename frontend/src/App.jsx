@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertStrategies } from "./components/AlertStrategies";
 import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
-import { MtfTable, PriceBucket } from "./components/PriceTables";
+import { MtfTable, PreMarketScannerTable, PriceBucket } from "./components/PriceTables";
 import { getJson, postJson } from "./lib/api";
 import { ALERT_STRATEGIES, filterQuotesByStrategy, loadStrategyState, saveStrategyState, strategyIdForMatch } from "./lib/alertStrategies";
 import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, flattenAccounts, formatPrice, isMarketRefreshWindow, marginTradingAccountId, matchEntryPrice, notificationMatchText, mtfSignature, preferredAccountId } from "./lib/market";
@@ -22,6 +22,7 @@ const AUTO_TRADE_KEY = "dhanam-auto-trade";
 const AUTO_TRADE_EXECUTIONS_KEY = "dhanam-auto-trade-executions";
 const MAX_AUTO_TRADE_EXECUTIONS = 500;
 const OG_WATCHLIST_ID = "og";
+const PRE_MARKET_SCANNER_TAB = "pre-market-scanner";
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
   "ASTS", "AMD", "ARM", "AVGO", "DELL", "INTC", "APP", "LLY",
@@ -493,6 +494,37 @@ function alertOutcomePlan(match, fallbackPrice, riskSettings) {
   };
 }
 
+function preMarketScannerRowsFromWatchlists(watchlists, quotesByTab) {
+  const rowsBySymbol = new Map();
+  for (const watchlist of watchlists) {
+    for (const quote of quotesByTab[watchlist.id] || []) {
+      const price = Number(quote.price);
+      const previousHigh = Number(quote.previous_day?.high);
+      const previousLow = Number(quote.previous_day?.low);
+      if (!Number.isFinite(price) || !Number.isFinite(previousHigh) || !Number.isFinite(previousLow)) continue;
+      const action = price > previousHigh ? "Long" : price < previousLow ? "Short" : "";
+      if (!action || rowsBySymbol.has(quote.symbol)) continue;
+      rowsBySymbol.set(quote.symbol, {
+        symbol: quote.symbol,
+        action,
+        trigger: price > previousHigh ? "Above YH" : "Below YL",
+      });
+    }
+  }
+  return [...rowsBySymbol.values()].sort((left, right) => (
+    left.action.localeCompare(right.action) || left.symbol.localeCompare(right.symbol)
+  ));
+}
+
+function scannerUpdatedText(updatedTextByTab, watchlists) {
+  const updatedLists = watchlists
+    .map((watchlist) => updatedTextByTab[watchlist.id])
+    .filter((text) => text?.startsWith("Updated "));
+  return updatedLists.length
+    ? `Scanner uses ${updatedLists.length}/${watchlists.length} refreshed watchlists`
+    : "Refresh all watchlists to scan premarket moves";
+}
+
 export default function App() {
   const [watchlists, setWatchlists] = useState(loadWatchlists);
   const [status, setStatus] = useState(null);
@@ -548,9 +580,10 @@ export default function App() {
   const watchlistTabRef = useRef(watchlistTab);
   const watchlistsRef = useRef(watchlists);
   const retainedMtfQuotesRef = useRef(retainedMtfQuotesByTab);
-  const activeWatchlist = watchlists.find((item) => item.id === watchlistTab) || watchlists[0];
-  const quotes = quotesByTab[watchlistTab] || [];
-  const updatedText = updatedTextByTab[watchlistTab] || "";
+  const scannerSelected = watchlistTab === PRE_MARKET_SCANNER_TAB;
+  const activeWatchlist = scannerSelected ? null : (watchlists.find((item) => item.id === watchlistTab) || watchlists[0]);
+  const quotes = scannerSelected ? [] : (quotesByTab[watchlistTab] || []);
+  const updatedText = scannerSelected ? scannerUpdatedText(updatedTextByTab, watchlists) : (updatedTextByTab[watchlistTab] || "");
   const pageLoading = loading.shell || loading.watchlists || loading.prices || loading.notifications || loading.trades;
   const tradingAccountId = useMemo(() => marginTradingAccountId(accounts, selectedAccountId), [accounts, selectedAccountId]);
   const autoTradeOrderCount = autoTradeOrders.counts?.open ?? autoTradeOrders.buckets?.open?.length ?? 0;
@@ -567,6 +600,7 @@ export default function App() {
       { bullish: [], bearish: [], chop: [] },
     );
   }, [quotes]);
+  const preMarketScannerRows = useMemo(() => preMarketScannerRowsFromWatchlists(watchlists, quotesByTab), [watchlists, quotesByTab]);
   const allMtfQuotes = useMemo(() => {
     const matches = watchlists.flatMap((watchlist) => (
       (quotesByTab[watchlist.id] || [])
@@ -653,6 +687,10 @@ export default function App() {
     if (showLoading) setLoadingKey("prices", true);
     try {
       const activeTab = watchlistTabRef.current;
+      if (activeTab === PRE_MARKET_SCANNER_TAB) {
+        await refreshAllPrices({ showLoading: false });
+        return;
+      }
       const selectedWatchlist = watchlistsRef.current.find((item) => item.id === activeTab);
       await refreshWatchlistPrices(selectedWatchlist);
     } catch (error) {
@@ -983,6 +1021,7 @@ export default function App() {
 
   function addSymbolsToActiveWatchlist(event) {
     event.preventDefault();
+    if (watchlistTab === PRE_MARKET_SCANNER_TAB) return;
     const incoming = normalizeSymbols([symbolInputs[watchlistTab] || ""]);
     if (!incoming.length) return;
     updateWatchlists((current) => current.map((watchlist) => (
@@ -1059,6 +1098,7 @@ export default function App() {
 
   function switchWatchlistTab(tab) {
     setWatchlistTab(tab);
+    if (tab === PRE_MARKET_SCANNER_TAB) return;
     setUpdatedTextByTab((current) => ({
       ...current,
       [tab]: current[tab] || "Watchlist selected",
@@ -1107,7 +1147,9 @@ export default function App() {
       }
       return updated;
     });
-    setWatchlistTab((current) => next.some((item) => item.id === current) ? current : OG_WATCHLIST_ID);
+    setWatchlistTab((current) => (
+      current === PRE_MARKET_SCANNER_TAB || next.some((item) => item.id === current) ? current : OG_WATCHLIST_ID
+    ));
   }
 
   async function refreshAppMarketData({ showLoading = true } = {}) {
@@ -1364,18 +1406,24 @@ export default function App() {
                 onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
                 onSwitchTab={switchWatchlistTab}
                 onToggleAutoTrade={toggleWatchlistAutoTrade}
+                preMarketScannerCount={preMarketScannerRows.length}
+                preMarketScannerTabId={PRE_MARKET_SCANNER_TAB}
                 selectedWatchlist={activeWatchlist}
                 symbolInput={symbolInputs[watchlistTab] || ""}
                 watchlists={watchlists}
               />
               <div className="section-heading">
                 <div>
-                  <h2>{activeWatchlist?.name || "Watchlist"}</h2>
-                  <p className="muted">Live Webull prices with clock-aligned EMA levels.</p>
+                  <h2>{scannerSelected ? "Pre Market Scanner" : (activeWatchlist?.name || "Watchlist")}</h2>
+                  <p className="muted">
+                    {scannerSelected
+                      ? "All watchlist stocks above yesterday's high or below yesterday's low."
+                      : "Live Webull prices with clock-aligned EMA levels."}
+                  </p>
                 </div>
                 <div className="live-price-actions">
                   <button type="button" onClick={() => loadLivePrices({ manual: true })} disabled={loading.prices}>
-                    Refresh Prices
+                    {scannerSelected ? "Refresh All" : "Refresh Prices"}
                   </button>
                 </div>
               </div>
@@ -1383,11 +1431,15 @@ export default function App() {
               {liveAlert ? <div className="alert">{liveAlert}</div> : null}
 
               <div className="active-watchlist-tables">
-                <div className="trend-price-grid">
-                  <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
-                  <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
-                  <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
-                </div>
+                {scannerSelected ? (
+                  <PreMarketScannerTable rows={preMarketScannerRows} />
+                ) : (
+                  <div className="trend-price-grid">
+                    <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
+                    <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
+                    <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol)} />
+                  </div>
+                )}
                 <p className="muted">{updatedText}</p>
               </div>
             </section>
@@ -2023,10 +2075,13 @@ function WatchlistTabs({
   onSwitchTab,
   onSymbolInput,
   onToggleAutoTrade,
+  preMarketScannerCount,
+  preMarketScannerTabId,
   selectedWatchlist,
   symbolInput,
   watchlists,
 }) {
+  const scannerSelected = activeTab === preMarketScannerTabId;
   return (
     <section className="watchlist-panel" aria-label="Watchlists">
       <div className="watchlist-tabs" role="tablist" aria-label="Watchlist tabs">
@@ -2053,6 +2108,17 @@ function WatchlistTabs({
             ) : null}
           </span>
         ))}
+        <span className={`watchlist-tab scanner-tab ${scannerSelected ? "active" : ""}`}>
+          <button
+            type="button"
+            onClick={() => onSwitchTab(preMarketScannerTabId)}
+            role="tab"
+            aria-selected={scannerSelected}
+          >
+            Pre Market Scanner
+            <b>{preMarketScannerCount}</b>
+          </button>
+        </span>
         <button
           type="button"
           className="watchlist-add-tab"
@@ -2071,6 +2137,7 @@ function WatchlistTabs({
           Refresh All
         </button>
       </div>
+      {scannerSelected ? null : (
       <div className="daily-list-editor">
         <label className="watchlist-auto-trade-toggle">
           <input
@@ -2091,6 +2158,7 @@ function WatchlistTabs({
           <button type="submit" disabled={loading}>Add</button>
         </form>
       </div>
+      )}
     </section>
   );
 }

@@ -116,6 +116,7 @@ def build_live_prices(
                 "price": price,
                 "change": snapshot_change(snapshot_map.get(symbol)),
                 "change_ratio": snapshot_change_ratio(snapshot_map.get(symbol)),
+                "previous_day": previous_daily_range(daily_candles),
                 "ema_10m": ten_minute_ema,
                 "ema_1h": ema_1h,
                 "ema_daily": ema_daily,
@@ -151,6 +152,28 @@ def build_live_prices(
         "symbols": selected_symbols,
         "quotes": quotes,
         "errors": errors,
+    }
+
+
+def previous_daily_range(candles: list[dict[str, Any]]) -> dict[str, Any] | None:
+    today = datetime.now(MARKET_TIMEZONE).date().isoformat()
+    completed = [
+        candle for candle in candles
+        if candle.get("session_date") and candle.get("session_date") < today
+        and candle.get("high") is not None and candle.get("low") is not None
+    ]
+    if not completed:
+        completed = [
+            candle for candle in candles
+            if candle.get("high") is not None and candle.get("low") is not None
+        ][:-1]
+    if not completed:
+        return None
+    candle = completed[-1]
+    return {
+        "date": candle.get("session_date"),
+        "high": round(candle["high"], 4),
+        "low": round(candle["low"], 4),
     }
 
 
