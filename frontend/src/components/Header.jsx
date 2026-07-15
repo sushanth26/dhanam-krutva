@@ -6,9 +6,7 @@ export function Header({
   status,
   accounts,
   selectedAccountId,
-  loading,
   pageLoading,
-  onRefresh,
   onSelectAccount,
   notificationState,
   onEnableNotifications,
@@ -161,9 +159,6 @@ export function Header({
               />
             ) : null}
           </div>
-          <button type="button" className="icon-button" onClick={onRefresh} disabled={pageLoading} aria-label="Refresh" title="Refresh">
-            <span aria-hidden="true">{loading?.shell ? "…" : "↻"}</span>
-          </button>
         </div>
       </section>
     </header>

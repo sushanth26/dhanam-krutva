@@ -110,20 +110,20 @@ export function PreMarketScannerTable({ rows }) {
           <tbody>
             {rows.length ? rows.map((row) => (
               <tr key={row.symbol} className={`stock-row scanner-${row.action.toLowerCase()}`}>
-                <td><strong>{row.symbol}</strong></td>
-                <td>
+                <td data-label="Stock"><strong>{row.symbol}</strong></td>
+                <td data-label="Action">
                   <span className={`scanner-action ${row.action.toLowerCase()}`}>{row.action}</span>
                 </td>
-                <td><CloudTag status={row.trend} /></td>
-                <td>{row.trigger}</td>
-                <td className="price-cell">{formatPrice(row.price)}</td>
-                <td className="price-cell">{formatPrice(row.previousHigh)}</td>
-                <td className="price-cell">{formatPrice(row.previousLow)}</td>
-                <td className="price-cell">{formatPercent(row.distancePct)}</td>
-                <td>{row.watchlistName || "-"}</td>
+                <td data-label="10m Trend"><CloudTag status={row.trend} /></td>
+                <td data-label="Trigger">{row.trigger}</td>
+                <td data-label="Last" className="price-cell">{formatPrice(row.price)}</td>
+                <td data-label="YH" className="price-cell">{formatPrice(row.previousHigh)}</td>
+                <td data-label="YL" className="price-cell">{formatPrice(row.previousLow)}</td>
+                <td data-label="Move" className="price-cell">{formatPercent(row.distancePct)}</td>
+                <td data-label="List">{row.watchlistName || "-"}</td>
               </tr>
             )) : (
-              <tr><td colSpan="9">No aligned breakouts: longs need above YH + bullish 10m cloud; shorts need below YL + bearish 10m cloud.</td></tr>
+              <tr className="scanner-empty-row"><td colSpan="9">No aligned breakouts: longs need above YH + bullish 10m cloud; shorts need below YL + bearish 10m cloud.</td></tr>
             )}
           </tbody>
         </table>

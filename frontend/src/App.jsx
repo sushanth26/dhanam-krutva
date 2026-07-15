@@ -1349,9 +1349,7 @@ export default function App() {
         status={status}
         accounts={accounts}
         selectedAccountId={selectedAccountId}
-        loading={loading}
         pageLoading={pageLoading}
-        onRefresh={refreshShell}
         onSelectAccount={(accountId) => setSelectedAccountId(preferredAccountId(accounts, accountId))}
         notificationState={notificationState}
         onEnableNotifications={enableAppNotifications}
@@ -1425,7 +1423,7 @@ export default function App() {
                 </div>
                 <div className="live-price-actions">
                   <button type="button" onClick={() => refreshAllPrices()} disabled={loading.prices}>
-                    {loading.prices ? "Refreshing" : "Refresh All"}
+                    {loading.prices ? "Updating" : "Update Market Data"}
                   </button>
                 </div>
               </div>
@@ -1448,7 +1446,6 @@ export default function App() {
                 onAddSymbols={addSymbolsToActiveWatchlist}
                 onAddTab={addWatchlist}
                 onDeleteTab={deleteWatchlist}
-                onRefreshAll={refreshAllPrices}
                 loading={loading.watchlists || loading.prices}
                 onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
                 onSwitchTab={switchWatchlistTab}
@@ -1467,11 +1464,6 @@ export default function App() {
                   <p className="eyebrow">Intraday context</p>
                   <h2>{contextWatchlist?.name || "Watchlist"}</h2>
                   <p className="muted">10m EMA cloud state for the selected list. Use this after the premarket shortlist is narrowed.</p>
-                </div>
-                <div className="live-price-actions">
-                  <button type="button" onClick={() => loadLivePrices({ manual: true })} disabled={loading.prices || !contextWatchlist}>
-                    Refresh List
-                  </button>
                 </div>
               </div>
               <div className="active-watchlist-tables">
@@ -2119,7 +2111,6 @@ function WatchlistTabs({
   onAddSymbols,
   onAddTab,
   onDeleteTab,
-  onRefreshAll,
   loading,
   onSwitchTab,
   onSymbolInput,
@@ -2176,14 +2167,6 @@ function WatchlistTabs({
           title="Add watchlist tab"
         >
           +
-        </button>
-        <button
-          type="button"
-          className="watchlist-refresh-all"
-          onClick={onRefreshAll}
-          disabled={loading}
-        >
-          Refresh All
         </button>
       </div>
       {scannerSelected ? null : (
