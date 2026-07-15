@@ -1,23 +1,28 @@
 import asyncio
 import json
-import logging
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pywebpush import WebPushException, webpush
 
-from app.alert_history import AlertHistoryStore
-from app.alert_strategies import MATCH_TYPE_TO_STRATEGY_KEY, AlertStrategySettingsStore, filter_enabled_matches
 from app.config import Settings
 from app.dependencies import service
-from app.live_data_gate import POST_MARKET_CLOSE_MINUTES
 from app.market_data import WEBULL_BATCH_BAR_LIMIT, build_live_prices, symbol_chunks
 from app.watchlists import WatchlistStore
 
 
-logger = logging.getLogger(__name__)
+DEFAULT_ALERT_STRATEGIES = {
+    "hourly-cloud": True,
+    "daily-fast-cloud": True,
+    "daily-slow-cloud": True,
+    "ten-minute-bounce-10m": True,
+    "ten-minute-9ema-touch": True,
+    "ten-minute-bounce-hourly": True,
+    "ten-minute-bounce-daily-fast": True,
+    "ten-minute-bounce-daily-slow": True,
+}
 
 
 class PushSubscriptionStore:
@@ -58,10 +63,9 @@ class MtfPushMonitor:
         self.store = PushSubscriptionStore(settings.push_subscription_file)
         self.task: asyncio.Task | None = None
         self.last_signature: str | None = None
-        self.last_error_signature: str | None = None
 
     def start(self) -> None:
-        if self.task or not self.settings.mtf_push_enabled or not self.settings.push_configured:
+        if self.task or not self.settings.push_configured:
             return
         self.task = asyncio.create_task(self._run())
 
@@ -78,29 +82,21 @@ class MtfPushMonitor:
     async def _run(self) -> None:
         while True:
             try:
-                if self.should_poll():
+                if self.store.all() and is_market_refresh_window(self.settings.mtf_push_timezone):
                     await asyncio.to_thread(self.check_once)
-                    self.last_error_signature = None
             except Exception:
-                logger.exception("MTF push monitor failed")
-                self.notify_monitor_error()
+                pass
             await asyncio.sleep(self.settings.mtf_push_poll_seconds)
 
-    def should_poll(self) -> bool:
-        return bool(self.store.all()) and is_market_refresh_window(self.settings.mtf_push_timezone)
-
     def check_once(self) -> dict[str, Any] | None:
-        strategies = AlertStrategySettingsStore(self.settings.alert_strategy_file).get()
         quotes = confirmed_mtf_quotes(build_monitored_quotes(self.settings))
-        quotes = setup_alert_quotes(quotes, strategies)
         signature = mtf_signature(quotes)
-        changed = bool(signature) and signature != self.last_signature
+        changed = self.last_signature is not None and signature != self.last_signature
         self.last_signature = signature
         if not changed:
             return None
 
         notification = mtf_notification_payload(quotes)
-        save_push_alert_history(self.settings, quotes)
         self.send(notification)
         return notification
 
@@ -111,10 +107,13 @@ class MtfPushMonitor:
         sent = 0
         removed = 0
         for subscription in self.store.all():
+            subscription_payload = filter_payload_by_strategies(payload, subscription.get("alert_strategies", {}))
+            if not subscription_payload:
+                continue
             try:
                 webpush(
                     subscription_info=webpush_subscription_info(subscription),
-                    data=json.dumps(payload),
+                    data=json.dumps(subscription_payload),
                     vapid_private_key=self.settings.vapid_private_key,
                     vapid_claims={"sub": self.settings.vapid_subject},
                 )
@@ -125,35 +124,16 @@ class MtfPushMonitor:
                     removed += 1
         return {"sent": sent, "removed": removed}
 
-    def notify_monitor_error(self) -> dict[str, int] | None:
-        signature = "webull-refresh-failed"
-        if self.last_error_signature == signature:
-            return None
-        self.last_error_signature = signature
-        return self.send(
-            {
-                "title": "Webull alerts paused",
-                "body": "Background live-data refresh failed. Open the app and refresh Webull to resume setup alerts.",
-                "badgeCount": 1,
-                "badge_count": 1,
-                "tag": "webull-alerts-paused",
-                "targetSymbol": "",
-                "url": "/",
-                "matches": [],
-            }
-        )
 
-
-def is_market_refresh_window(timezone_name: str, now: datetime | None = None) -> bool:
-    if now is None:
-        try:
-            now = datetime.now(ZoneInfo(timezone_name))
-        except ZoneInfoNotFoundError:
-            now = datetime.now()
+def is_market_refresh_window(timezone_name: str) -> bool:
+    try:
+        now = datetime.now(ZoneInfo(timezone_name))
+    except ZoneInfoNotFoundError:
+        now = datetime.now()
     if now.weekday() >= 5:
         return False
     minutes = now.hour * 60 + now.minute
-    return 3 * 60 <= minutes < POST_MARKET_CLOSE_MINUTES
+    return 3 * 60 <= minutes < 15 * 60
 
 
 def webpush_subscription_info(subscription: dict[str, Any]) -> dict[str, Any]:
@@ -177,33 +157,13 @@ def monitored_symbols(settings: Settings) -> list[str]:
 
 def build_monitored_quotes(settings: Settings) -> list[dict[str, Any]]:
     quotes = []
-    errors = []
     webull = service()
     for chunk in symbol_chunks(monitored_symbols(settings), WEBULL_BATCH_BAR_LIMIT):
         if not chunk:
             continue
         payload = build_live_prices(webull, ",".join(chunk))
-        if payload.get("ok") is False:
-            errors.extend(payload.get("errors") or [{"source": "live prices", "error": payload}])
         quotes.extend(payload.get("quotes", []))
-    if errors:
-        raise RuntimeError(f"Webull live-data refresh failed: {describe_webull_errors(errors)}")
     return quotes
-
-
-def describe_webull_errors(errors: list[dict[str, Any]]) -> str:
-    descriptions = []
-    for item in errors[:3]:
-        source = item.get("source") or "webull"
-        error = item.get("error") if isinstance(item, dict) else item
-        if isinstance(error, dict):
-            message = error.get("error") or error.get("message") or error.get("error_code") or error.get("status_code")
-        else:
-            message = error
-        descriptions.append(f"{source}: {message or 'unknown error'}")
-    if len(errors) > 3:
-        descriptions.append(f"{len(errors) - 3} more")
-    return "; ".join(descriptions)
 
 
 def mtf_notification_payload(quotes: list[dict[str, Any]]) -> dict[str, Any]:
@@ -235,37 +195,6 @@ def mtf_notification_payload(quotes: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def save_push_alert_history(settings: Settings, quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    created_at = datetime.now(UTC).isoformat()
-    alerts = []
-    for quote in quotes:
-        symbol = str(quote.get("symbol") or "").upper()
-        quote_payload = {key: value for key, value in quote.items() if key != "mtf_matches"}
-        quote_payload["symbol"] = symbol
-        for match in quote.get("mtf_matches", []):
-            alerts.append(
-                {
-                    "watchlist": {"id": "push-monitor", "name": "Background monitor"},
-                    "quote": quote_payload,
-                    "match": match,
-                    "symbol": symbol,
-                    "created_at": created_at,
-                }
-            )
-    if not alerts:
-        return []
-    return AlertHistoryStore(settings.alert_history_file).upsert_many(alerts)
-
-
-def apply_enabled_strategies(quotes: list[dict[str, Any]], strategies: dict[str, bool]) -> list[dict[str, Any]]:
-    output = []
-    for quote in quotes:
-        matches = filter_enabled_matches(quote.get("mtf_matches", []), strategies)
-        if matches:
-            output.append({**quote, "mtf_matches": matches})
-    return output
-
-
 def confirmed_mtf_quotes(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     output = []
     for quote in quotes:
@@ -277,101 +206,6 @@ def confirmed_mtf_quotes(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if matches:
             output.append({**quote, "mtf_matches": matches})
     return output
-
-
-def scanner_entry_quotes(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    output = []
-    for quote in quotes:
-        read = quote.get("scanner_read") if isinstance(quote.get("scanner_read"), dict) else {}
-        if read.get("kind") != "entry":
-            continue
-        source_match = entry_source_match(quote, read)
-        if not source_match:
-            continue
-        output.append({**quote, "mtf_matches": [entry_alert_match(quote, read, source_match)]})
-    return output
-
-
-def setup_alert_quotes(quotes: list[dict[str, Any]], strategies: dict[str, bool] | None = None) -> list[dict[str, Any]]:
-    output = []
-    for quote in quotes:
-        matches = setup_alert_matches(quote, strategies)
-        if matches:
-            output.append({**quote, "mtf_matches": matches})
-    return output
-
-
-def setup_alert_matches(quote: dict[str, Any], strategies: dict[str, bool] | None = None) -> list[dict[str, Any]]:
-    matches = []
-    read = quote.get("scanner_read") if isinstance(quote.get("scanner_read"), dict) else {}
-    source_match = entry_source_match(quote, read) if read.get("kind") == "entry" else None
-    playable_match = next((match for match in quote.get("mtf_matches", []) if match.get("type") == "playable_trade"), None)
-    emitted_playable = False
-    if playable_match and (strategies is None or filter_enabled_matches([playable_match], strategies)):
-        matches.append(playable_match)
-        emitted_playable = True
-    emitted_entry = False
-    if source_match and not emitted_playable:
-        entry_match = entry_alert_match(quote, read, source_match)
-        if strategies is None or filter_enabled_matches([entry_match], strategies):
-            matches.append(entry_match)
-            emitted_entry = True
-
-    for match in quote.get("mtf_matches", []):
-        if emitted_playable and match is playable_match:
-            continue
-        if not direct_alert_match(match):
-            continue
-        if emitted_entry and source_match and same_setup_match(match, source_match):
-            continue
-        if strategies is not None and not filter_enabled_matches([match], strategies):
-            continue
-        matches.append(match)
-    return matches
-
-
-def direct_alert_match(match: dict[str, Any]) -> bool:
-    if match.get("status") and match.get("status") != "confirmed":
-        return False
-    return match.get("type") != "scanner_entry" and match.get("type") in MATCH_TYPE_TO_STRATEGY_KEY
-
-
-def same_setup_match(left: dict[str, Any], right: dict[str, Any]) -> bool:
-    return (
-        left.get("type") == right.get("type")
-        and left.get("candle_time") == right.get("candle_time")
-        and (left.get("display_label") or left.get("label")) == (right.get("display_label") or right.get("label"))
-    )
-
-
-def entry_source_match(quote: dict[str, Any], read: dict[str, Any]) -> dict[str, Any] | None:
-    source_type = read.get("source_match_type")
-    matches = quote.get("mtf_matches", [])
-    if source_type:
-        for match in matches:
-            if match.get("type") == source_type:
-                return match
-    for match in matches:
-        if (
-            match.get("trade_action") == "Long"
-            and match.get("type") in {"long_mtf_5_12_touch", "10m_34_50_bounce"}
-            and match.get("setup_quality") != "bad"
-        ):
-            return match
-    return None
-
-
-def entry_alert_match(quote: dict[str, Any], read: dict[str, Any], source_match: dict[str, Any]) -> dict[str, Any]:
-    return {
-        **source_match,
-        "type": "scanner_entry",
-        "source_type": source_match.get("type"),
-        "label": "Entry",
-        "display_label": f"Entry: {read.get('reason') or 'in 5/12'}",
-        "entry_price": read.get("entry_price") or source_match.get("entry_price") or quote.get("price"),
-        "candle_time": read.get("candle_time") or source_match.get("candle_time"),
-        "scanner_read": read,
-    }
 
 
 def mtf_notification_details(quotes: list[dict[str, Any]]) -> dict[str, Any]:
@@ -391,8 +225,8 @@ def mtf_notification_details(quotes: list[dict[str, Any]]) -> dict[str, Any]:
 
     if not matches:
         return {
-            "title": "No setup alerts",
-            "body": "No symbols have live setups now.",
+            "title": "No MTF alerts",
+            "body": "No symbols are on MTF clouds now.",
             "badge_count": 0,
             "tag": "mtf-empty",
             "target_symbol": "",
@@ -405,7 +239,7 @@ def mtf_notification_details(quotes: list[dict[str, Any]]) -> dict[str, Any]:
         labels = [str(label) for label in match["labels"]]
         return {
             "title": f"{symbol}: {labels[0]}",
-            "body": " + ".join(labels[1:]) if len(labels) > 1 else "Tap to open this setup row.",
+            "body": " + ".join(labels[1:]) if len(labels) > 1 else "Tap to open this MTF row.",
             "badge_count": 1,
             "tag": f"mtf-{symbol}",
             "target_symbol": symbol,
@@ -417,7 +251,7 @@ def mtf_notification_details(quotes: list[dict[str, Any]]) -> dict[str, Any]:
     if len(symbols) > 3:
         symbol_text += "..."
     return {
-        "title": f"{len(matches)} Setup alerts: {symbol_text}",
+        "title": f"{len(matches)} MTF alerts: {symbol_text}",
         "body": " • ".join(f"{match['symbol']} {match['labels'][0]}" for match in matches[:3]),
         "badge_count": len(matches),
         "tag": "mtf-batch",
@@ -469,14 +303,97 @@ def format_price(value: Any) -> str:
 def mtf_signature(quotes: list[dict[str, Any]]) -> str:
     return ",".join(
         sorted(
-            f"{quote.get('symbol')}:{'|'.join(mtf_match_signature(match) for match in quote.get('mtf_matches', []))}"
+            f"{quote.get('symbol')}:{'|'.join(match.get('label', '') for match in quote.get('mtf_matches', []))}"
             for quote in quotes
         )
     )
 
 
-def mtf_match_signature(match: dict[str, Any]) -> str:
-    return "|".join(
-        str(match.get(key) or "")
-        for key in ("label", "display_label", "mtf_label", "candle_time", "entry_price")
-    )
+def strategy_id_for_label(label: str) -> str:
+    if label == "10m bounce 34/50":
+        return "ten-minute-bounce-10m"
+    if label == "10m 9 EMA touch":
+        return "ten-minute-9ema-touch"
+    if label == "10m bounce Hourly 34/50":
+        return "ten-minute-bounce-hourly"
+    if label == "10m bounce Daily 20/21":
+        return "ten-minute-bounce-daily-fast"
+    if label == "10m bounce Daily 50/55":
+        return "ten-minute-bounce-daily-slow"
+    if label == "Hourly 34/50":
+        return "hourly-cloud"
+    if label == "Daily 20/21":
+        return "daily-fast-cloud"
+    if label == "Daily 50/55":
+        return "daily-slow-cloud"
+    return "unknown"
+
+
+def normalize_strategy_state(strategy_state: dict[str, Any] | None) -> dict[str, bool]:
+    normalized = DEFAULT_ALERT_STRATEGIES.copy()
+    if isinstance(strategy_state, dict):
+        legacy_bounce = strategy_state.get("ten-minute-bounce", strategy_state.get("ten-minute-touch"))
+        if legacy_bounce is not None:
+            for key in (
+                "ten-minute-bounce-10m",
+                "ten-minute-bounce-hourly",
+                "ten-minute-bounce-daily-fast",
+                "ten-minute-bounce-daily-slow",
+            ):
+                if key not in strategy_state:
+                    normalized[key] = bool(legacy_bounce)
+        for key in normalized:
+            if key in strategy_state:
+                normalized[key] = bool(strategy_state[key])
+    return normalized
+
+
+def filter_payload_by_strategies(payload: dict[str, Any], strategy_state: dict[str, Any] | None) -> dict[str, Any] | None:
+    if "matches" not in payload:
+        return payload
+
+    strategies = normalize_strategy_state(strategy_state)
+    filtered_matches = []
+    for item in payload.get("matches", []):
+        labels = []
+        details = []
+        detail_by_label = {
+            str(detail.get("label") or ""): detail
+            for detail in item.get("details", [])
+            if isinstance(detail, dict)
+        }
+        for label in item.get("labels", []):
+            label_text = str(label or "")
+            if label_text and strategies.get(strategy_id_for_label(label_text), True):
+                labels.append(label_text)
+                if label_text in detail_by_label:
+                    details.append(detail_by_label[label_text])
+        if labels:
+            filtered_matches.append({"symbol": item.get("symbol"), "labels": labels, "details": details})
+
+    if not filtered_matches:
+        return None
+
+    notification = mtf_notification_details([
+        {
+            "symbol": item.get("symbol"),
+            "mtf_matches": [
+                item.get("details", [])[index]
+                if index < len(item.get("details", []))
+                else {"label": label}
+                for index, label in enumerate(item.get("labels", []))
+            ],
+        }
+        for item in filtered_matches
+    ])
+    return {
+        **payload,
+        "title": notification["title"],
+        "body": notification["body"],
+        "badgeCount": len(filtered_matches),
+        "badge_count": len(filtered_matches),
+        "tag": notification["tag"],
+        "targetSymbol": notification["target_symbol"],
+        "url": notification["url"],
+        "matches": filtered_matches,
+    }

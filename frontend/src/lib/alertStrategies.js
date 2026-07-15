@@ -1,77 +1,98 @@
-import { getJson, postJson } from "./api.js";
+const STORAGE_KEY = "dhanam-alert-strategies";
 
 export const ALERT_STRATEGIES = [
   {
-    key: "playableTrades",
-    name: "Playable Trades",
-    matchTypes: ["playable_trade"],
-    description: "Trade thesis is Playable with confirmation and acceptable R:R.",
+    id: "hourly-cloud",
+    name: "Hourly 34/50",
+    description: "Price is inside the hourly 34/50 EMA cloud.",
+    match: (match) => String(match?.label || "") === "Hourly 34/50",
   },
   {
-    key: "scannerEntry",
-    name: "Entry Alerts",
-    matchTypes: ["scanner_entry"],
-    description: "Scanner says Entry after the setup clears its read filters.",
+    id: "daily-fast-cloud",
+    name: "Daily 20/21",
+    description: "Price is inside the daily 20/21 EMA cloud.",
+    match: (match) => String(match?.label || "") === "Daily 20/21",
   },
   {
-    key: "curls",
-    name: "Curls",
-    matchTypes: ["long_mtf_5_12_touch"],
-    description: "MTF touch first, then price moves back above 10m 5/12.",
+    id: "daily-slow-cloud",
+    name: "Daily 50/55",
+    description: "Price is inside the daily 50/55 EMA cloud.",
+    match: (match) => String(match?.label || "") === "Daily 50/55",
   },
   {
-    key: "tenMinute3450Bounce",
-    name: "10m 34/50 Bounce/Rejection",
-    matchTypes: ["10m_34_50_bounce"],
-    description: "Confirmed 10m close back above or below the 34/50 cloud after touching it.",
+    id: "ten-minute-bounce-10m",
+    name: "10m bounce/rejection 34/50",
+    description: "10m candle touches the 10m 34/50 EMA cloud with trend direction.",
+    match: (match) => String(match?.label || "") === "10m bounce 34/50",
   },
   {
-    key: "mtfCloudTouch",
-    name: "MTF Cloud Touch",
-    matchTypes: ["mtf_cloud_price_touch"],
-    description: "Live price sits inside the Hourly 34/50, Daily 20/21, or Daily 50/55 cloud. Fires once per 10m candle.",
+    id: "ten-minute-9ema-touch",
+    name: "10m 9 EMA touch",
+    description: "Bullish 10m stock touches the 9 EMA with SL at the 10m 34/50 cloud low.",
+    match: (match) => String(match?.label || "") === "10m 9 EMA touch",
+  },
+  {
+    id: "ten-minute-bounce-hourly",
+    name: "10m bounce/rejection 1hr 34/50",
+    description: "10m candle rejects or bounces through the hourly 34/50 EMA cloud with trend direction.",
+    match: (match) => String(match?.label || "") === "10m bounce Hourly 34/50",
+  },
+  {
+    id: "ten-minute-bounce-daily-fast",
+    name: "10m bounce/rejection Daily 20/21",
+    description: "10m candle rejects or bounces through the daily 20/21 EMA cloud with trend direction.",
+    match: (match) => String(match?.label || "") === "10m bounce Daily 20/21",
+  },
+  {
+    id: "ten-minute-bounce-daily-slow",
+    name: "10m bounce/rejection Daily 50/55",
+    description: "10m candle rejects or bounces through the daily 50/55 EMA cloud with trend direction.",
+    match: (match) => String(match?.label || "") === "10m bounce Daily 50/55",
   },
 ];
 
-const MATCH_TYPE_TO_STRATEGY_KEY = ALERT_STRATEGIES.reduce((lookup, strategy) => {
-  for (const type of strategy.matchTypes) lookup[type] = strategy.key;
-  return lookup;
-}, {});
-
-export function defaultAlertStrategies() {
-  return Object.fromEntries(ALERT_STRATEGIES.map((strategy) => [strategy.key, true]));
+export function defaultStrategyState() {
+  return Object.fromEntries(ALERT_STRATEGIES.map((strategy) => [strategy.id, true]));
 }
 
-export function hasAlertStrategyOverrides(strategies = {}) {
-  const defaults = defaultAlertStrategies();
-  return Object.keys(defaults).some((key) => Boolean(strategies[key]) !== defaults[key]);
-}
-
-export function mergeAlertStrategySettings(localStrategies = {}, remoteStrategies = {}) {
-  const defaults = defaultAlertStrategies();
-  const local = { ...defaults, ...localStrategies };
-  const remote = { ...defaults, ...remoteStrategies };
-  if (hasAlertStrategyOverrides(local) && !hasAlertStrategyOverrides(remote)) {
-    return { strategies: local, shouldSaveRemote: true };
+export function loadStrategyState() {
+  const defaults = defaultStrategyState();
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "{}");
+    const legacyBounce = saved["ten-minute-bounce"] ?? saved["ten-minute-touch"];
+    if (legacyBounce !== undefined) {
+      for (const key of [
+        "ten-minute-bounce-10m",
+        "ten-minute-bounce-hourly",
+        "ten-minute-bounce-daily-fast",
+        "ten-minute-bounce-daily-slow",
+      ]) {
+        if (saved[key] === undefined) saved[key] = legacyBounce;
+      }
+      delete saved["ten-minute-bounce"];
+      delete saved["ten-minute-touch"];
+      saveStrategyState({ ...defaults, ...saved });
+    }
+    return { ...defaults, ...saved };
+  } catch {
+    return defaults;
   }
-  return { strategies: remote, shouldSaveRemote: false };
 }
 
-export function strategyKeyForMatch(match) {
-  return MATCH_TYPE_TO_STRATEGY_KEY[match?.type] || null;
+export function saveStrategyState(state) {
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-export function alertStrategyEnabled(match, strategies = defaultAlertStrategies()) {
-  const key = strategyKeyForMatch(match);
-  return Boolean(key && strategies[key] !== false);
+export function strategyIdForMatch(match) {
+  return ALERT_STRATEGIES.find((strategy) => strategy.match(match))?.id || "unknown";
 }
 
-export async function fetchAlertStrategies() {
-  const body = await getJson("/api/notifications/strategies");
-  return { ...defaultAlertStrategies(), ...(body.strategies || {}) };
+export function filterMatchesByStrategy(matches = [], strategyState = defaultStrategyState()) {
+  return matches.filter((match) => strategyState[strategyIdForMatch(match)] !== false);
 }
 
-export async function saveAlertStrategiesRemote(strategies) {
-  const body = await postJson("/api/notifications/strategies", { strategies });
-  return { ...defaultAlertStrategies(), ...(body.strategies || {}) };
+export function filterQuotesByStrategy(quotes = [], strategyState = defaultStrategyState()) {
+  return quotes
+    .map((quote) => ({ ...quote, mtf_matches: filterMatchesByStrategy(quote.mtf_matches, strategyState) }))
+    .filter((quote) => quote.mtf_matches.length);
 }

@@ -5,21 +5,13 @@ from app.market_data import (
     aggregate_by_minutes,
     batch_history_bars_chunked,
     daily_volatility,
-    ema_touch_matches,
     ema_cloud_bounce_matches,
     ema_values,
-    mtf_cloud_touch_matches,
     mtf_matches,
-    mtf_proximity,
     mtf_signal_matches,
     nine_ema_touch_matches,
     parse_symbols,
-    playable_trade_alert_match,
-    scanner_read,
-    support_resistance_levels,
     symbol_chunks,
-    trade_plan_from_levels,
-    trade_thesis_from_gates,
 )
 
 
@@ -269,220 +261,20 @@ def test_mtf_matches_alerts_when_current_intraday_candle_touches_hourly_cloud():
     assert "trade_action" not in matches[0]
 
 
-def test_ema_touch_matches_alerts_single_hourly_and_daily_emas_immediately():
-    matches = ema_touch_matches(
-        112,
-        109.5,
-        112.5,
-        {"20": 108, "21": 110, "34": 111, "50": 115, "55": 116},
-        {"20": 95, "21": 96, "50": 112, "55": 120},
-        candle_time="2026-07-02T09:40:00",
-        ten_minute_trend="Chop",
-    )
-
-    assert [match["label"] for match in matches] == [
-        "Hourly 34 EMA touch",
-        "Daily 50 EMA touch",
-    ]
-    assert all(match["status"] == "confirmed" for match in matches)
-    assert all(match["type"] == "ema_touch" for match in matches)
-    assert all("trade_action" not in match for match in matches)
-    assert matches[0]["entry_price"] == 111
-    assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
-
-
-def test_mtf_signal_matches_skips_chop_trend():
-    matches = mtf_signal_matches(
-        112,
-        "Chop",
-        [
-            {"low": 100, "high": 106, "close": 105, "source_count": 2, "session_date": "2026-07-02", "time": "2026-07-02T09:30:00"},
-            {"low": 109.5, "high": 112.5, "close": 112, "source_count": 1, "session_date": "2026-07-02", "time": "2026-07-02T09:40:00"},
-        ],
-        {"5": 106, "9": 108, "12": 109, "34": 107, "50": 110},
-        {"20": 108, "21": 110, "34": 111, "50": 115, "55": 116},
-        {"20": 95, "21": 96, "50": 112, "55": 120},
-    )
-
-    assert matches == []
-
-
-def test_mtf_cloud_touch_matches_alerts_when_latest_candle_touches_and_moves_up():
-    matches = mtf_cloud_touch_matches(
-        116,
-        {"34": 111, "50": 115},
-        {"20": 108, "21": 114, "50": 130, "55": 140},
-        latest_candle={"low": 112, "high": 116, "close": 116, "source_count": 2},
-        candle_time="2026-07-02T09:40:00",
-    )
-
-    assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 20/21"]
-    assert all(match["status"] == "confirmed" for match in matches)
-    assert all(match["direction"] == "bounce_up" for match in matches)
-    assert all(match["type"] == "mtf_cloud_price_touch" for match in matches)
-    assert all(match["trade_action"] == "Long" for match in matches)
-    assert all(match["candle_time"] == "2026-07-02T09:40:00" for match in matches)
-    assert matches[0]["entry_price"] == 116
-    assert matches[0]["cloud_low"] == 111
-    assert matches[0]["cloud_high"] == 115
-
-
-def test_mtf_cloud_touch_matches_alerts_when_latest_candle_touches_and_moves_down():
-    matches = mtf_cloud_touch_matches(
-        107,
-        {"34": 111, "50": 115},
-        {"20": 108, "21": 110, "50": 130, "55": 140},
-        latest_candle={"low": 107, "high": 112, "close": 107, "source_count": 2},
-        candle_time="2026-07-02T09:40:00",
-    )
-
-    assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 20/21"]
-    assert all(match["direction"] == "reject_down" for match in matches)
-    assert all(match["trade_action"] == "Short" for match in matches)
-
-
-def test_mtf_cloud_touch_matches_ignores_price_still_inside_cloud():
-    matches = mtf_cloud_touch_matches(
-        112,
-        {"34": 111, "50": 115},
-        {"20": 108, "21": 114, "50": 130, "55": 140},
-        latest_candle={"low": 112, "high": 116, "close": 112, "source_count": 2},
-    )
-
-    assert matches == []
-
-
-def test_mtf_cloud_touch_matches_ignores_incomplete_10m_candle():
-    matches = mtf_cloud_touch_matches(
-        116,
-        {"34": 111, "50": 115},
-        {"20": 108, "21": 110, "50": 130, "55": 140},
-        latest_candle={"low": 111, "high": 116, "close": 116, "source_count": 1},
-    )
-
-    assert matches == []
-
-
-def test_mtf_signal_matches_adds_cloud_touch_when_live_price_given():
-    matches = mtf_signal_matches(
-        116,
-        "Chop",
-        [
-            {"low": 100, "high": 106, "close": 105, "source_count": 2, "session_date": "2026-07-02", "time": "2026-07-02T09:30:00"},
-            {"low": 109.5, "high": 116.5, "close": 116, "source_count": 2, "session_date": "2026-07-02", "time": "2026-07-02T09:40:00"},
-        ],
-        {"5": 106, "9": 108, "12": 109, "34": 107, "50": 110},
-        {"20": 108, "21": 110, "34": 111, "50": 115, "55": 116},
-        {"20": 95, "21": 96, "50": 118, "55": 120},
-        live_price=116,
-    )
-
-    assert [match["label"] for match in matches] == ["Hourly 34/50"]
-    assert matches[0]["type"] == "mtf_cloud_price_touch"
-    assert matches[0]["direction"] == "bounce_up"
-    assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
-
-
-def test_mtf_signal_matches_waits_for_confirmed_mtf_touch_candle_close():
-    matches = mtf_signal_matches(
-        116,
-        "Chop",
-        [
-            {"low": 100, "high": 106, "close": 105, "source_count": 2, "session_date": "2026-07-02", "time": "2026-07-02T09:30:00"},
-            {"low": 109.5, "high": 116.5, "close": 116, "source_count": 1, "session_date": "2026-07-02", "time": "2026-07-02T09:40:00"},
-        ],
-        {"5": 106, "9": 108, "12": 109, "34": 107, "50": 110},
-        {"20": 108, "21": 110, "34": 111, "50": 115, "55": 116},
-        {"20": 95, "21": 96, "50": 118, "55": 120},
-        live_price=116,
-    )
-
-    assert [match for match in matches if match["type"] == "mtf_cloud_price_touch"] == []
-
-
-def seeded_pullback_candles(
-    touch_candle: dict,
-    trigger_candle: dict,
-    touch_offset_minutes: int = 120,
-    trigger_offset_minutes: int = 130,
-) -> list[dict]:
-    start_time = datetime.fromisoformat("2026-07-02T09:00:00")
-
-    def candle_time(offset_minutes: int) -> str:
-        return (start_time + timedelta(minutes=offset_minutes)).isoformat()
-
-    candles = []
-    for index in range(12):
-        candles.append(
-            {
-                "low": 119,
-                "high": 121,
-                "close": 120,
-                "source_count": 2,
-                "session_date": "2026-07-02",
-                "time": candle_time(index * 10),
-            }
-        )
-    return [
-        *candles,
-        {
-            "source_count": 2,
-            "session_date": "2026-07-02",
-            "time": candle_time(touch_offset_minutes),
-            **touch_candle,
-        },
-        {
-            "source_count": 1,
-            "session_date": "2026-07-02",
-            "time": candle_time(trigger_offset_minutes),
-            **trigger_candle,
-        },
-    ]
-
-
-def test_mtf_signal_matches_alerts_long_after_same_day_mtf_touch_and_10m_5_12_touch():
+def test_mtf_signal_matches_does_not_alert_when_only_prior_candle_touched_hourly_cloud():
     matches = mtf_signal_matches(
         120,
         "Bullish",
-        seeded_pullback_candles(
-            {"low": 105, "high": 110, "close": 105},
-            {"low": 118, "high": 123, "close": 123},
-        ),
+        [
+            {"low": 105, "high": 113, "close": 112, "source_count": 2, "session_date": "2026-07-02", "time": "2026-07-02T09:30:00"},
+            {"low": 118, "high": 122, "close": 120, "source_count": 2, "session_date": "2026-07-02", "time": "2026-07-02T09:40:00"},
+        ],
         {"5": 122, "12": 121, "34": 100, "50": 110},
         {"34": 100, "50": 110},
         {"20": 80, "21": 90, "50": 130, "55": 135},
     )
 
-    assert len(matches) == 1
-    assert matches[0]["label"] == "Curl"
-    assert matches[0]["display_label"] == "Curl: Hourly 34/50 -> above 10m 5/12"
-    assert matches[0]["trade_action"] == "Long"
-    assert matches[0]["trend"] == "Bullish"
-    assert matches[0]["type"] == "long_mtf_5_12_touch"
-    assert matches[0]["mtf_label"] == "Hourly 34/50"
-    assert matches[0]["mtf_touch_time"] == "2026-07-02T11:00:00"
-    assert matches[0]["candle_time"] == "2026-07-02T11:10:00"
-    assert matches[0]["entry_price"] == 122
-    assert matches[0]["risk_plan"]["stop"] == 99
-    assert matches[0]["risk_plan"]["shares"] == 4
-
-
-def test_mtf_signal_matches_ignores_curl_when_mtf_touch_is_older_than_one_hour():
-    matches = mtf_signal_matches(
-        120,
-        "Bullish",
-        seeded_pullback_candles(
-            {"low": 105, "high": 110, "close": 105},
-            {"low": 118, "high": 123, "close": 123},
-            touch_offset_minutes=60,
-            trigger_offset_minutes=130,
-        ),
-        {"5": 122, "12": 121, "34": 100, "50": 110},
-        {"34": 100, "50": 110},
-        {"20": 80, "21": 90, "50": 130, "55": 135},
-    )
-
-    assert [match for match in matches if match["type"] == "long_mtf_5_12_touch"] == []
+    assert matches == []
 
 
 def test_mtf_matches_alerts_bullish_only_after_price_closes_above_cloud():
@@ -527,350 +319,120 @@ def test_mtf_matches_alerts_bearish_only_after_price_closes_below_cloud():
     assert all(match["risk_plan"]["stop_mode"] == "mtf-cloud-3-dollar" for match in matches)
 
 
-def test_mtf_signal_matches_returns_all_matching_mtf_sources_for_long_alert():
+def test_mtf_signal_matches_skips_chop_trend():
+    matches = mtf_signal_matches(
+        105,
+        "Chop",
+        [{"low": 99, "close": 113}],
+        {"5": 101, "12": 102, "34": 100, "50": 110},
+        {"34": 100, "50": 110},
+        {"20": 80, "21": 90, "50": 104, "55": 106},
+    )
+
+    assert matches == []
+
+
+def test_mtf_signal_matches_prefers_confirmed_bounce_over_matching_breakout_name():
     matches = mtf_signal_matches(
         113,
         "Bullish",
-        seeded_pullback_candles(
-            {"low": 99, "high": 106, "close": 105},
-            {"low": 104, "high": 117, "close": 117},
-        ),
+        [
+            {"low": 99, "high": 106, "close": 105, "time": "2026-07-02T09:30:00"},
+            {"low": 104, "high": 114, "close": 113, "time": "2026-07-02T09:40:00"},
+        ],
         {"5": 116, "12": 114, "34": 100, "50": 110},
         {"34": 100, "50": 110},
         {"20": 108, "21": 112, "50": 104, "55": 106},
     )
 
-    assert len(matches) == 1
-    assert matches[0]["mtf_labels"] == [
-        "Hourly 34/50",
-        "Daily 50/55",
+    assert [match["label"] for match in matches][:3] == [
+        "10m bounce Hourly 34/50",
+        "10m bounce Daily 20/21",
+        "10m bounce Daily 50/55",
     ]
-    assert matches[0]["mtf_label"] == "Hourly 34/50 + Daily 50/55"
-    assert matches[0]["display_label"] == "Curl: Hourly 34/50 + Daily 50/55 -> above 10m 5/12"
-    assert matches[0]["trade_action"] == "Long"
+    assert "Hourly 34/50" not in [match["label"] for match in matches]
+    assert "Daily 20/21" not in [match["label"] for match in matches]
+    assert "Daily 50/55" not in [match["label"] for match in matches]
     assert matches[0]["status"] == "confirmed"
-    assert matches[0]["candle_time"] == "2026-07-02T11:10:00"
+    assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
+    assert matches[2]["candle_time"] == "2026-07-02T09:40:00"
 
 
-def test_mtf_signal_matches_allows_bearish_trend_but_still_long_only():
+def test_mtf_signal_matches_dedupes_bearish_rejection_and_matching_breakout_name():
     matches = mtf_signal_matches(
-        101,
+        97,
         "Bearish",
-        seeded_pullback_candles(
-            {"low": 94, "high": 99, "close": 93},
-            {"open": 96, "high": 103, "low": 95, "close": 103},
-        ),
-        {"5": 100, "12": 102, "34": 110, "50": 112},
-        {"34": 94, "50": 98},
-        {"20": 95, "21": 97, "50": 96, "55": 99},
+        [
+            {"low": 113, "high": 121, "close": 118, "time": "2026-07-02T09:30:00"},
+            {"open": 102, "high": 111, "low": 98, "close": 97, "time": "2026-07-02T09:40:00"},
+        ],
+        {"5": 94, "12": 95, "34": 100, "50": 110},
+        {"34": 104, "50": 108},
+        {"20": 105, "21": 107, "50": 106, "55": 109},
     )
 
-    assert len(matches) == 1
-    assert matches[0]["mtf_labels"] == [
-        "Hourly 34/50",
-        "Daily 20/21",
-        "Daily 50/55",
+    labels = [match["label"] for match in matches]
+    assert labels == [
+        "10m bounce Hourly 34/50",
+        "10m bounce Daily 20/21",
+        "10m bounce Daily 50/55",
+        "10m bounce 34/50",
     ]
-    assert matches[0]["mtf_label"] == "Hourly 34/50 + Daily 20/21 + Daily 50/55"
-    assert matches[0]["trade_action"] == "Long"
-    assert matches[0]["trend"] == "Bearish"
+    assert "Hourly 34/50" not in labels
+    assert "Daily 20/21" not in labels
+    assert "Daily 50/55" not in labels
+    assert all(match["display_label"].replace("10m rejection", "10m bounce") == match["label"] for match in matches)
+    assert all(match["trade_action"] == "Short" for match in matches)
 
 
-def test_mtf_signal_matches_requires_curl_mtf_cloud_below_10m_5_12_cloud():
-    matches = mtf_signal_matches(
-        123,
-        "Bullish",
-        seeded_pullback_candles(
-            {"low": 121, "high": 123, "close": 121},
-            {"low": 118, "high": 124, "close": 123},
-        ),
-        {"5": 122, "12": 121, "34": 100, "50": 110},
-        {"34": 121, "50": 123},
-        {"20": 80, "21": 90, "50": 130, "55": 135},
-    )
-
-    assert [match for match in matches if match["type"] == "long_mtf_5_12_touch"] == []
-
-
-def test_mtf_signal_matches_alerts_immediately_on_incomplete_10m_touch():
+def test_mtf_signal_matches_marks_incomplete_10m_candle_as_waiting():
     matches = mtf_signal_matches(
         105,
         "Bullish",
-        seeded_pullback_candles(
-            {"low": 104, "high": 106, "close": 105},
-            {"low": 113, "high": 117, "close": 117},
-        ),
+        [
+            {"low": 94, "high": 98, "close": 95, "source_count": 2, "time": "2026-07-02T09:30:00"},
+            {"low": 99, "high": 106, "close": 105, "source_count": 1, "time": "2026-07-02T09:40:00"},
+        ],
         {"5": 116, "12": 114, "34": 100, "50": 110},
         {"34": 100, "50": 110},
         {"20": 80, "21": 90, "50": 104, "55": 106},
     )
 
-    assert len(matches) == 1
-    assert matches[0]["mtf_labels"] == ["Hourly 34/50", "Daily 50/55"]
-    assert matches[0]["status"] == "confirmed"
-    assert matches[0]["candle_time"] == "2026-07-02T11:10:00"
+    assert [match["label"] for match in matches][:2] == ["Hourly 34/50", "Daily 50/55"]
+    assert [match["status"] for match in matches[:2]] == ["waiting", "waiting"]
+    assert [match["direction"] for match in matches[:2]] == ["inside", "inside"]
+    assert all(match["label"] != "10m bounce 34/50" for match in matches)
+    assert matches[0]["candle_time"] == "2026-07-02T09:40:00"
 
 
-def test_mtf_signal_matches_requires_curl_close_above_10m_5_12_cloud():
-    matches = mtf_signal_matches(
-        120,
-        "Bullish",
-        seeded_pullback_candles(
-            {"low": 105, "high": 110, "close": 105},
-            {"low": 118, "high": 122, "close": 120},
-        ),
-        {"5": 122, "12": 121, "34": 100, "50": 110},
-        {"34": 100, "50": 110},
-        {"20": 80, "21": 90, "50": 130, "55": 135},
-    )
-
-    assert [match for match in matches if match["type"] == "long_mtf_5_12_touch"] == []
-
-
-def test_mtf_signal_matches_ignores_mtf_touch_after_price_already_reclaimed_10m_5_12():
-    matches = mtf_signal_matches(
-        120,
-        "Bullish",
-        seeded_pullback_candles(
-            {"low": 100, "high": 121, "close": 120},
-            {"low": 118, "high": 122, "close": 120},
-        ),
-        {"5": 122, "12": 121, "34": 100, "50": 110},
-        {"34": 100, "50": 110},
-        {"20": 80, "21": 90, "50": 130, "55": 135},
-    )
-
-    assert matches == []
-
-
-def test_mtf_signal_matches_includes_confirmed_10m_34_50_bounce_as_separate_setup():
-    candles = [
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:30:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:40:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:50:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:00:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:10:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:20:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:30:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:40:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:50:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:00:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:10:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:20:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:30:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:40:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:50:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:00:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:10:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:20:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:30:00"},
-        {"low": 100.1, "high": 106, "close": 105, "source_count": 2, "time": "2026-07-02T12:40:00"},
-    ]
-
-    matches = mtf_signal_matches(
-        105,
-        "Chop",
-        candles,
-        {"5": 105, "12": 104, "34": 101, "50": 100},
-        {"34": 90, "50": 95},
-        {"20": 80, "21": 90, "50": 70, "55": 75},
-    )
-
-    assert len(matches) == 1
-    assert matches[0]["label"] == "10m 34/50 Bounce"
-    assert matches[0]["display_label"] == "Good 34/50 Bounce"
-    assert matches[0]["type"] == "10m_34_50_bounce"
-    assert matches[0]["setup_quality"] == "good"
-    assert matches[0]["setup_quality_note"] == "Clear room above 10m 34/50"
-    assert matches[0]["overhead_clouds"] == []
-    assert matches[0]["risk_plan"]["stop"] == 99.1961
-    assert matches[0]["risk_plan"]["shares"] == 17
-    assert matches[0]["trade_action"] == "Long"
-    assert matches[0]["trend"] == "Bullish"
-    assert matches[0]["entry_price"] == 105
-    assert matches[0]["candle_time"] == "2026-07-02T12:40:00"
-
-
-def test_mtf_signal_matches_marks_10m_34_50_bounce_bad_when_mtf_cloud_is_overhead():
-    candles = [
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:30:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:40:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:50:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:00:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:10:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:20:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:30:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:40:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T10:50:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:00:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:10:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:20:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:30:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:40:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T11:50:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:00:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:10:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:20:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T12:30:00"},
-        {"low": 100.1, "high": 106, "close": 105, "source_count": 2, "time": "2026-07-02T12:40:00"},
-    ]
-
-    matches = mtf_signal_matches(
-        105,
-        "Chop",
-        candles,
-        {"5": 105, "12": 104, "34": 101, "50": 100},
-        {"34": 106, "50": 107},
-        {"20": 80, "21": 90, "50": 70, "55": 75},
-    )
-
-    bounce_matches = [match for match in matches if match["type"] == "10m_34_50_bounce"]
-    mtf_touch_matches = [match for match in matches if match["type"] == "mtf_cloud_price_touch"]
-
-    assert len(bounce_matches) == 1
-    assert bounce_matches[0]["display_label"] == "Bad 34/50 Bounce"
-    assert bounce_matches[0]["setup_quality"] == "bad"
-    assert bounce_matches[0]["setup_quality_note"] == "Overhead cloud nearby: Hourly 34/50"
-    assert bounce_matches[0]["overhead_clouds"] == [
-        {"label": "Hourly 34/50", "cloud_low": 106, "cloud_high": 107, "distance_pct": 0.95}
-    ]
-    assert [match["direction"] for match in mtf_touch_matches] == ["reject_down"]
-
-
-def test_mtf_signal_matches_includes_confirmed_bearish_10m_34_50_rejection_as_short_setup():
-    candles = [
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T09:30:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T09:40:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T09:50:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:00:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:10:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:20:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:30:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:40:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:50:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:00:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:10:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:20:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:30:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:40:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:50:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:00:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:10:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:20:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:30:00"},
-        {"low": 114, "high": 119.9, "close": 115, "source_count": 2, "time": "2026-07-02T12:40:00"},
-    ]
-
-    matches = mtf_signal_matches(
-        115,
-        "Chop",
-        candles,
-        {"5": 115, "12": 116, "34": 119, "50": 120},
-        {"34": 130, "50": 135},
-        {"20": 125, "21": 126, "50": 140, "55": 145},
-    )
-
-    assert len(matches) == 1
-    assert matches[0]["label"] == "10m 34/50 Bounce"
-    assert matches[0]["display_label"] == "Good 34/50 Rejection"
-    assert matches[0]["setup_quality"] == "good"
-    assert matches[0]["setup_quality_note"] == "Clear room below 10m 34/50"
-    assert matches[0]["underfoot_clouds"] == []
-    assert matches[0]["risk_plan"]["stop"] == 120.8039
-    assert matches[0]["risk_plan"]["shares"] == 17
-    assert matches[0]["trade_action"] == "Short"
-    assert matches[0]["trend"] == "Bearish"
-    assert matches[0]["direction"] == "reject_below_10m_34_50"
-    assert matches[0]["entry_price"] == 115
-    assert matches[0]["candle_time"] == "2026-07-02T12:40:00"
-
-
-def test_mtf_signal_matches_marks_bearish_10m_34_50_rejection_bad_when_mtf_cloud_is_underfoot():
-    candles = [
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T09:30:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T09:40:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T09:50:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:00:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:10:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:20:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:30:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:40:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T10:50:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:00:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:10:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:20:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:30:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:40:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T11:50:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:00:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:10:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:20:00"},
-        {"low": 119, "high": 121, "close": 120, "source_count": 2, "time": "2026-07-02T12:30:00"},
-        {"low": 114, "high": 119.9, "close": 115, "source_count": 2, "time": "2026-07-02T12:40:00"},
-    ]
-
-    matches = mtf_signal_matches(
-        115,
-        "Chop",
-        candles,
-        {"5": 115, "12": 116, "34": 119, "50": 120},
-        {"34": 113, "50": 114},
-        {"20": 125, "21": 126, "50": 140, "55": 145},
-    )
-
-    bounce_matches = [match for match in matches if match["type"] == "10m_34_50_bounce"]
-
-    assert len(bounce_matches) == 1
-    assert bounce_matches[0]["display_label"] == "Bad 34/50 Rejection"
-    assert bounce_matches[0]["setup_quality"] == "bad"
-    assert bounce_matches[0]["setup_quality_note"] == "Underfoot cloud nearby: Hourly 34/50"
-    assert bounce_matches[0]["underfoot_clouds"] == [
-        {"label": "Hourly 34/50", "cloud_low": 113, "cloud_high": 114, "distance_pct": 0.87}
-    ]
-
-
-def test_mtf_signal_matches_waits_for_confirmed_10m_34_50_bounce_close():
-    candles = [
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:30:00"},
-        {"low": 99, "high": 101, "close": 100, "source_count": 2, "time": "2026-07-02T09:40:00"},
-        {"low": 100, "high": 106, "close": 105, "source_count": 1, "time": "2026-07-02T09:50:00"},
-    ]
-
-    matches = mtf_signal_matches(
-        105,
-        "Bullish",
-        candles,
-        {"5": 105, "12": 104, "34": 101, "50": 100},
-        {"34": 90, "50": 95},
-        {"20": 80, "21": 90, "50": 70, "55": 75},
-    )
-
-    assert [match for match in matches if match["type"] == "10m_34_50_bounce"] == []
-
-
-def test_mtf_signal_matches_requires_move_up_into_10m_5_12():
-    matches = mtf_signal_matches(
-        105,
-        "Bullish",
-        [
-            {"low": 94, "high": 98, "close": 106, "source_count": 2, "time": "2026-07-02T09:30:00"},
-            {"low": 99, "high": 106, "close": 105, "source_count": 1, "time": "2026-07-02T09:40:00"},
-        ],
-        {"5": 104, "12": 106, "34": 90, "50": 95},
-        {"34": 94, "50": 98},
-        {"20": 80, "21": 90, "50": 94, "55": 98},
-    )
-
-    assert matches == []
-
-
-def test_mtf_signal_matches_requires_mtf_touch_from_same_trading_day():
+def test_mtf_signal_matches_waits_for_incomplete_breakouts_until_candle_close():
     matches = mtf_signal_matches(
         113,
         "Bullish",
         [
-            {"low": 100, "high": 110, "close": 106, "source_count": 2, "session_date": "2026-07-01", "time": "2026-07-01T15:50:00"},
-            {"low": 111, "high": 116, "close": 113, "source_count": 2, "session_date": "2026-07-02", "time": "2026-07-02T09:40:00"},
+            {"low": 94, "high": 98, "close": 95, "source_count": 2, "time": "2026-07-02T09:30:00"},
+            {"low": 109, "high": 114, "close": 113, "source_count": 1, "time": "2026-07-02T09:40:00"},
+        ],
+        {"5": 116, "12": 114, "34": 100, "50": 110},
+        {"34": 100, "50": 110},
+        {"20": 80, "21": 90, "50": 104, "55": 106},
+    )
+
+    statuses = {match["label"]: match["status"] for match in matches}
+    assert statuses["Hourly 34/50"] == "confirmed"
+    assert {match["label"]: match["direction"] for match in matches}["Hourly 34/50"] == "touch"
+    assert "10m bounce 34/50" not in statuses
+    assert "Daily 20/21" not in statuses
+    assert "Daily 50/55" not in statuses
+
+
+def test_mtf_signal_matches_does_not_alert_when_price_was_already_above_clouds():
+    matches = mtf_signal_matches(
+        113,
+        "Bullish",
+        [
+            {"low": 110, "high": 115, "close": 112, "source_count": 2, "time": "2026-07-02T09:30:00"},
+            {"low": 111, "high": 116, "close": 113, "source_count": 2, "time": "2026-07-02T09:40:00"},
         ],
         {"5": 116, "12": 114, "34": 100, "50": 110},
         {"34": 100, "50": 110},
@@ -995,7 +557,7 @@ def test_ema_cloud_bounce_matches_uses_latest_10m_candle_not_previous_complete()
     assert matches == []
 
 
-def test_mtf_signal_matches_ignores_single_candle_without_prior_mtf_touch():
+def test_mtf_signal_matches_waits_for_a_plus_plus_bullish_breakout_before_candle_close():
     matches = mtf_signal_matches(
         113,
         "Bullish",
@@ -1005,10 +567,10 @@ def test_mtf_signal_matches_ignores_single_candle_without_prior_mtf_touch():
         {"20": 122, "21": 123, "50": 124, "55": 125},
     )
 
-    assert matches == []
+    assert all(match["label"] != "10m bounce 34/50" for match in matches)
 
 
-def test_mtf_signal_matches_still_ignores_complete_single_candle_without_prior_mtf_touch():
+def test_mtf_signal_matches_confirms_a_plus_plus_bounce_after_candle_close():
     matches = mtf_signal_matches(
         113,
         "Bullish",
@@ -1018,7 +580,8 @@ def test_mtf_signal_matches_still_ignores_complete_single_candle_without_prior_m
         {"20": 122, "21": 123, "50": 124, "55": 125},
     )
 
-    assert matches == []
+    assert [match["label"] for match in matches] == ["10m bounce 34/50"]
+    assert all(match["status"] == "confirmed" for match in matches)
 
 
 def test_ema_cloud_bounce_ignores_10m_bullish_price_below_cloud():
@@ -1127,377 +690,3 @@ def test_daily_volatility_grades_slow_names_from_last_three_days():
         "average_range_pct": 1,
         "sample_size": 3,
     }
-
-
-def test_mtf_proximity_returns_nearest_cloud_with_range_ratio():
-    proximity = mtf_proximity(
-        100,
-        {"34": 103, "50": 105},
-        {"20": 94, "21": 95, "50": 110, "55": 112},
-        [
-            {"high": 106, "low": 100},
-            {"high": 108, "low": 102},
-            {"high": 109, "low": 103},
-        ],
-    )
-
-    assert proximity["range_unit"] == 6
-    assert proximity["nearest"] == {
-        "label": "Hourly 34/50",
-        "timeframe": "1h",
-        "cloud_low": 103,
-        "cloud_high": 105,
-        "direction": "above",
-        "distance": 3,
-        "distance_pct": 3,
-        "range_ratio": 0.5,
-        "status": "near",
-    }
-    assert [cloud["label"] for cloud in proximity["clouds"]] == ["Hourly 34/50", "Daily 20/21", "Daily 50/55"]
-
-
-def test_mtf_proximity_marks_inside_cloud_as_highest_priority():
-    proximity = mtf_proximity(
-        104,
-        {"34": 103, "50": 105},
-        {"20": 94, "21": 95, "50": 110, "55": 112},
-        [{"high": 108, "low": 102}, {"high": 109, "low": 103}, {"high": 110, "low": 104}],
-    )
-
-    assert proximity["nearest"]["label"] == "Hourly 34/50"
-    assert proximity["nearest"]["direction"] == "inside"
-    assert proximity["nearest"]["distance"] == 0
-    assert proximity["nearest"]["range_ratio"] == 0
-    assert proximity["nearest"]["status"] == "inside"
-
-
-def test_support_resistance_levels_include_hourly_daily_clouds_and_swings():
-    hourly = [
-        {"high": 100, "low": 96},
-        {"high": 104, "low": 97},
-        {"high": 108, "low": 98},
-        {"high": 104, "low": 97},
-        {"high": 101, "low": 96},
-        {"high": 99, "low": 94},
-        {"high": 98, "low": 92},
-        {"high": 100, "low": 95},
-    ]
-    daily = [
-        {"high": 120, "low": 90},
-        {"high": 125, "low": 88},
-        {"high": 130, "low": 86},
-        {"high": 124, "low": 89},
-        {"high": 121, "low": 92},
-    ]
-
-    levels = support_resistance_levels(
-        100,
-        hourly,
-        daily,
-        {"34": 94, "50": 96},
-        {"20": 108, "21": 110, "50": 90, "55": 92},
-    )
-
-    assert levels["support"][0]["label"] == "Hourly 34/50"
-    assert levels["support"][0]["side"] == "support"
-    assert levels["resistance"][0]["label"] == "Daily 20/21"
-    assert levels["resistance"][0]["side"] == "resistance"
-    assert any(level["kind"] == "swing_high" for level in levels["resistance"])
-
-
-def test_trade_plan_from_levels_calculates_reward_to_risk_for_long():
-    levels = {
-        "support": [{"label": "Hourly 34/50", "timeframe": "1h", "kind": "ema_cloud", "side": "support", "low": 94, "high": 96}],
-        "resistance": [{"label": "Daily 20/21", "timeframe": "daily", "kind": "ema_cloud", "side": "resistance", "low": 110, "high": 112}],
-    }
-
-    plan = trade_plan_from_levels(
-        100,
-        "Bullish",
-        levels,
-        [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "entry_price": 100, "display_label": "Curl"}],
-        risk_amount=100,
-        fixed_stop_buffer=1,
-    )
-
-    assert plan["action"] == "Long"
-    assert plan["entry"] == 100
-    assert plan["stop"] == 93
-    assert plan["target"] == 110
-    assert plan["risk_per_share"] == 7
-    assert plan["reward_per_share"] == 10
-    assert plan["reward_risk"] == 1.43
-    assert plan["grade"] == "thin"
-    assert plan["is_acceptable"] is False
-    assert plan["risk_plan"]["shares"] == 14
-
-
-def test_trade_plan_from_levels_calculates_reward_to_risk_for_short():
-    levels = {
-        "support": [{"label": "Daily 20/21", "timeframe": "daily", "kind": "ema_cloud", "side": "support", "low": 88, "high": 90}],
-        "resistance": [{"label": "Hourly 34/50", "timeframe": "1h", "kind": "ema_cloud", "side": "resistance", "low": 104, "high": 106}],
-    }
-
-    plan = trade_plan_from_levels(
-        100,
-        "Bearish",
-        levels,
-        [{"type": "10m_34_50_bounce", "trade_action": "Short", "entry_price": 100, "setup_quality": "good"}],
-        fixed_stop_buffer=1,
-    )
-
-    assert plan["action"] == "Short"
-    assert plan["stop"] == 107
-    assert plan["target"] == 90
-    assert plan["reward_risk"] == 1.43
-    assert plan["stop_level"]["label"] == "Hourly 34/50"
-    assert plan["target_level"]["label"] == "Daily 20/21"
-
-
-def test_trade_plan_from_levels_keeps_multiple_targets_for_rr():
-    levels = {
-        "support": [{"label": "Prior support", "timeframe": "daily", "kind": "swing_low", "side": "support", "low": 117.5, "high": 118.2}],
-        "resistance": [
-            {"label": "T1", "timeframe": "daily", "kind": "swing_high", "side": "resistance", "low": 124.78, "high": 124.78},
-            {"label": "T2", "timeframe": "daily", "kind": "swing_high", "side": "resistance", "low": 127.51, "high": 127.51},
-            {"label": "T3", "timeframe": "daily", "kind": "swing_high", "side": "resistance", "low": 129.81, "high": 129.81},
-        ],
-    }
-
-    plan = trade_plan_from_levels(
-        119.42,
-        "Bullish",
-        levels,
-        [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "entry_price": 119.42, "display_label": "Gap support reclaim"}],
-        fixed_stop_buffer=1,
-    )
-
-    assert [target["label"] for target in plan["targets"]] == ["T1", "T2", "T3"]
-    assert [target["reward_risk"] for target in plan["targets"]] == [1.84, 2.77, 3.56]
-    assert plan["is_acceptable"] is False
-    assert plan["has_acceptable_target"] is True
-
-
-def test_trade_thesis_waits_when_setup_exists_without_confirmation():
-    thesis = trade_thesis_from_gates(
-        119.42,
-        "Bullish",
-        {"support": [{"label": "Prior resistance", "low": 116.5, "high": 118.2}], "resistance": [{"label": "Target", "low": 127.51, "high": 127.51}]},
-        [],
-        {"action": "Long", "entry": 119.42, "stop": 115.5, "targets": [{"label": "Target", "price": 127.51, "reward_risk": 2.1, "is_acceptable": True}], "has_acceptable_target": True},
-        {"kind": "wait", "reason": "hold support", "detail": "Setup exists, but wait for support to hold."},
-    )
-
-    assert thesis["decision"] == "Wait"
-    assert thesis["setup"]["status"] is True
-    assert thesis["confirmation"]["status"] is False
-    assert thesis["reward_risk"]["status"] is True
-    assert thesis["reason"] == "hold support"
-
-
-def test_trade_thesis_playable_when_confirmed_and_rr_is_good():
-    thesis = trade_thesis_from_gates(
-        119.42,
-        "Bullish",
-        {"support": [{"label": "Prior resistance", "low": 116.5, "high": 118.2}], "resistance": [{"label": "Target", "low": 127.51, "high": 127.51}]},
-        [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "entry_price": 119.42, "display_label": "Support bounce"}],
-        {"action": "Long", "entry": 119.42, "stop": 115.5, "targets": [{"label": "Target", "price": 127.51, "reward_risk": 2.1, "is_acceptable": True}], "has_acceptable_target": True},
-        {"kind": "entry", "reason": "in 5/12", "detail": "Confirmed bounce."},
-    )
-
-    assert thesis["decision"] == "Playable"
-    assert thesis["setup"]["label"] == "Support bounce"
-    assert thesis["confirmation"]["status"] is True
-    assert thesis["reward_risk"]["status"] is True
-
-
-def test_trade_thesis_waits_when_mtf_setup_has_rr_but_no_10m_cloud_entry():
-    thesis = trade_thesis_from_gates(
-        119.42,
-        "Bullish",
-        {"support": [{"label": "Prior resistance", "low": 116.5, "high": 118.2}], "resistance": [{"label": "Target", "low": 127.51, "high": 127.51}]},
-        [{"type": "mtf_cloud_price_touch", "trade_action": "Long", "entry_price": 119.42, "display_label": "Daily 20/21 bounced up from"}],
-        {
-            "action": "Long",
-            "entry": 119.42,
-            "stop": 115.5,
-            "targets": [{"label": "Target", "price": 127.51, "reward_risk": 2.1, "is_acceptable": True}],
-            "has_acceptable_target": True,
-        },
-        {"kind": "wait", "reason": "5/12 trigger", "detail": "Wait for the 10m 5/12 cloud entry trigger."},
-    )
-
-    assert thesis["decision"] == "Wait"
-    assert thesis["confirmation"]["status"] is False
-    assert thesis["reward_risk"]["status"] is True
-    assert thesis["reason"] == "5/12 trigger"
-
-
-def test_trade_thesis_waits_when_tp1_reward_risk_is_thin_even_if_later_target_is_good():
-    thesis = trade_thesis_from_gates(
-        119.42,
-        "Bullish",
-        {"support": [{"label": "Prior resistance", "low": 116.5, "high": 118.2}], "resistance": [{"label": "T1", "low": 124.78, "high": 124.78}, {"label": "T2", "low": 127.51, "high": 127.51}]},
-        [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "entry_price": 119.42, "display_label": "Support bounce"}],
-        {
-            "action": "Long",
-            "entry": 119.42,
-            "stop": 115.5,
-            "targets": [
-                {"label": "T1", "price": 124.78, "reward_risk": 1.84, "is_acceptable": False},
-                {"label": "T2", "price": 127.51, "reward_risk": 2.77, "is_acceptable": True},
-            ],
-            "grade": "thin",
-            "has_acceptable_target": True,
-        },
-        {"kind": "entry", "reason": "in 5/12", "detail": "Confirmed bounce."},
-    )
-
-    assert thesis["decision"] == "Wait"
-    assert thesis["reason"] == "R:R not ready"
-    assert thesis["reward_risk"]["status"] is False
-    assert thesis["reward_risk"]["label"] == "TP1 1.84R to T1"
-
-
-def test_playable_trade_alert_match_uses_tp1_trade_plan_levels():
-    match = playable_trade_alert_match(
-        "AAOI",
-        119.42,
-        "Bullish",
-        {
-            "action": "Long",
-            "entry": 119.42,
-            "stop": 115.5,
-            "targets": [
-                {"label": "T1", "price": 127.51, "reward_risk": 2.77, "is_acceptable": True},
-                {"label": "T2", "price": 129.81, "reward_risk": 3.56, "is_acceptable": True},
-            ],
-            "risk_plan": {"shares": 25},
-            "source_match_type": "long_mtf_5_12_touch",
-        },
-        {"decision": "Playable", "bias": "Long"},
-        {"kind": "entry", "candle_time": "2026-07-13T15:10:00"},
-    )
-
-    assert match["type"] == "playable_trade"
-    assert match["status"] == "confirmed"
-    assert match["entry_price"] == 119.42
-    assert match["stop_price"] == 115.5
-    assert match["target_price"] == 127.51
-    assert match["reward_risk"] == 2.77
-    assert match["risk_plan"]["shares"] == 25
-
-
-def test_playable_trade_alert_match_rejects_thin_tp1_even_when_later_target_is_good():
-    match = playable_trade_alert_match(
-        "AAOI",
-        119.42,
-        "Bullish",
-        {
-            "action": "Long",
-            "entry": 119.42,
-            "stop": 115.5,
-            "targets": [
-                {"label": "T1", "price": 124.78, "reward_risk": 1.84, "is_acceptable": False},
-                {"label": "T2", "price": 127.51, "reward_risk": 2.77, "is_acceptable": True},
-            ],
-        },
-        {"decision": "Playable", "bias": "Long"},
-        {"kind": "entry", "candle_time": "2026-07-13T15:10:00"},
-    )
-
-    assert match is None
-
-
-def test_scanner_read_entry_requires_price_inside_5_12_after_mtf_resistance_clears():
-    read = scanner_read(
-        100,
-        "Bullish",
-        {"5": 99, "12": 101},
-        {
-            "clouds": [
-                {"label": "Hourly 34/50", "cloud_low": 94, "cloud_high": 96, "direction": "below", "distance_pct": 4},
-                {"label": "Daily 20/21", "cloud_low": 90, "cloud_high": 91, "direction": "below", "distance_pct": 9},
-            ]
-        },
-        [
-            {
-                "type": "long_mtf_5_12_touch",
-                "trade_action": "Long",
-                "display_label": "Curl: Hourly 34/50 -> above 10m 5/12",
-                "entry_price": 100,
-                "candle_time": "2026-07-13T15:10:00",
-            }
-        ],
-    )
-
-    assert read["kind"] == "entry"
-    assert read["label"] == "Entry"
-    assert read["reason"] == "in 5/12"
-    assert read["source_match_type"] == "long_mtf_5_12_touch"
-    assert read["support"]["label"] == "Hourly 34/50"
-
-
-def test_scanner_read_waits_for_mtf_resistance_and_5_12_pullback():
-    resistance_read = scanner_read(
-        100,
-        "Bullish",
-        {"5": 99, "12": 101},
-        {"clouds": [{"label": "Daily 50/55", "cloud_low": 101, "cloud_high": 103, "direction": "above", "distance_pct": 1}]},
-        [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "entry_price": 100}],
-    )
-    extended_read = scanner_read(
-        103,
-        "Bullish",
-        {"5": 99, "12": 101},
-        {"clouds": [{"label": "Daily 50/55", "cloud_low": 95, "cloud_high": 96, "direction": "below", "distance_pct": 6.8}]},
-        [{"type": "long_mtf_5_12_touch", "trade_action": "Long", "entry_price": 103}],
-    )
-
-    assert resistance_read["kind"] == "wait"
-    assert resistance_read["reason"] == "break D 50/55"
-    assert extended_read["kind"] == "wait"
-    assert extended_read["reason"] == "pullback 5/12"
-
-
-def test_scanner_read_bearish_entry_uses_short_side_5_12_zone():
-    read = scanner_read(
-        100,
-        "Bearish",
-        {"5": 99, "12": 101},
-        {
-            "clouds": [
-                {"label": "Hourly 34/50", "cloud_low": 101, "cloud_high": 102, "direction": "above", "distance_pct": 1},
-                {"label": "Daily 20/21", "cloud_low": 90, "cloud_high": 91, "direction": "below", "distance_pct": 9},
-            ]
-        },
-        [
-            {
-                "type": "10m_34_50_bounce",
-                "trade_action": "Short",
-                "display_label": "Good 34/50 Rejection",
-                "setup_quality": "good",
-                "entry_price": 100,
-                "candle_time": "2026-07-13T15:10:00",
-            }
-        ],
-    )
-
-    assert read["kind"] == "entry"
-    assert read["label"] == "Entry"
-    assert read["reason"] == "in 5/12"
-    assert read["source_match_type"] == "10m_34_50_bounce"
-    assert read["resistance"]["label"] == "Hourly 34/50"
-
-
-def test_scanner_read_bearish_waits_for_support_break_instead_of_skipping():
-    read = scanner_read(
-        100,
-        "Bearish",
-        {"5": 99, "12": 101},
-        {"clouds": [{"label": "Daily 50/55", "cloud_low": 98, "cloud_high": 99, "direction": "below", "distance_pct": 1}]},
-        [{"type": "10m_34_50_bounce", "trade_action": "Short", "entry_price": 100, "setup_quality": "good"}],
-    )
-
-    assert read["kind"] == "wait"
-    assert read["reason"] == "break D 50/55"

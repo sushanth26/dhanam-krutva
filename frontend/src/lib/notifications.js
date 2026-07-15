@@ -39,17 +39,12 @@ export async function loadNotificationState() {
     permission: Notification.permission,
     appEnabled,
     webPushConfigured: Boolean(config.web_push_configured && config.vapid_public_key),
-    mtfPushEnabled: Boolean(config.mtf_push_enabled),
-    monitorRunning: Boolean(config.monitor_running),
-    marketWindow: Boolean(config.market_window),
-    pollSeconds: config.poll_seconds,
-    subscriptions: Number(config.subscriptions) || 0,
     vapidPublicKey: config.vapid_public_key,
     subscribed: Boolean(subscription),
   };
 }
 
-export async function enableNotifications() {
+export async function enableNotifications(alertStrategies = {}) {
   const support = notificationSupport();
   if (!support.notifications || !support.serviceWorker) {
     throw new Error("This browser does not support app notifications.");
@@ -64,18 +59,13 @@ export async function enableNotifications() {
   setWebNotificationsEnabled(true);
   const config = await getJson("/api/notifications/config");
   const registration = await registerNotificationWorker();
-  const subscription = support.push ? await ensureServerSubscription(registration, config) : null;
+  const subscription = support.push ? await ensureServerSubscription(registration, config, null, alertStrategies) : null;
 
   return {
     supported: true,
     permission,
     appEnabled: true,
     webPushConfigured: Boolean(config.web_push_configured && config.vapid_public_key),
-    mtfPushEnabled: Boolean(config.mtf_push_enabled),
-    monitorRunning: Boolean(config.monitor_running),
-    marketWindow: Boolean(config.market_window),
-    pollSeconds: config.poll_seconds,
-    subscriptions: Number(config.subscriptions) || 0,
     subscribed: Boolean(subscription),
   };
 }
@@ -137,19 +127,15 @@ export async function setAppBadgeCount(count) {
   return false;
 }
 
-export async function syncNotificationPreferences() {
+export async function syncNotificationPreferences(alertStrategies = {}) {
   const support = notificationSupport();
   if (!webNotificationsEnabled() || !support.notifications || !support.serviceWorker || !support.push || Notification.permission !== "granted") {
     return false;
   }
   const config = await getJson("/api/notifications/config");
   const registration = await registerNotificationWorker();
-  const subscription = await ensureServerSubscription(registration, config);
+  const subscription = await ensureServerSubscription(registration, config, null, alertStrategies);
   return Boolean(subscription);
-}
-
-export async function sendTestPushNotification() {
-  return postJson("/api/notifications/test", {});
 }
 
 async function registerNotificationWorker() {
@@ -177,7 +163,7 @@ async function removeExistingSubscription(registration) {
   return true;
 }
 
-async function ensureServerSubscription(registration, config, currentSubscription = null) {
+async function ensureServerSubscription(registration, config, currentSubscription = null, alertStrategies = {}) {
   if (!config.web_push_configured || !config.vapid_public_key) return currentSubscription;
   if (currentSubscription && !subscriptionMatchesKey(currentSubscription, config.vapid_public_key)) {
     await currentSubscription.unsubscribe();
@@ -189,6 +175,7 @@ async function ensureServerSubscription(registration, config, currentSubscriptio
   });
   await postJson("/api/notifications/subscribe", {
     subscription: subscription.toJSON(),
+    alert_strategies: alertStrategies,
   });
   return subscription;
 }

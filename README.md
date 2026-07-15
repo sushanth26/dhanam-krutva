@@ -1,73 +1,6 @@
 # Dhanam Krutva
 
-Personal Webull dashboard and scanner for watchlists, 10-minute cloud trends, long-only setup alerts, account visibility, order history, and browser/phone notifications.
-
-The browser talks only to this FastAPI backend. Webull credentials, token files, push subscriptions, and guard state stay server-side.
-
-## Features
-
-- **Scanner tab**
-  - Live Webull price polling for saved watchlists.
-  - Watchlist tabs with add/delete symbol controls.
-  - Default OG list seeded with the current active symbols.
-  - Symbols grouped by 10-minute cloud trend:
-    - Bullish: 10m EMA 5/12 cloud above 10m EMA 34/50 cloud.
-    - Bearish: 10m EMA 5/12 cloud below 10m EMA 34/50 cloud.
-    - Chop: overlapping or incomplete cloud structure.
-  - Risk settings for max risk, stop mode, and cloud buffer.
-  - Per-watchlist "Do not auto trade" toggle.
-  - Settings menu toggles active alert strategies: Curls, 10m 34/50 Bounce, and MTF Cloud Touch. Toggling a strategy also stops it from sending phone push notifications, not just from showing in the table.
-
-- **MTFs tab**
-  - Live setup and touch alert table.
-  - Shows live setup count, Curl count, 10m 34/50 Bounce count, Cloud Touch count, and unique symbols.
-  - Each alert includes symbol, watchlist, setup, trend, entry, trigger, and alert candle time.
-
-- **Curls**
-  - A Curl is a good B setup where price touches an MTF cloud, then moves back above the 10m EMA 5/12 cloud.
-  - The app first checks 10m cloud state using EMA 5/12 and EMA 34/50.
-  - Curl alerts are allowed only when the 10m state is Bullish or Bearish.
-  - During the same trading day, price must have touched at least one MTF cloud:
-    - Hourly 34/50
-    - Daily 20/21
-    - Daily 50/55
-  - The MTF touch only counts if that candle is still below the 10m EMA 5/12 cloud.
-  - A Curl alert fires when the latest 10m candle moves up above the 10m EMA 5/12 cloud.
-  - Curls are long-only even when the 10m state is Bearish.
-
-- **10m 34/50 Bounce**
-  - A separate long-only setup from Curls.
-  - No MTF touch is required.
-  - Price must touch/pull into the 10m EMA 34/50 cloud.
-  - The 10m candle must be confirmed/closed.
-  - The confirmed 10m candle must close back above the top of the 10m EMA 34/50 cloud.
-  - The confirmed 10m candle must close above the prior confirmed 10m candle.
-  - Old alert strategy toggles and the old Alerts tab were removed.
-
-- **MTF Cloud Touch**
-  - A non-directional, informational alert (no entry/exit/trade action) — fires whenever the live price sits inside the Hourly 34/50, Daily 20/21, or Daily 50/55 cloud.
-  - Unlike Curls and 10m 34/50 Bounce, no 10m reclaim/close confirmation is required — a live price touch alone triggers it.
-  - Fires once per 10-minute candle per cloud while price stays inside it; goes quiet again once price leaves the cloud (or the candle rolls over and price is no longer touching).
-
-- **Notifications**
-  - In-app notification drawer with unread badge.
-  - Browser/device notifications for new setup alerts when enabled.
-  - Optional Web Push support for closed-app phone notifications with VAPID keys.
-  - Service worker and app badge support.
-
-- **Accounts and backend APIs**
-  - Webull connection status.
-  - Account list.
-  - Balance, positions, orders, and snapshot endpoints.
-  - Watchlists persisted server-side.
-  - TradingView analysis endpoint for supported timeframes.
-  - Server-side guarded trade endpoints for one-share buys and bracketed auto-long orders.
-
-- **Safety**
-  - HTTP Basic Auth can protect all routes except `/health`.
-  - Webull guard cooldowns help avoid repeated verification/rate-limit lockouts.
-  - Trading endpoints require approved watchlist symbols and a margin account.
-  - `.env`, token caches, guard files, push subscriptions, and local generated state are ignored by Git.
+Read-only Webull account dashboard for connection testing. This first version does not place, preview, modify, or cancel trades.
 
 ## Setup
 
@@ -80,62 +13,15 @@ cp .env.example .env
 
 Edit `.env` with your Webull OpenAPI credentials.
 
-The frontend package expects Node `>=22.12.0`. Older Node versions may still build, but Vite prints a warning.
-
-## Environment
-
-Required for Webull:
+This project installs Webull's SDK from your downloaded folder:
 
 ```text
-WEBULL_APP_KEY=...
-WEBULL_APP_SECRET=...
-WEBULL_ENV=prod
-WEBULL_REGION=us
+/Users/sushanth/Downloads/webull-openapi-python-sdk-main
 ```
 
-Use `WEBULL_ENV=uat` for Webull UAT testing with test credentials, or `WEBULL_ENV=prod` for a real account.
+For Webull UAT testing, Webull publishes shared test credentials in the official SDK docs. Set `WEBULL_ENV=uat`. For your real account, set `WEBULL_ENV=prod` and use your production app key/secret.
 
-Recommended for any public deployment:
-
-```text
-APP_USERNAME=sushanth
-APP_PASSWORD=<strong private password>
-```
-
-Optional local/server persistence:
-
-```text
-WEBULL_TOKEN_DIR=.webull-token
-WATCHLIST_FILE=.watchlists.json
-ALERT_HISTORY_FILE=.mtf-alert-history.sqlite3
-LIVE_DATA_UNLOCK_FILE=.live-data-unlock.json
-WEBULL_GUARD_ENABLED=true
-WEBULL_GUARD_FILE=.webull-guard.json
-```
-
-Optional Web Push:
-
-```text
-VAPID_PUBLIC_KEY=...
-VAPID_PRIVATE_KEY=...
-VAPID_SUBJECT=mailto:you@example.com
-PUSH_SUBSCRIPTION_FILE=.web-push-subscriptions.json
-MTF_PUSH_ENABLED=true
-MTF_PUSH_POLL_SECONDS=300
-MTF_PUSH_TIMEZONE=America/Chicago
-```
-
-`MTF_PUSH_ENABLED` defaults to `false`; set it to `true` and restart FastAPI to allow closed-app phone push alerts. Leave it off to prevent background Webull live-data polling. Manual app refresh buttons still work.
-
-When `MTF_PUSH_ENABLED=true`, background live-data refreshes run during the market refresh window as long as at least one push subscription is saved. The phone push monitor does not require the app to be open first.
-
-Generate VAPID keys with:
-
-```bash
-npx web-push generate-vapid-keys
-```
-
-## Run Locally
+## Run
 
 Production-style local run serves the built React app from FastAPI:
 
@@ -153,13 +39,18 @@ For frontend development, run FastAPI and Vite in separate terminals:
 npm --prefix frontend run dev
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite proxies `/api` requests to FastAPI.
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite proxies `/api`
+requests to FastAPI.
 
 ## Railway Personal Deploy
 
+This app is safe to start as a personal Railway deploy because Webull credentials
+stay server-side and the browser only calls this FastAPI backend.
+
 1. Create a Railway project from this GitHub repo.
-2. Add a persistent volume mounted at `/data`.
-3. Set Railway variables:
+2. Add a persistent volume mounted at `/data` if you want the Webull SDK token
+   cache to survive restarts.
+3. Set these Railway variables:
 
 ```text
 WEBULL_APP_KEY=...
@@ -167,155 +58,77 @@ WEBULL_APP_SECRET=...
 WEBULL_ENV=prod
 WEBULL_REGION=us
 WEBULL_TOKEN_DIR=/data/.webull-token
-WATCHLIST_FILE=/data/watchlists.json
-ALERT_HISTORY_FILE=/data/mtf-alert-history.sqlite3
-LIVE_DATA_UNLOCK_FILE=/data/live-data-unlock.json
 WEBULL_GUARD_ENABLED=true
 WEBULL_GUARD_FILE=/data/webull-guard.json
 APP_USERNAME=sushanth
 APP_PASSWORD=<strong private password>
 ```
 
-For Web Push on Railway, also set:
+`WEBULL_GUARD_ENABLED=false` is an emergency override for one controlled retry
+when Webull support has reset a verification/rate-limit lock. Turn it back on
+after the retry.
+
+For phone app-style MTF push notifications, generate VAPID keys once:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Then add these Railway variables:
 
 ```text
 VAPID_PUBLIC_KEY=...
 VAPID_PRIVATE_KEY=...
 VAPID_SUBJECT=mailto:you@example.com
 PUSH_SUBSCRIPTION_FILE=/data/push-subscriptions.json
-MTF_PUSH_ENABLED=true
 MTF_PUSH_POLL_SECONDS=60
 MTF_PUSH_TIMEZONE=America/Chicago
 ```
 
-After deploy, open the app on the device, sign in, and tap **Enable Notifications** once. Keep the same VAPID keys and keep `PUSH_SUBSCRIPTION_FILE` plus `ALERT_HISTORY_FILE` on the `/data` volume so subscriptions and alert history survive deploys and stay shared between the browser and installed app.
+After the first deploy, open the installed phone app, sign in, and tap
+`Enable Notifications` once. Keep the same VAPID keys in Railway and keep
+`PUSH_SUBSCRIPTION_FILE` on the `/data` volume. On later deploys, the phone app
+automatically re-registers its service worker and re-syncs the push subscription
+with Railway when it opens. The backend will poll Webull during the configured
+market refresh window and send a push notification when the MTF table changes.
 
-Railway uses `nixpacks.toml` to install Python dependencies, install/build the React frontend into `app/static`, and run:
+Railway uses `nixpacks.toml` to install Python dependencies, install the React
+frontend with `npm ci`, build React into `app/static`, and run:
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
-The `/health` endpoint is public for Railway health checks. All other routes are protected when `APP_PASSWORD` is set.
+The `/health` endpoint is intentionally public for Railway health checks. All
+other routes are protected with HTTP Basic Auth when `APP_PASSWORD` is set.
 
-## Useful Commands
+## Strategy Rules
 
-```bash
-npm --prefix frontend run build
-.venv/bin/pytest tests/test_market_data.py tests/test_notifications.py -q
-.venv/bin/uvicorn app.main:app --reload --port 8000
-```
+| Strategy | Entry rule | Exit rule |
+| --- | --- | --- |
+| Hourly 34/50 | Alert when price closes out of the hourly 34/50 EMA cloud after being inside/beyond it. Long above cloud, short below cloud. | Target is 1:1 from entry to SL. Long SL is $3 below the hourly 34/50 cloud; short SL is $3 above it. |
+| Daily 20/21 | Alert when price closes out of the daily 20/21 EMA cloud. Long above cloud, short below cloud. | Target is 1:1 from entry to SL. Long SL is $3 below the daily 20/21 cloud; short SL is $3 above it. |
+| Daily 50/55 | Alert when price closes out of the daily 50/55 EMA cloud. Long above cloud, short below cloud. | Target is 1:1 from entry to SL. Long SL is $3 below the daily 50/55 cloud; short SL is $3 above it. |
+| 10m bounce/rejection 34/50 | Enter only after a 10m candle touches the 10m 34/50 cloud and closes back above it for long, or below it for short. | Target is 1:1. Long SL below 10m 34/50 cloud; short SL above 10m 34/50 cloud. |
+| 10m 9 EMA touch | From 9:30-10:30 ET, alert/trade when bullish 10m trend touches the 9 EMA. After 10:30 ET, only if one of the recent 4 prior 10m candles touched the 10m 34/50 cloud. | Target is 1:1. SL below 10m 34/50 cloud. |
+| 10m bounce/rejection 1hr 34/50 | Alert when a 10m candle touches the hourly 34/50 cloud and closes back in the trend direction. | Target is 1:1. Long SL below 10m 34/50 cloud; short SL above the touched cloud. |
+| 10m bounce/rejection Daily 20/21 | Alert when a 10m candle touches the daily 20/21 cloud and closes back in the trend direction. | Target is 1:1. Long SL below 10m 34/50 cloud; short SL above the touched cloud. |
+| 10m bounce/rejection Daily 50/55 | Alert when a 10m candle touches the daily 50/55 cloud and closes back in the trend direction. | Target is 1:1. Long SL below 10m 34/50 cloud; short SL above the touched cloud. |
 
-## API Surface
+Alerts added to the MTF table are tracked in the Alert Log until price hits the
+Target or SL.
 
-- `GET /health` - Public health check for Railway and local uptime checks.
-- `GET /api/status` - Returns Webull configuration, environment, region, endpoint, and data-mode status.
-- `GET /api/accounts` - Fetches the Webull account list used by the account selector.
-- `GET /api/account/{account_id}/balance` - Fetches balance data for one Webull account.
-- `GET /api/account/{account_id}/positions` - Fetches current positions for one Webull account.
-- `GET /api/account/{account_id}/orders` - Fetches recent broker order history for one account.
-- `GET /api/snapshot` - Returns a combined account snapshot; accepts an optional `account_id`.
-- `GET /api/webull/quote` - Fetches a single live quote for a symbol.
-- `GET /api/webull/live-prices` - Fetches watchlist quotes, 10m/hourly/daily EMAs, cloud states, and setup alert matches.
-- `GET /api/webull/watchlists` - Loads persisted watchlists from the configured watchlist file.
-- `POST /api/webull/watchlists` - Saves/replaces persisted watchlists.
-- `GET /api/notifications/config` - Returns Web Push capability/configuration for the browser.
-- `POST /api/notifications/subscribe` - Saves a browser push subscription for closed-app notifications.
-- `POST /api/notifications/unsubscribe` - Removes a browser push subscription.
-- `POST /api/notifications/test` - Sends a test Web Push notification when VAPID keys are configured.
-- `GET /api/notifications/strategies` - Returns the on/off state for each alert strategy (Curls, 10m 34/50 Bounce, MTF Cloud Touch).
-- `POST /api/notifications/strategies` - Saves alert strategy on/off state; disabled strategies are filtered out of both the Setups table and push notifications.
-- `GET /api/tradingview/analyze` - Runs TradingView analysis for a symbol, exchange, and timeframe.
-- `GET /api/strategy/dry-run` - Runs the legacy dry-run strategy endpoint for selected symbols.
-- `POST /api/trade/buy` - Places a guarded one-share buy order for an approved watchlist symbol.
-- `POST /api/trade/auto-long` - Places a guarded long bracket order with entry, stop, target, and quantity.
+## What It Checks
 
-## Project Structure
-
-```text
-app/
-  main.py                 FastAPI app, auth middleware, static serving, push monitor
-  market_data.py          Webull live price build, EMA clouds, setup alert rules
-  notifications.py        Push subscription store and setup push monitor
-  routers/                Accounts, Webull, notifications, trading, TradingView APIs
-frontend/src/
-  App.jsx                 Main app coordinator
-  components/             Header, pages, tables, settings, watchlist controls
-  hooks/                  App-specific React hooks
-  lib/                    API client, market helpers, settings, watchlists, notifications
-tests/
-  test_market_data.py
-  test_notifications.py
-```
-
-## Architecture
-
-```mermaid
-flowchart TD
-    UI["Browser: App.jsx\n(Scanner / MTFs / Settings)"]
-    SW["Service Worker (sw.js)"]
-
-    subgraph Backend["FastAPI backend (app/)"]
-        direction TB
-        Auth["HTTP Basic Auth middleware"]
-        Routers["Routers: accounts, webull, strategy,\nnotifications, trade, tradingview"]
-        MarketData["market_data.py\nEMA clouds + alert matches"]
-        AlertStrategies["alert_strategies.py\nstrategy on/off store"]
-        WebullSvc["webull_service.py"]
-        PushMonitor["MtfPushMonitor\nbackground poller"]
-        LocalState[("Local JSON state\nwatchlists / push subs /\nstrategies / guard / token cache")]
-    end
-
-    WebullAPI[("Webull OpenAPI\nuat / prod")]
-    WebPush[("Browser push service")]
-
-    UI -- "fetch /api/* (Basic Auth)" --> Auth
-    Auth --> Routers
-    Routers --> MarketData
-    MarketData --> WebullSvc
-    Routers --> AlertStrategies
-    WebullSvc -- "REST calls" --> WebullAPI
-    Routers -.-> LocalState
-    AlertStrategies -.-> LocalState
-    WebullSvc -.-> LocalState
-
-    PushMonitor -- "poll every\nMTF_PUSH_POLL_SECONDS" --> MarketData
-    PushMonitor --> AlertStrategies
-    PushMonitor -- "web-push (VAPID)" --> WebPush
-    WebPush --> SW
-    SW --> UI
-```
-
-**Alert flow** — how a live price becomes a Setups row or a phone notification:
-
-```mermaid
-flowchart TD
-    A["Webull 10m / 1H / 1D bars"] --> B["market_data.py: compute EMA clouds"]
-    B --> C["mtf_signal_matches()"]
-    C --> D["Curl\n(long_mtf_pullback_matches)"]
-    C --> E["10m 34/50 Bounce\n(ten_minute_34_50_bounce_matches)"]
-    C --> F["MTF Cloud Touch\n(mtf_cloud_touch_matches)"]
-    D --> G["quote.mtf_matches"]
-    E --> G
-    F --> G
-
-    G --> H["GET /api/webull/live-prices"]
-    H --> I["Frontend: longAlertRows()"]
-    I --> J{"Strategy enabled\nin Settings?"}
-    J -- yes --> K["Setups table row +\nin-app / device notification"]
-    J -- no --> L["hidden"]
-
-    G --> M["MtfPushMonitor.check_once()"]
-    M --> N["apply_enabled_strategies()"]
-    N --> O{"Signature changed\nsince last poll?"}
-    O -- yes --> P["Send Web Push (VAPID)"]
-    O -- no --> Q["skip - already notified\nfor this candle"]
-```
+- SDK client initialization and Webull authentication.
+- Account list through `/openapi/account/list`.
+- Account balance through `/openapi/assets/balance`.
+- Account positions through `/openapi/assets/positions`.
 
 ## Safety Notes
 
-- Credentials are never sent to the browser.
-- Use `APP_PASSWORD` before exposing the app publicly.
-- Keep `WEBULL_GUARD_ENABLED=true` unless Webull support has reset a verification/rate-limit lock and you need one controlled retry.
-- Trade endpoints are server-side, margin-account-only, and limited to symbols in approved watchlists.
-- Review orders in Webull. This app is a personal trading tool, not a broker or risk manager.
+- Credentials stay on the server and are never sent to the browser.
+- `.env`, SDK token cache, virtualenvs, and Webull SDK logs are ignored by Git.
+- Set `APP_PASSWORD` before deploying publicly.
+- Trading endpoints are still server-side and should only be used behind your
+  private app login.
