@@ -4,19 +4,19 @@ export const ALERT_STRATEGIES = [
   {
     id: "hourly-cloud",
     name: "Hourly 34/50",
-    description: "Price is inside the hourly 34/50 EMA cloud.",
+    description: "Price breaks through or touches the hourly 34/50 EMA cloud.",
     match: (match) => String(match?.label || "") === "Hourly 34/50",
   },
   {
     id: "daily-fast-cloud",
     name: "Daily 20/21",
-    description: "Price is inside the daily 20/21 EMA cloud.",
+    description: "Price breaks through or touches the daily 20/21 EMA cloud.",
     match: (match) => String(match?.label || "") === "Daily 20/21",
   },
   {
     id: "daily-slow-cloud",
     name: "Daily 50/55",
-    description: "Price is inside the daily 50/55 EMA cloud.",
+    description: "Price breaks through or touches the daily 50/55 EMA cloud.",
     match: (match) => String(match?.label || "") === "Daily 50/55",
   },
   {

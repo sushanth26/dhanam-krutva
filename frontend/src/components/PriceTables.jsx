@@ -86,11 +86,12 @@ function MtfRow({ buyState, focused, quote, showSignalTags, showWatchlist, onBuy
   const riskPlan = aPlusPlusRiskPlan(quote.mtf_matches);
   const tradeAction = tradeActionForMatches(quote.mtf_matches);
   const dismissNew = quote.is_new ? () => onDismissNew?.(quote) : undefined;
-  const waiting = quote.mtf_matches?.some((match) => match.status === "waiting");
+  const rowId = ["mtf-row", quote.watchlist_id || "tab", quote.symbol].join("-");
   return (
     <BaseRow
       className={focused ? "focused-mtf-row" : ""}
-      id={`mtf-row-${quote.symbol}`}
+      dataMtfSymbol={quote.symbol}
+      id={rowId}
       quote={quote}
       showPrice={false}
       onClick={dismissNew}
@@ -101,7 +102,6 @@ function MtfRow({ buyState, focused, quote, showSignalTags, showWatchlist, onBuy
           onBuy={() => onBuy?.(quote)}
           symbol={quote.symbol}
           tradeAction={tradeAction}
-          waiting={waiting}
         />
       )}
     >
@@ -140,10 +140,7 @@ function RiskPlan({ plan }) {
   );
 }
 
-function BuyCell({ buyState, disabled, onBuy, symbol, tradeAction, waiting }) {
-  if (waiting) {
-    return <td className="row-action-cell buy-action-cell" aria-label="Waiting for candle close"></td>;
-  }
+function BuyCell({ buyState, disabled, onBuy, symbol, tradeAction }) {
   if (!tradeAction) {
     return <td className="row-action-cell buy-action-cell" aria-label="Watch alert"></td>;
   }
@@ -207,10 +204,10 @@ function PriceRow({ quote, onRemoveSymbol }) {
   );
 }
 
-function BaseRow({ quote, children, trend = "", action = null, className = "", id, showPrice = true, onClick }) {
+function BaseRow({ quote, children, trend = "", action = null, className = "", dataMtfSymbol, id, showPrice = true, onClick }) {
   const rowClass = [trend ? `trend-${String(trend).toLowerCase()}` : "", className].filter(Boolean).join(" ");
   return (
-    <tr className={`stock-row ${rowClass}`} id={id} onClick={onClick}>
+    <tr className={`stock-row ${rowClass}`} data-mtf-symbol={dataMtfSymbol} id={id} onClick={onClick}>
       <td><strong>{quote.symbol}</strong></td>
       {children}
       {showPrice ? <td className="price-cell">{formatPrice(quote.price)}</td> : null}

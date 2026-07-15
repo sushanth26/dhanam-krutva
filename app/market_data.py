@@ -286,7 +286,6 @@ def mtf_matches(
             "type": "mtf_cloud_breakout",
         }
         if low <= price <= high:
-            matches.append({**match, "type": "mtf_cloud_inside", "status": "waiting", "direction": "inside"})
             continue
 
         action_match = {**match, "trade_action": trade_action_for_trend(trend)}
@@ -323,7 +322,7 @@ def mtf_signal_matches(
     candle = latest_ten_minute_candle(ten_minute_candles)
     if not candle:
         return []
-    status = "confirmed" if is_complete_ten_minute_candle(candle) else "waiting"
+    candle_complete = is_complete_ten_minute_candle(candle)
     candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
     previous_candle = previous_ten_minute_candle(ten_minute_candles)
     previous_price = previous_candle.get("close") if previous_candle else None
@@ -338,7 +337,7 @@ def mtf_signal_matches(
         previous_price=previous_price,
         current_high=candle_high,
         current_low=candle_low,
-        candle_complete=status == "confirmed",
+        candle_complete=candle_complete,
         risk_amount=risk_amount,
     )
     matches.extend(
@@ -365,13 +364,7 @@ def mtf_signal_matches(
     for match in matches:
         if candle_time is not None:
             match.setdefault("candle_time", candle_time)
-        if status == "waiting":
-            if match.get("status") == "confirmed":
-                visible_matches.append(match)
-                continue
-            match["status"] = "waiting"
-        else:
-            match.setdefault("status", "confirmed")
+        match.setdefault("status", "confirmed")
         visible_matches.append(match)
     return dedupe_mtf_signal_matches(visible_matches)
 
