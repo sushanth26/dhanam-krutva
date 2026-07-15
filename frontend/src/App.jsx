@@ -159,6 +159,10 @@ function saveRetainedMtfQuotes(value) {
   window.localStorage.setItem(RETAINED_MTF_QUOTES_KEY, JSON.stringify(value));
 }
 
+function clearRetainedMtfQuotes() {
+  window.localStorage.removeItem(RETAINED_MTF_QUOTES_KEY);
+}
+
 function mergeMtfMatches(currentMatches = [], retainedMatches = []) {
   const merged = [];
   const seen = new Set();
@@ -714,12 +718,11 @@ export default function App() {
     const payload = await getJson(`/api/webull/live-prices?${query.toString()}`);
     const nextQuotes = payload.quotes || [];
     const currentMtfs = filterQuotesByStrategy(alertableMtfQuotes(nextQuotes), strategyStateRef.current);
-    const retainedMerge = mergeRetainedMtfQuotesForTab(retainedMtfQuotesRef.current, watchlist.id, nextQuotes);
-    retainedMtfQuotesRef.current = retainedMerge.retainedByTab;
     const updatedAt = new Date().toLocaleTimeString();
-    setRetainedMtfQuotesByTab(retainedMerge.retainedByTab);
-    saveRetainedMtfQuotes(retainedMerge.retainedByTab);
-    setQuotesForTab(watchlist.id, retainedMerge.quotes);
+    retainedMtfQuotesRef.current = {};
+    setRetainedMtfQuotesByTab({});
+    clearRetainedMtfQuotes();
+    setQuotesForTab(watchlist.id, nextQuotes);
     updateAlertOutcomes(nextQuotes);
     setUpdatedTextForTab(watchlist.id, `Updated ${updatedAt} from ${payload.source || "webull"}`);
     notifyMtfUpdate(watchlist.id, currentMtfs);
