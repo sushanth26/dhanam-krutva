@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.notifications import MtfPushMonitor, PushSubscriptionStore
+from app.notifications import AlertHistoryStore, MtfPushMonitor, PushSubscriptionStore
 
 
 router = APIRouter(prefix="/api/notifications")
@@ -17,6 +17,11 @@ class PushSubscriptionPayload(BaseModel):
 
 class PushUnsubscribePayload(BaseModel):
     endpoint: str
+
+
+class NotificationHistoryPayload(BaseModel):
+    item: dict[str, Any] | None = None
+    items: list[dict[str, Any]] | None = None
 
 
 @router.get("/config")
@@ -50,6 +55,32 @@ def unsubscribe(payload: PushUnsubscribePayload):
     settings = get_settings()
     total = PushSubscriptionStore(settings.push_subscription_file).remove(payload.endpoint)
     return {"ok": True, "subscriptions": total}
+
+
+@router.get("/history")
+def notification_history(limit: int = 500):
+    settings = get_settings()
+    safe_limit = min(max(limit, 1), 1000)
+    return {"ok": True, "items": AlertHistoryStore(settings.alert_history_file).all(safe_limit)}
+
+
+@router.post("/history")
+def append_notification_history(payload: NotificationHistoryPayload):
+    entries = []
+    if payload.item:
+        entries.append(payload.item)
+    if payload.items:
+        entries.extend(payload.items)
+    settings = get_settings()
+    items = AlertHistoryStore(settings.alert_history_file).append(entries)
+    return {"ok": True, "items": items[:500]}
+
+
+@router.delete("/history")
+def clear_notification_history():
+    settings = get_settings()
+    AlertHistoryStore(settings.alert_history_file).clear()
+    return {"ok": True, "items": []}
 
 
 @router.post("/test")

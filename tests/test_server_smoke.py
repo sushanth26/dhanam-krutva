@@ -40,7 +40,9 @@ def wait_for_server(process: subprocess.Popen):
 
 def test_uvicorn_serves_react_shell_and_protected_api():
     watchlist_file = ROOT / ".test-watchlists-smoke.json"
+    alert_history_file = ROOT / ".test-alert-history-smoke.json"
     watchlist_file.unlink(missing_ok=True)
+    alert_history_file.unlink(missing_ok=True)
     env = {
         **os.environ,
         "APP_USERNAME": "tester",
@@ -49,7 +51,10 @@ def test_uvicorn_serves_react_shell_and_protected_api():
         "WEBULL_APP_SECRET": "",
         "WEBULL_ACCESS_TOKEN": "",
         "WEBULL_TOKEN_DIR": "",
+        "VAPID_PUBLIC_KEY": "",
+        "VAPID_PRIVATE_KEY": "",
         "WATCHLIST_FILE": str(watchlist_file),
+        "ALERT_HISTORY_FILE": str(alert_history_file),
         "PORT": str(PORT),
     }
     process = subprocess.Popen(
@@ -120,6 +125,11 @@ def test_uvicorn_serves_react_shell_and_protected_api():
             assert payload["web_push_configured"] is False
             assert payload["vapid_public_key"] is None
 
+        with request("/api/notifications/history", auth_header()) as response:
+            payload = json.loads(response.read())
+            assert response.status == 200
+            assert payload == {"ok": True, "items": []}
+
         with request("/api/webull/watchlists", auth_header()) as response:
             payload = json.loads(response.read())
             assert response.status == 200
@@ -127,6 +137,7 @@ def test_uvicorn_serves_react_shell_and_protected_api():
             assert payload["watchlists"][0]["locked"] is True
     finally:
         watchlist_file.unlink(missing_ok=True)
+        alert_history_file.unlink(missing_ok=True)
         process.terminate()
         try:
             process.wait(timeout=5)

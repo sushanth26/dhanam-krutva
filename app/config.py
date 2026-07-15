@@ -32,6 +32,7 @@ class Settings:
     vapid_private_key: str | None
     vapid_subject: str
     push_subscription_file: Path
+    alert_history_file: Path
     watchlist_file: Path
     webull_guard_enabled: bool
     webull_guard_file: Path
@@ -76,6 +77,7 @@ def get_settings() -> Settings:
         vapid_private_key=os.getenv("VAPID_PRIVATE_KEY", "").strip() or None,
         vapid_subject=os.getenv("VAPID_SUBJECT", "mailto:sushanth@example.com").strip() or "mailto:sushanth@example.com",
         push_subscription_file=Path(os.getenv("PUSH_SUBSCRIPTION_FILE", "").strip() or default_push_subscription_file()),
+        alert_history_file=Path(os.getenv("ALERT_HISTORY_FILE", "").strip() or default_alert_history_file()),
         watchlist_file=Path(os.getenv("WATCHLIST_FILE", "").strip() or default_watchlist_file()),
         webull_guard_enabled=env_bool("WEBULL_GUARD_ENABLED", True),
         webull_guard_file=Path(os.getenv("WEBULL_GUARD_FILE", "").strip() or default_webull_guard_file()),
@@ -96,6 +98,12 @@ def default_push_subscription_file() -> str:
     if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
         return "/data/push-subscriptions.json"
     return ".web-push-subscriptions.json"
+
+
+def default_alert_history_file() -> str:
+    if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
+        return "/data/alert-history.json"
+    return ".mtf-alert-history.json"
 
 
 def default_watchlist_file() -> str:

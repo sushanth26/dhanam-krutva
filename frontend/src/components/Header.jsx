@@ -15,6 +15,7 @@ export function Header({
   onMarkNotificationsRead,
   activePage,
   onNavigate,
+  alertLogCount,
   settingsBadge,
   settingsControls,
 }) {
@@ -78,6 +79,17 @@ export function Header({
             title="Scanner"
           >
             <span>Scanner</span>
+          </button>
+          <button
+            type="button"
+            className={`account-menu-button secondary-button ${activePage === "alerts" ? "active" : ""}`}
+            disabled={pageLoading}
+            onClick={() => onNavigate("alerts")}
+            aria-label="Open alerts history"
+            title="Alerts"
+          >
+            <span>Alerts</span>
+            <b>{alertLogCount || 0}</b>
           </button>
           <div className="settings-menu-anchor" ref={settingsAnchorRef}>
             <button

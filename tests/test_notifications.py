@@ -2,7 +2,9 @@ from types import SimpleNamespace
 
 import app.notifications as notifications
 from app.notifications import (
+    AlertHistoryStore,
     PushSubscriptionStore,
+    alert_history_entries_from_push,
     build_monitored_quotes,
     confirmed_mtf_quotes,
     describe_mtf_matches,
@@ -24,6 +26,48 @@ def test_push_subscription_store_upserts_and_removes_by_endpoint(tmp_path):
     assert store.all() == [updated]
     assert store.remove("https://push.example/1") == 0
     assert store.all() == []
+
+
+def test_alert_history_store_appends_dedupes_and_sorts(tmp_path):
+    store = AlertHistoryStore(tmp_path / "alerts.json", max_items=3)
+
+    store.append([
+        {"id": "older", "symbol": "BE", "reason": "Hourly 34/50", "alertedAt": "2026-07-15T12:00:00Z"},
+        {"id": "newer", "symbol": "AAOI", "reason": "10m rejection", "alertedAt": "2026-07-15T12:05:00Z"},
+    ])
+    store.append([
+        {"id": "older", "symbol": "BE", "reason": "Hourly 34/50", "alertedAt": "2026-07-15T12:00:00Z"},
+        {"id": "latest", "title": "Push notification", "body": "Batch alert", "createdAt": "2026-07-15T12:10:00Z"},
+    ])
+
+    items = store.all()
+    assert [item["id"] for item in items] == ["latest", "newer", "older"]
+    assert items[0]["reason"] == "Batch alert"
+    assert items[1]["symbol"] == "AAOI"
+
+
+def test_alert_history_entries_from_push_saves_one_push_notification_event():
+    entries = alert_history_entries_from_push(
+        {
+            "title": "2 MTF alerts: BE, LLY",
+            "body": "BE Hourly 34/50 • LLY Daily 20/21",
+            "targetSymbol": "BE",
+            "matches": [
+                {
+                    "symbol": "BE",
+                    "labels": ["Hourly 34/50"],
+                    "details": [{"label": "Hourly 34/50", "display_label": "Hourly 34/50", "entry_price": 12.34}],
+                },
+                {"symbol": "LLY", "labels": ["Daily 20/21"]},
+            ],
+        }
+    )
+
+    assert len(entries) == 1
+    assert entries[0]["symbol"] == "BE"
+    assert entries[0]["title"] == "2 MTF alerts: BE, LLY"
+    assert entries[0]["body"] == "BE Hourly 34/50 • LLY Daily 20/21"
+    assert entries[0]["payload"]["matches"][0]["symbol"] == "BE"
 
 
 def test_mtf_notification_payload_lists_symbols_and_clouds():

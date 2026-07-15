@@ -12,6 +12,7 @@
 body {
   margin: 0;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 button {
@@ -3199,6 +3200,11 @@ button:disabled {
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(0, 1fr) 340px;
+  min-width: 0;
+}
+
+.market-command-center > * {
+  min-width: 0;
 }
 
 .premarket-focus-panel,
@@ -3217,6 +3223,8 @@ button:disabled {
 .premarket-focus-panel {
   display: grid;
   gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
   padding: 16px;
 }
 
@@ -3231,6 +3239,7 @@ button:disabled {
   display: grid;
   gap: 14px;
   grid-column: 1 / -1;
+  overflow: hidden;
   padding: 16px;
 }
 
@@ -3578,7 +3587,7 @@ select {
   .top-actions {
     display: grid;
     gap: 6px;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) 40px;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) 40px;
   }
 
   .top-actions button {
@@ -3936,5 +3945,37 @@ select {
   .auto-trade-table td:before,
   .alert-log-table td::before {
     color: #8b9aad;
+  }
+}
+
+/* Final scanner layout guardrails */
+@media (max-width: 1180px) {
+  .market-command-center {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .premarket-focus-panel,
+  .watchlist-control-rail,
+  .intraday-context-panel,
+  .price-bucket,
+  .live-price-table-wrap {
+    max-width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .premarket-scanner-table {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .scanner-hero > *,
+  .scanner-metric,
+  .scanner-metric > *,
+  .live-price-actions,
+  .live-price-actions button {
+    max-width: 100%;
+    min-width: 0;
   }
 }
