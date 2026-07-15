@@ -1877,6 +1877,10 @@ select {
   grid-area: list;
 }
 
+.global-mtf-panel .global-mtf-table .mtf-plan-cell {
+  grid-area: tags;
+}
+
 .global-mtf-panel .global-mtf-table .mtf-tags {
   grid-area: tags;
 }
@@ -1904,6 +1908,19 @@ select {
   display: flex;
   justify-content: space-between;
   margin-bottom: 8px;
+}
+
+.bucket-title {
+  display: grid;
+  gap: 2px;
+}
+
+.bucket-title p {
+  color: #68766c;
+  font-size: 12px;
+  font-weight: 900;
+  margin: 0;
+  text-transform: uppercase;
 }
 
 .bucket-heading span {
@@ -2117,6 +2134,16 @@ select {
   flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
+}
+
+.mtf-plan-cell {
+  min-width: 0;
+}
+
+.confirmed-setup {
+  color: #4d5a55;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .mtf-tag {
