@@ -5,6 +5,7 @@ from app.market_data import (
     aggregate_by_minutes,
     batch_history_bars_chunked,
     daily_volatility,
+    dedupe_mtf_signal_matches,
     ema_cloud_bounce_matches,
     ema_values,
     mtf_matches,
@@ -46,6 +47,33 @@ def test_symbol_chunks_splits_bar_requests_at_webull_limit():
     assert [len(chunk) for chunk in chunks] == [20, 4]
     assert chunks[0][0] == "S0"
     assert chunks[1][-1] == "S23"
+
+
+def test_dedupe_mtf_signal_matches_keeps_one_setup_per_action_and_time():
+    matches = [
+        {
+            "label": "10m bounce 34/50",
+            "type": "10m_cloud_bounce",
+            "trade_action": "Long",
+            "candle_time": "2026-07-10T14:00:00",
+        },
+        {
+            "label": "10m bounce 34/50",
+            "type": "10m_cloud_bounce",
+            "trade_action": "Long",
+            "candle_time": "2026-07-10T14:00:00",
+        },
+        {
+            "label": "10m bounce 34/50",
+            "type": "10m_cloud_bounce",
+            "trade_action": "Short",
+            "candle_time": "2026-07-10T14:00:00",
+        },
+    ]
+
+    deduped = dedupe_mtf_signal_matches(matches)
+
+    assert [match["trade_action"] for match in deduped] == ["Long", "Short"]
 
 
 def test_batch_history_bars_chunked_merges_results():

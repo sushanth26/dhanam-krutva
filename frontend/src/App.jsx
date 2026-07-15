@@ -138,10 +138,11 @@ function mtfRowSignature(quote) {
 
 function mtfMatchKey(match) {
   return [
+    match?.trade_action || "watch",
     match?.label || "",
     match?.type || "",
     match?.direction || "",
-    matchEntryPrice(match) ?? "",
+    match?.candle_time || "",
   ].join(":");
 }
 
@@ -171,6 +172,25 @@ function mergeMtfMatches(currentMatches = [], retainedMatches = []) {
     merged.push(match);
   }
   return merged;
+}
+
+function splitMtfQuoteByAction(quote, action) {
+  const matches = dedupeMtfMatches(
+    (quote.mtf_matches || []).filter((match) => match.trade_action === action),
+  );
+  return matches.length ? { ...quote, mtf_matches: matches } : null;
+}
+
+function dedupeMtfMatches(matches = []) {
+  const deduped = [];
+  const seen = new Set();
+  for (const match of matches) {
+    const key = mtfMatchKey(match);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(match);
+  }
+  return deduped;
 }
 
 function mergeRetainedMtfQuotesForTab(retainedByTab, tab, nextQuotes) {
@@ -283,11 +303,8 @@ function alertableMtfQuotes(quotes) {
 
 function quotesWithTradeAction(quotes, action) {
   return quotes
-    .map((quote) => ({
-      ...quote,
-      mtf_matches: (quote.mtf_matches || []).filter((match) => match.trade_action === action),
-    }))
-    .filter((quote) => quote.mtf_matches.length);
+    .map((quote) => splitMtfQuoteByAction(quote, action))
+    .filter(Boolean);
 }
 
 function loadRiskSettings() {

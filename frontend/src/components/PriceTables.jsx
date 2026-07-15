@@ -112,8 +112,8 @@ function MtfRow({ buyState, focused, quote, showSignalTags, showWatchlist, onBuy
         </td>
       ) : null}
       <td className="mtf-tags">
-        {quote.mtf_matches.map((match) => (
-          <span key={match.label} className="mtf-tag-group">
+        {quote.mtf_matches.map((match, index) => (
+          <span key={[match.label, match.trade_action, match.type, match.candle_time, index].join(":")} className="mtf-tag-group">
             <MtfTag label={match.label} match={match} />
             {showSignalTags && match.trade_action ? <TradeTag action={match.trade_action} /> : null}
             {showSignalTags && !match.trade_action && match.trend ? <CloudTag status={match.trend} /> : null}

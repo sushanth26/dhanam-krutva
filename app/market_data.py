@@ -386,7 +386,13 @@ def dedupe_mtf_signal_matches(matches: list[dict[str, Any]]) -> list[dict[str, A
     selected: dict[str, dict[str, Any]] = {}
     order: list[str] = []
     for match in matches:
-        family = mtf_signal_cloud_family(match)
+        family = ":".join(
+            [
+                str(match.get("trade_action") or "watch"),
+                mtf_signal_cloud_family(match),
+                str(match.get("candle_time") or ""),
+            ]
+        )
         current = selected.get(family)
         if current is None:
             selected[family] = match
