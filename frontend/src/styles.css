@@ -1332,6 +1332,14 @@ select {
   padding: 2px 6px;
 }
 
+.mtf-view-tabs {
+  max-width: 420px;
+}
+
+.mtf-view-tabs button {
+  justify-content: center;
+}
+
 .auto-trade-buckets {
   display: grid;
   gap: 14px;
@@ -1379,7 +1387,7 @@ select {
 .mtf-desktop-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .mtf-signal-group {
@@ -2071,11 +2079,6 @@ select {
   color: #343083;
 }
 
-.cloud-tag.waiting {
-  background: #fff5cf;
-  color: #735100;
-}
-
 .cloud-tag.unknown {
   background: #eef2f5;
   color: #68766c;
@@ -2340,6 +2343,7 @@ pre {
 }
 
 /* Mobile-first trading view */
+@media (max-width: 759px) {
 .shell {
   padding: 12px;
 }
@@ -2355,16 +2359,37 @@ pre {
 }
 
 .top-actions {
-  justify-content: flex-start;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  justify-content: stretch;
 }
 
 .top-actions button {
-  flex: 0 0 auto;
-  padding: 0 10px;
+  min-width: 0;
+  padding: 0 6px;
+  width: 100%;
 }
 
 .top-actions .icon-button {
   padding: 0;
+}
+
+.top-actions .account-menu-button span {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-actions .account-menu-button {
+  gap: 4px;
+}
+
+.top-actions .account-menu-button b {
+  font-size: 10px;
+  height: 18px;
+  min-width: 18px;
+  padding: 0 4px;
 }
 
 .notification-anchor {
@@ -2421,10 +2446,10 @@ h1 {
   flex: 1 1 130px;
 }
 
-  .risk-settings-panel,
-  .settings-menu .risk-settings-panel {
-    grid-template-columns: 1fr;
-  }
+.risk-settings-panel,
+.settings-menu .risk-settings-panel {
+  grid-template-columns: 1fr;
+}
 
 .live-price-table-wrap {
   overflow-x: hidden;
@@ -2479,12 +2504,14 @@ h1 {
 }
 
 .global-mtf-panel .global-mtf-table .stock-row {
-  gap: 2px 6px;
+  gap: 4px 8px;
   grid-template-areas:
-    "symbol tags";
-  grid-template-columns: 54px minmax(0, 1fr);
-  min-height: 34px;
-  padding: 5px 0;
+    "symbol buy"
+    "tags tags"
+    "list time";
+  grid-template-columns: minmax(54px, auto) minmax(0, 1fr);
+  min-height: 0;
+  padding: 8px 0;
 }
 
 .global-mtf-panel .global-mtf-table tbody tr:not(.stock-row) td {
@@ -2501,11 +2528,19 @@ h1 {
 .global-mtf-panel .global-mtf-table .watchlist-cell,
 .global-mtf-panel .global-mtf-table .trigger-time,
 .global-mtf-panel .global-mtf-table .buy-action-cell {
-  display: none;
+  display: initial;
 }
 
 .global-mtf-panel .global-mtf-table .buy-action-cell {
   margin-top: 2px;
+  justify-self: end;
+}
+
+.global-mtf-panel .global-mtf-table .watchlist-cell,
+.global-mtf-panel .global-mtf-table .trigger-time {
+  color: #68766c;
+  font-size: 10px;
+  min-width: 0;
 }
 
 .global-mtf-panel .mtf-tags {
@@ -2513,14 +2548,19 @@ h1 {
 }
 
 .global-mtf-panel .mtf-tag-group {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
   gap: 3px;
+  min-width: 0;
 }
 
 .mtf-tag,
 .cloud-tag {
+  flex: 1 1 auto;
   font-size: 10px;
   min-height: 22px;
   padding: 3px 6px;
+  white-space: normal;
 }
 
 .trade-tag {
@@ -2537,6 +2577,15 @@ h1 {
   gap: 3px;
   min-height: 22px;
   padding: 3px 6px;
+}
+
+.table-view-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.table-view-tabs button {
+  justify-content: center;
 }
 
 .risk-plan span,
@@ -2556,6 +2605,7 @@ h1 {
 
 .buy-one {
   min-width: 64px;
+}
 }
 
 @media (max-width: 759px) {

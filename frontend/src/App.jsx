@@ -138,10 +138,11 @@ function mtfRowSignature(quote) {
 
 function mtfMatchKey(match) {
   return [
+    match?.trade_action || "watch",
     match?.label || "",
     match?.type || "",
     match?.direction || "",
-    matchEntryPrice(match) ?? "",
+    match?.candle_time || "",
   ].join(":");
 }
 
@@ -171,6 +172,25 @@ function mergeMtfMatches(currentMatches = [], retainedMatches = []) {
     merged.push(match);
   }
   return merged;
+}
+
+function splitMtfQuoteByAction(quote, action) {
+  const matches = dedupeMtfMatches(
+    (quote.mtf_matches || []).filter((match) => match.trade_action === action),
+  );
+  return matches.length ? { ...quote, mtf_matches: matches } : null;
+}
+
+function dedupeMtfMatches(matches = []) {
+  const deduped = [];
+  const seen = new Set();
+  for (const match of matches) {
+    const key = mtfMatchKey(match);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(match);
+  }
+  return deduped;
 }
 
 function mergeRetainedMtfQuotesForTab(retainedByTab, tab, nextQuotes) {
@@ -276,31 +296,15 @@ function alertableMtfQuotes(quotes) {
   return quotes
     .map((quote) => ({
       ...quote,
-      mtf_matches: (quote.mtf_matches || []).filter((match) => (
-        (match.status || "confirmed") === "confirmed" || match.type === "mtf_cloud_inside"
-      )),
+      mtf_matches: (quote.mtf_matches || []).filter((match) => (match.status || "confirmed") === "confirmed"),
     }))
     .filter((quote) => quote.mtf_matches.length);
 }
 
 function quotesWithTradeAction(quotes, action) {
   return quotes
-    .map((quote) => ({
-      ...quote,
-      mtf_matches: (quote.mtf_matches || []).filter((match) => match.trade_action === action),
-    }))
-    .filter((quote) => quote.mtf_matches.length);
-}
-
-function quotesWithWaitOrWatch(quotes) {
-  return quotes
-    .map((quote) => ({
-      ...quote,
-      mtf_matches: (quote.mtf_matches || []).filter((match) => (
-        (match.status || "confirmed") === "waiting" || match.type === "mtf_cloud_inside"
-      )),
-    }))
-    .filter((quote) => quote.mtf_matches.length);
+    .map((quote) => splitMtfQuoteByAction(quote, action))
+    .filter(Boolean);
 }
 
 function loadRiskSettings() {
@@ -575,7 +579,6 @@ export default function App() {
   const allMtfs = useMemo(() => quotesWithMatchStatus(allMtfQuotes, "confirmed"), [allMtfQuotes]);
   const longMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Long"), [allMtfs]);
   const shortMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Short"), [allMtfs]);
-  const waitingMtfs = useMemo(() => quotesWithWaitOrWatch(allMtfQuotes), [allMtfQuotes]);
   const enabledStrategyCount = useMemo(
     () => Object.values(strategyState || {}).filter((enabled) => enabled !== false).length,
     [strategyState],
@@ -866,10 +869,6 @@ export default function App() {
     const accountId = marginTradingAccountId(accounts, selectedAccountId);
     if (!accountId) {
       setLiveAlert("Select a Webull margin account before buying.");
-      return;
-    }
-    if (quote.mtf_matches?.some((match) => match.status === "waiting")) {
-      setLiveAlert(`${symbol} is still waiting for the candle close.`);
       return;
     }
     if (quote.mtf_matches?.some((match) => match.trade_action === "Short")) {
@@ -1225,7 +1224,7 @@ export default function App() {
   useEffect(() => {
     if (!focusedMtfSymbol || !allMtfs.some((quote) => quote.symbol === focusedMtfSymbol)) return;
     window.requestAnimationFrame(() => {
-      document.getElementById(`mtf-row-${focusedMtfSymbol}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document.querySelector(`[data-mtf-symbol="${focusedMtfSymbol}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
   }, [allMtfs, focusedMtfSymbol]);
 
@@ -1293,7 +1292,7 @@ export default function App() {
         activePage={activePage}
         alertLogCount={alertLog.length}
         autoTradeOrderCount={autoTradeOrderCount}
-        mtfCount={allMtfQuotes.length}
+        mtfCount={longMtfs.length + shortMtfs.length}
         onNavigate={navigatePage}
         settingsBadge={autoTrade.enabled ? "Auto" : enabledStrategyCount}
         settingsControls={(
@@ -1340,7 +1339,6 @@ export default function App() {
             onBuy={buyMtfQuote}
             onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
             shortMtfs={shortMtfs}
-            waitingMtfs={waitingMtfs}
           />
         ) : activePage === "trades" ? (
           <AutoTradesPage
@@ -1405,89 +1403,48 @@ function MtfPage({
   onBuy,
   onDismissNew,
   shortMtfs,
-  waitingMtfs,
 }) {
-  const [showAllTables, setShowAllTables] = useState(() => window.matchMedia("(min-width: 900px)").matches);
   const [tableView, setTableView] = useState("long");
   const tableViews = [
     { id: "long", label: "Long", count: longMtfs.length },
     { id: "short", label: "Short", count: shortMtfs.length },
-    { id: "wait", label: "Wait", count: waitingMtfs.length },
   ];
-  const selectedQuotes = tableView === "short" ? shortMtfs : tableView === "wait" ? waitingMtfs : longMtfs;
+  const selectedQuotes = tableView === "short" ? shortMtfs : longMtfs;
   const selectedView = tableViews.find((item) => item.id === tableView) || tableViews[0];
-  const totalCount = longMtfs.length + shortMtfs.length + waitingMtfs.length;
-
-  useEffect(() => {
-    const query = window.matchMedia("(min-width: 900px)");
-    const updateLayout = () => setShowAllTables(query.matches);
-    updateLayout();
-    query.addEventListener("change", updateLayout);
-    return () => query.removeEventListener("change", updateLayout);
-  }, []);
+  const totalCount = longMtfs.length + shortMtfs.length;
 
   return (
     <section className="mtf-page global-mtf-panel">
       <div className="mtf-page-header">
         <div>
           <h2>MTFs</h2>
-          <p className="muted">Long, short, and wait signals from every watchlist.</p>
+          <p className="muted">Long and short signals from every watchlist.</p>
         </div>
         <strong>{totalCount}</strong>
       </div>
 
-      {showAllTables ? (
-        <div className="mtf-desktop-grid">
-          <MtfSignalGroup
-            buyState={buyState}
-            focusedSymbol={focusedSymbol}
-            label="Long"
-            onBuy={onBuy}
-            onDismissNew={onDismissNew}
-            quotes={longMtfs}
-          />
-          <MtfSignalGroup
-            buyState={buyState}
-            focusedSymbol={focusedSymbol}
-            label="Short"
-            onBuy={onBuy}
-            onDismissNew={onDismissNew}
-            quotes={shortMtfs}
-          />
-          <MtfSignalGroup
-            buyState={buyState}
-            focusedSymbol={focusedSymbol}
-            label="Wait"
-            onDismissNew={onDismissNew}
-            quotes={waitingMtfs}
-          />
-        </div>
-      ) : (
-        <>
-          <div className="table-view-tabs" role="tablist" aria-label="MTF table view">
-            {tableViews.map((view) => (
-              <button
-                key={view.id}
-                type="button"
-                className={tableView === view.id ? "active" : ""}
-                onClick={() => setTableView(view.id)}
-                role="tab"
-                aria-selected={tableView === view.id}
-              >
-                {view.label} <span>{view.count}</span>
-              </button>
-            ))}
-          </div>
-          <MtfSignalGroup
-            buyState={buyState}
-            focusedSymbol={focusedSymbol}
-            label={selectedView.label}
-            onBuy={tableView === "wait" ? undefined : onBuy}
-            onDismissNew={onDismissNew}
-            quotes={selectedQuotes}
-          />
-        </>
-      )}
+      <div className="table-view-tabs mtf-view-tabs" role="tablist" aria-label="MTF table view">
+        {tableViews.map((view) => (
+          <button
+            key={view.id}
+            type="button"
+            className={tableView === view.id ? "active" : ""}
+            onClick={() => setTableView(view.id)}
+            role="tab"
+            aria-selected={tableView === view.id}
+          >
+            {view.label} <span>{view.count}</span>
+          </button>
+        ))}
+      </div>
+      <MtfSignalGroup
+        buyState={buyState}
+        focusedSymbol={focusedSymbol}
+        label={selectedView.label}
+        onBuy={onBuy}
+        onDismissNew={onDismissNew}
+        quotes={selectedQuotes}
+      />
     </section>
   );
 }

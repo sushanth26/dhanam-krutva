@@ -93,7 +93,6 @@ def test_confirmed_mtf_quotes_removes_waiting_matches():
     assert len(confirmed) == 1
     assert confirmed[0]["symbol"] == "BE"
     assert confirmed[0]["mtf_matches"] == [
-        {"label": "Daily 20/21", "status": "waiting", "type": "mtf_cloud_inside"},
         {"label": "Daily 50/55", "status": "confirmed"},
     ]
 

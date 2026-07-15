@@ -201,7 +201,7 @@ def confirmed_mtf_quotes(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         matches = [
             match
             for match in quote.get("mtf_matches", [])
-            if match.get("status", "confirmed") == "confirmed" or match.get("type") == "mtf_cloud_inside"
+            if match.get("status", "confirmed") == "confirmed"
         ]
         if matches:
             output.append({**quote, "mtf_matches": matches})
