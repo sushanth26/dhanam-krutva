@@ -85,6 +85,41 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
   );
 }
 
+export function PreMarketScannerTable({ rows }) {
+  return (
+    <section className="price-bucket premarket-scanner-bucket">
+      <div className="bucket-heading">
+        <h3>Pre Market Scanner</h3>
+        <span>{rows.length}</span>
+      </div>
+      <div className="live-price-table-wrap">
+        <table className="live-price-table premarket-scanner-table">
+          <thead>
+            <tr>
+              <th>Stock</th>
+              <th>Short or Long</th>
+              <th>Above/Below YH/YL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? rows.map((row) => (
+              <tr key={row.symbol} className={`stock-row scanner-${row.action.toLowerCase()}`}>
+                <td><strong>{row.symbol}</strong></td>
+                <td>
+                  <span className={`scanner-action ${row.action.toLowerCase()}`}>{row.action}</span>
+                </td>
+                <td>{row.trigger}</td>
+              </tr>
+            )) : (
+              <tr><td colSpan="3">No stocks are above yesterday's high or below yesterday's low right now.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }) {
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
   const riskPlan = aPlusPlusRiskPlan(quote.mtf_matches);

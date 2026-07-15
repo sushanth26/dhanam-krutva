@@ -12,6 +12,7 @@ from app.market_data import (
     mtf_signal_matches,
     nine_ema_touch_matches,
     parse_symbols,
+    previous_daily_range,
     symbol_chunks,
 )
 
@@ -125,6 +126,17 @@ def test_ema_values_returns_latest_values_by_period():
     assert values["5"] is not None
     assert values["12"] is not None
     assert values["20"] is None
+
+
+def test_previous_daily_range_uses_latest_completed_daily_candle():
+    candles = [
+        {"session_date": "2000-01-01", "high": 101.12345, "low": 95.43219},
+        {"session_date": "2000-01-02", "high": 104, "low": 97},
+    ]
+
+    previous_day = previous_daily_range(candles)
+
+    assert previous_day == {"date": "2000-01-02", "high": 104, "low": 97}
 
 
 def test_nine_ema_touch_matches_buys_bullish_stock_at_9ema_with_34_50_cloud_stop():

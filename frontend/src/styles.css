@@ -910,6 +910,15 @@ select {
   color: #184d36;
 }
 
+.watchlist-tab.scanner-tab > button {
+  color: #1f4b66;
+}
+
+.watchlist-tab.scanner-tab b {
+  background: #e0f0fb;
+  color: #1f4b66;
+}
+
 .watchlist-tab b {
   align-items: center;
   background: #dff4e9;
@@ -1975,6 +1984,44 @@ select {
 
 .live-price-table tr.trend-chop td {
   background: #f3f2ff;
+}
+
+.premarket-scanner-bucket {
+  max-width: 680px;
+}
+
+.premarket-scanner-table th:nth-child(n + 2),
+.premarket-scanner-table td:nth-child(n + 2) {
+  text-align: right;
+}
+
+.premarket-scanner-table tr.scanner-long td {
+  background: #edf8f1;
+}
+
+.premarket-scanner-table tr.scanner-short td {
+  background: #fff0f0;
+}
+
+.scanner-action {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  justify-content: center;
+  min-width: 64px;
+  padding: 5px 10px;
+  text-transform: uppercase;
+}
+
+.scanner-action.long {
+  background: #dff4e9;
+  color: #0d513f;
+}
+
+.scanner-action.short {
+  background: #ffe0e0;
+  color: #8a2424;
 }
 
 .stock-row {
