@@ -521,8 +521,16 @@ function preMarketScannerRowsFromWatchlists(watchlists, quotesByTab) {
     }
   }
   return [...rowsBySymbol.values()].sort((left, right) => (
-    right.distancePct - left.distancePct || left.action.localeCompare(right.action) || left.symbol.localeCompare(right.symbol)
+    scannerTrendRank(left.trend) - scannerTrendRank(right.trend)
+    || right.distancePct - left.distancePct
+    || left.symbol.localeCompare(right.symbol)
   ));
+}
+
+function scannerTrendRank(trend) {
+  if (trend === "Bullish") return 0;
+  if (trend === "Bearish") return 1;
+  return 2;
 }
 
 function scannerRefreshStats(updatedTextByTab, watchlists) {
