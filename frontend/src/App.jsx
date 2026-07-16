@@ -1479,7 +1479,6 @@ export default function App() {
           payload: event.data.payload || null,
         }),
       ]);
-      navigatePage("mtfs");
       refreshAppMarketData({ showLoading: false });
       loadAlertHistory({ showLoading: false });
     }
