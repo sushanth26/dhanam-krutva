@@ -13,7 +13,9 @@
       "COHR",
       "RKLB",
       "ASTS",
-      "APP"
+      "APP",
+      "NBIS",
+      "CRWV"
     ],
     "locked": true,
     "auto_trade_enabled": true
