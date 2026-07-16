@@ -98,7 +98,7 @@ export function PreMarketScannerTable({ rows }) {
   return (
     <section className="price-bucket premarket-scanner-bucket">
       <div className="bucket-heading">
-        <h3>Pre Market Scanner</h3>
+        <h3>Scanner</h3>
         <span>{rows.length}</span>
       </div>
       <div className="live-price-table-wrap">
@@ -106,14 +106,14 @@ export function PreMarketScannerTable({ rows }) {
           <thead>
             <tr>
               <th>Stock</th>
-              <th>Short or Long</th>
-              <th>10m Trend</th>
-              <th>Above/Below YH/YL</th>
+              <th>Side</th>
+              <th className="scanner-trend-col">10m</th>
+              <th className="scanner-trigger-col">Break</th>
               <th className="price-col">Last</th>
               <th className="price-col">YH</th>
               <th className="price-col">YL</th>
-              <th className="price-col">Move</th>
-              <th>
+              <th className="price-col scanner-move-col">Move</th>
+              <th className="scanner-list-col">
                 <button
                   type="button"
                   className="scanner-sort-button"
@@ -129,19 +129,19 @@ export function PreMarketScannerTable({ rows }) {
             {sortedRows.length ? sortedRows.map((row) => (
               <tr key={row.symbol} className={`stock-row scanner-${row.action.toLowerCase()}`}>
                 <td data-label="Stock"><strong>{row.symbol}</strong></td>
-                <td data-label="Action">
+                <td data-label="Side" className="scanner-side-cell">
                   <span className={`scanner-action ${row.action.toLowerCase()}`}>{row.action}</span>
                 </td>
-                <td data-label="10m Trend"><CloudTag status={row.trend} /></td>
-                <td data-label="Trigger">{row.trigger}</td>
-                <td data-label="Last" className="price-cell">{formatPrice(row.price)}</td>
-                <td data-label="YH" className="price-cell">{formatPrice(row.previousHigh)}</td>
-                <td data-label="YL" className="price-cell">{formatPrice(row.previousLow)}</td>
-                <td data-label="Move" className="price-cell">{formatPercent(row.distancePct)}</td>
-                <td data-label="List">{row.watchlistName || "-"}</td>
+                <td data-label="10m" className="scanner-trend-cell"><CloudTag status={row.trend} /></td>
+                <td data-label="Break" className="scanner-trigger-cell">{row.trigger}</td>
+                <td data-label="Last" className="price-cell last-price-cell">{formatPrice(row.price)}</td>
+                <td data-label="YH" className="price-cell range-high-cell">{formatPrice(row.previousHigh)}</td>
+                <td data-label="YL" className="price-cell range-low-cell">{formatPrice(row.previousLow)}</td>
+                <td data-label="Move" className="price-cell scanner-move-cell">{formatPercent(row.distancePct)}</td>
+                <td data-label="List" className="scanner-list-cell">{row.watchlistName || "-"}</td>
               </tr>
             )) : (
-              <tr className="scanner-empty-row"><td colSpan="9">No aligned breakouts: longs need above YH + bullish 10m cloud; shorts need below YL + bearish 10m cloud.</td></tr>
+              <tr className="scanner-empty-row"><td colSpan="9">No setups.</td></tr>
             )}
           </tbody>
         </table>
@@ -158,12 +158,19 @@ function formatPercent(value) {
 function sortScannerRows(rows, listSort) {
   if (!listSort) return rows;
   return [...rows].sort((left, right) => {
+    const sideCompare = scannerSideRank(left) - scannerSideRank(right);
     const listCompare = String(left.watchlistName || "").localeCompare(String(right.watchlistName || ""));
     const symbolCompare = String(left.symbol || "").localeCompare(String(right.symbol || ""));
     return listSort === "asc"
-      ? listCompare || symbolCompare
-      : -listCompare || symbolCompare;
+      ? sideCompare || listCompare || symbolCompare
+      : sideCompare || -listCompare || symbolCompare;
   });
+}
+
+function scannerSideRank(row) {
+  if (row?.trend === "Bullish" || row?.action === "Long") return 0;
+  if (row?.trend === "Bearish" || row?.action === "Short") return 1;
+  return 2;
 }
 
 function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }) {

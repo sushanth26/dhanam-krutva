@@ -625,19 +625,6 @@ function scannerTrendRank(trend) {
   return 2;
 }
 
-function scannerRefreshStats(updatedTextByTab, watchlists) {
-  const updatedLists = watchlists
-    .map((watchlist) => updatedTextByTab[watchlist.id])
-    .filter((text) => text?.startsWith("Updated "));
-  return {
-    refreshed: updatedLists.length,
-    total: watchlists.length,
-    text: updatedLists.length
-      ? `${updatedLists.length}/${watchlists.length} lists fresh`
-      : "Refresh all watchlists",
-  };
-}
-
 export default function App() {
   const [watchlists, setWatchlists] = useState(loadWatchlists);
   const [status, setStatus] = useState(null);
@@ -716,7 +703,6 @@ export default function App() {
     );
   }, [quotes]);
   const preMarketScannerRows = useMemo(() => preMarketScannerRowsFromWatchlists(watchlists, quotesByTab), [watchlists, quotesByTab]);
-  const scannerStats = useMemo(() => scannerRefreshStats(updatedTextByTab, watchlists), [updatedTextByTab, watchlists]);
   const scannerLongCount = useMemo(() => preMarketScannerRows.filter((row) => row.action === "Long").length, [preMarketScannerRows]);
   const scannerShortCount = useMemo(() => preMarketScannerRows.filter((row) => row.action === "Short").length, [preMarketScannerRows]);
   const allMtfQuotes = useMemo(() => {
@@ -1632,23 +1618,19 @@ export default function App() {
             <section className="premarket-focus-panel">
               <div className="scanner-hero">
                 <div>
-                  <p className="eyebrow">Premarket shortlist</p>
-                  <h2>Breaks of yesterday's range</h2>
-                  <p className="muted">Scan every watchlist for clean long/short candidates before the open.</p>
+                  <h2>Premarket Scanner</h2>
                 </div>
                 <div className="live-price-actions">
                   <button type="button" onClick={() => refreshAllPrices()} disabled={loading.prices}>
-                    {loading.prices ? "Updating" : "Update Market Data"}
+                    {loading.prices ? "Updating" : "Update"}
                   </button>
                 </div>
               </div>
 
               <div className="scanner-metric-grid" aria-label="Premarket scanner summary">
-                <ScannerMetric label="Candidates" value={preMarketScannerRows.length} tone="neutral" />
+                <ScannerMetric label="Total" value={preMarketScannerRows.length} tone="neutral" />
                 <ScannerMetric label="Long" value={scannerLongCount} tone="long" />
                 <ScannerMetric label="Short" value={scannerShortCount} tone="short" />
-                <ScannerMetric label="Data" value={scannerStats.text} tone="neutral" />
-                <ScannerMetric label="Risk" value={`$${riskSettings.riskAmount}`} tone="risk" />
               </div>
 
               {liveAlert ? <div className="alert">{liveAlert}</div> : null}
@@ -1676,9 +1658,7 @@ export default function App() {
             <section className="intraday-context-panel">
               <div className="section-heading">
                 <div>
-                  <p className="eyebrow">Intraday context</p>
                   <h2>{contextWatchlist?.name || "Watchlist"}</h2>
-                  <p className="muted">10m EMA cloud state for the selected list. Use this after the premarket shortlist is narrowed.</p>
                 </div>
               </div>
               <div className="active-watchlist-tables">

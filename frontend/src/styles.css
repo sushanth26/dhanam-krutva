@@ -3266,7 +3266,7 @@ button:disabled {
 .scanner-metric-grid {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .scanner-metric {
@@ -3483,6 +3483,19 @@ select {
   text-align: left;
 }
 
+.premarket-scanner-table .scanner-trend-col,
+.premarket-scanner-table .scanner-trigger-col,
+.premarket-scanner-table .scanner-move-col,
+.premarket-scanner-table .scanner-list-col,
+.premarket-scanner-table .scanner-trend-cell,
+.premarket-scanner-table .scanner-trigger-cell,
+.premarket-scanner-table .scanner-move-cell,
+.premarket-scanner-table .scanner-list-cell,
+.premarket-scanner-table .scanner-long .range-low-cell,
+.premarket-scanner-table .scanner-short .range-high-cell {
+  display: none;
+}
+
 .scanner-sort-button {
   align-items: center;
   background: transparent;
@@ -3584,7 +3597,7 @@ select {
   }
 
   .scanner-metric-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .trend-price-grid {
@@ -3671,14 +3684,6 @@ select {
     font-size: 22px;
   }
 
-  .scanner-metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .scanner-metric.risk {
-    grid-column: span 2;
-  }
-
   .premarket-scanner-table {
     min-width: 0;
   }
@@ -3697,25 +3702,29 @@ select {
 
   .premarket-scanner-table tbody {
     display: grid;
-    gap: 8px;
+    gap: 6px;
     padding: 8px;
   }
 
   .premarket-scanner-table tr {
+    align-items: center;
     background: #0b121a;
     border: 1px solid #1f2a37;
     border-radius: 8px;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(48px, 1fr) auto minmax(60px, auto) minmax(60px, auto);
     overflow: hidden;
+    padding: 8px 10px;
   }
 
   .premarket-scanner-table td {
-    align-items: center;
-    border-bottom: 1px solid #1f2a37;
+    border-bottom: 0;
     display: grid;
-    gap: 8px;
-    grid-template-columns: 76px minmax(0, 1fr);
+    gap: 2px;
+    grid-template-columns: 1fr;
     overflow-wrap: normal;
-    padding: 8px 10px;
+    padding: 0;
     text-align: left;
     word-break: normal;
   }
@@ -3734,6 +3743,11 @@ select {
     text-transform: uppercase;
   }
 
+  .premarket-scanner-table td:first-child::before,
+  .premarket-scanner-table .scanner-side-cell::before {
+    display: none;
+  }
+
   .premarket-scanner-table td:last-child {
     border-bottom: 0;
   }
@@ -3750,10 +3764,40 @@ select {
   .premarket-scanner-table .scanner-action,
   .premarket-scanner-table .cloud-tag,
   .premarket-scanner-table td strong {
-    min-width: max-content;
+    min-width: 0;
     overflow-wrap: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
     word-break: keep-all;
+  }
+
+  .premarket-scanner-table td:first-child {
+    order: 1;
+  }
+
+  .premarket-scanner-table .scanner-side-cell {
+    order: 2;
+  }
+
+  .premarket-scanner-table .range-high-cell,
+  .premarket-scanner-table .range-low-cell {
+    order: 3;
+  }
+
+  .premarket-scanner-table .last-price-cell {
+    order: 4;
+  }
+
+  .premarket-scanner-table .range-high-cell::before,
+  .premarket-scanner-table .range-low-cell::before,
+  .premarket-scanner-table .last-price-cell::before {
+    font-size: 9px;
+  }
+
+  .premarket-scanner-table .scanner-empty-row {
+    display: block;
+    padding: 10px;
   }
 
   .premarket-scanner-table .scanner-empty-row td {
