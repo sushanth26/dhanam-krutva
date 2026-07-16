@@ -10,7 +10,6 @@ import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, flattenAccounts, form
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
 const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
-const WATCHLIST_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_NOTIFICATIONS = 20;
 const MAX_ALERT_LOG = 500;
 const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
@@ -690,7 +689,6 @@ export default function App() {
     trades: false,
   });
   const passiveMarketTimer = useRef(null);
-  const watchlistSyncTimer = useRef(null);
   const lastMtfSignature = useRef(initialTabState(loadWatchlists(), null));
   const lastMtfRows = useRef(initialTabState(loadWatchlists(), {}));
   const lastScannerRows = useRef(null);
@@ -1545,15 +1543,10 @@ export default function App() {
 
   function pauseBackgroundRefresh() {
     if (passiveMarketTimer.current) clearInterval(passiveMarketTimer.current);
-    if (watchlistSyncTimer.current) clearInterval(watchlistSyncTimer.current);
     passiveMarketTimer.current = null;
-    watchlistSyncTimer.current = null;
 
     return () => {
       if (!accountsConfirmedRef.current) return;
-      if (!watchlistSyncTimer.current) {
-        watchlistSyncTimer.current = setInterval(() => refreshWatchlists({ showLoading: false }), WATCHLIST_SYNC_INTERVAL_MS);
-      }
       if (!passiveMarketTimer.current) {
         passiveMarketTimer.current = setInterval(() => {
           if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false });
@@ -1569,15 +1562,11 @@ export default function App() {
         if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false });
       }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
     }
-    if (!watchlistSyncTimer.current) {
-      watchlistSyncTimer.current = setInterval(() => refreshWatchlists({ showLoading: false }), WATCHLIST_SYNC_INTERVAL_MS);
-    }
   }
 
   async function confirmAccountsAndStart() {
     const confirmed = await refreshShell();
     if (!confirmed) return;
-    await refreshAppMarketData();
     loadAlertHistory();
     loadNotificationState(strategyStateRef.current)
       .then(setNotificationState)
@@ -1591,7 +1580,6 @@ export default function App() {
     confirmAccountsAndStart();
     return () => {
       if (passiveMarketTimer.current) clearInterval(passiveMarketTimer.current);
-      if (watchlistSyncTimer.current) clearInterval(watchlistSyncTimer.current);
     };
   }, []);
 
