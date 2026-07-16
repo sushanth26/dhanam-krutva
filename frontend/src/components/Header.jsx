@@ -66,7 +66,6 @@ export function Header({
     <header className="app-header">
       <section className="topbar">
         <div>
-          <p className="eyebrow">Webull connection lab</p>
           <h1>Dhanam Krutva</h1>
         </div>
         <div className="top-actions">
