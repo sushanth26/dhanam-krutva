@@ -4,6 +4,7 @@ from app.market_data import (
     LIVE_WATCHLIST,
     aggregate_by_minutes,
     batch_history_bars_chunked,
+    build_live_prices,
     daily_volatility,
     dedupe_mtf_signal_matches,
     ema_cloud_bounce_matches,
@@ -102,6 +103,34 @@ def test_batch_history_bars_chunked_merges_results():
     assert [len(call) for call in webull.calls] == [20, 4]
     assert response["ok"] is True
     assert [item["symbol"] for item in response["data"]["result"]] == symbols
+
+
+def test_build_live_prices_exposes_latest_10m_close_for_scanner_breakouts():
+    class FakeWebull:
+        def market_snapshot(self, symbols, category):
+            return {"ok": True, "data": [{"symbol": "TSM", "last_price": 100}]}
+
+        def batch_history_bars(self, symbols, category, timespan, count, real_time_required=True, trading_sessions=None):
+            symbol = symbols[0]
+            if timespan == "M5":
+                bars = [candle(index, 120 - (index * 0.25)) for index in range(120)]
+            elif timespan == "D":
+                bars = [
+                    {"time": "2026-07-14T16:00:00", "open": 100, "high": 104, "low": 98, "close": 101},
+                    {"time": "2026-07-15T16:00:00", "open": 99, "high": 103, "low": 95, "close": 97},
+                ]
+            else:
+                bars = []
+            return {"ok": True, "data": {"result": [{"symbol": symbol, "result": bars}]}}
+
+    payload = build_live_prices(FakeWebull(), "TSM")
+    quote = payload["quotes"][0]
+
+    assert payload["ok"] is True
+    assert quote["price"] == 100
+    assert quote["scanner_price"] == quote["latest_10m_close"]
+    assert quote["scanner_price"] < quote["previous_day"]["low"]
+    assert quote["scanner_price_source"] == "latest_10m_candle_close"
 
 
 def test_aggregate_by_minutes_rolls_5m_bars_into_10m_buckets():

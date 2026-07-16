@@ -108,12 +108,18 @@ def build_live_prices(
         ema_daily = ema_values(daily_candles, [20, 21, 50, 55])
         ten_minute_ema = ema_values(ten_minute_candles, [5, 9, 12, 34, 50])
         ten_minute_trend = cloud_status(ten_minute_ema, ["5", "12"], ["34", "50"])
+        latest_10m_candle = latest_ten_minute_candle(ten_minute_candles)
+        latest_10m_close = latest_10m_candle.get("close") if latest_10m_candle else None
         candle_price = latest_ten_minute_price(ten_minute_candles, price)
         quotes.append(
             {
                 "symbol": symbol,
                 "sector": SYMBOL_SECTORS.get(symbol, "Other"),
                 "price": price,
+                "scanner_price": candle_price,
+                "scanner_price_source": "latest_10m_candle_close" if latest_10m_close is not None else "snapshot",
+                "latest_10m_close": latest_10m_close,
+                "latest_10m_time": latest_10m_candle.get("time") if latest_10m_candle else None,
                 "change": snapshot_change(snapshot_map.get(symbol)),
                 "change_ratio": snapshot_change_ratio(snapshot_map.get(symbol)),
                 "previous_day": previous_daily_range(daily_candles),

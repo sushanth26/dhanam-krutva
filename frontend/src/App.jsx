@@ -590,7 +590,7 @@ function preMarketScannerRowsFromWatchlists(watchlists, quotesByTab) {
   const rowsBySymbol = new Map();
   for (const watchlist of watchlists) {
     for (const quote of quotesByTab[watchlist.id] || []) {
-      const price = Number(quote.price);
+      const price = Number(quote.scanner_price ?? quote.price);
       const previousHigh = Number(quote.previous_day?.high);
       const previousLow = Number(quote.previous_day?.low);
       if (!Number.isFinite(price) || !Number.isFinite(previousHigh) || !Number.isFinite(previousLow)) continue;
