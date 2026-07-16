@@ -1,3 +1,5 @@
+import { useMemo, useState } from "react";
+
 import { CloudTag } from "./Tags";
 import { cloudStatus, formatPrice } from "../lib/market";
 
@@ -86,6 +88,13 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
 }
 
 export function PreMarketScannerTable({ rows }) {
+  const [listSort, setListSort] = useState(null);
+  const sortedRows = useMemo(() => sortScannerRows(rows, listSort), [rows, listSort]);
+
+  function toggleListSort() {
+    setListSort((current) => (current === "asc" ? "desc" : "asc"));
+  }
+
   return (
     <section className="price-bucket premarket-scanner-bucket">
       <div className="bucket-heading">
@@ -104,11 +113,20 @@ export function PreMarketScannerTable({ rows }) {
               <th className="price-col">YH</th>
               <th className="price-col">YL</th>
               <th className="price-col">Move</th>
-              <th>List</th>
+              <th>
+                <button
+                  type="button"
+                  className="scanner-sort-button"
+                  onClick={toggleListSort}
+                  aria-label={`Sort scanner by list ${listSort === "asc" ? "descending" : "ascending"}`}
+                >
+                  List {listSort ? <span>{listSort === "asc" ? "A-Z" : "Z-A"}</span> : null}
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
-            {rows.length ? rows.map((row) => (
+            {sortedRows.length ? sortedRows.map((row) => (
               <tr key={row.symbol} className={`stock-row scanner-${row.action.toLowerCase()}`}>
                 <td data-label="Stock"><strong>{row.symbol}</strong></td>
                 <td data-label="Action">
@@ -135,6 +153,17 @@ export function PreMarketScannerTable({ rows }) {
 function formatPercent(value) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? `${numeric.toFixed(2)}%` : "-";
+}
+
+function sortScannerRows(rows, listSort) {
+  if (!listSort) return rows;
+  return [...rows].sort((left, right) => {
+    const listCompare = String(left.watchlistName || "").localeCompare(String(right.watchlistName || ""));
+    const symbolCompare = String(left.symbol || "").localeCompare(String(right.symbol || ""));
+    return listSort === "asc"
+      ? listCompare || symbolCompare
+      : -listCompare || symbolCompare;
+  });
 }
 
 function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }) {
