@@ -72,6 +72,65 @@ button:hover {
   justify-content: flex-end;
 }
 
+.brand-block {
+  display: grid;
+  gap: 3px;
+}
+
+.brand-block p {
+  color: #68766c;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.primary-nav,
+.utility-actions {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.connection-summary {
+  align-items: center;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  display: inline-flex;
+  gap: 10px;
+  min-height: 42px;
+  padding: 5px 6px 5px 12px;
+}
+
+.connection-summary > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.connection-summary strong {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.connection-summary span {
+  color: #68766c;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.connection-summary.ready {
+  background: #e8f8ee;
+  border-color: #20a464;
+  color: #0d513f;
+}
+
+.connection-summary.blocked {
+  background: #fff8e5;
+  border-color: #d69e2e;
+  color: #6b4a00;
+}
+
 .icon-button {
   align-items: center;
   display: inline-flex;
@@ -157,6 +216,37 @@ button:hover {
 
 .push-row > span {
   font-size: 20px;
+}
+
+.notification-state-grid {
+  display: grid;
+  gap: 5px;
+}
+
+.notification-status-line {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.notification-status-line span {
+  color: #68766c;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.notification-status-line strong {
+  background: #fff3d8;
+  border-radius: 999px;
+  color: #5a4211;
+  font-size: 11px;
+  padding: 3px 7px;
+}
+
+.notification-status-line.active strong {
+  background: #dff4e9;
+  color: #0d513f;
 }
 
 .push-row p {
@@ -255,6 +345,16 @@ button:hover {
   gap: 8px;
   min-height: 36px;
   padding: 0 12px;
+}
+
+.account-refresh-button {
+  min-height: 36px;
+  padding: 0 10px;
+}
+
+.account-refresh-button {
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .account-menu-button span {
@@ -3169,8 +3269,42 @@ button:disabled {
   gap: 6px;
 }
 
+.brand-block p {
+  color: #8b9aad;
+}
+
+.primary-nav,
+.utility-actions {
+  background: #0f1722;
+  border: 1px solid #1f2a37;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.connection-summary {
+  background: #0f1722;
+  border-color: #1f2a37;
+}
+
+.connection-summary.ready {
+  background: #10251f;
+  border-color: #1d7a4d;
+  color: #d7fbe5;
+}
+
+.connection-summary.blocked {
+  background: #241b0a;
+  border-color: #9a6a18;
+  color: #fde68a;
+}
+
+.connection-summary span {
+  color: #8b9aad;
+}
+
 .secondary-button,
 .account-menu-button,
+.account-refresh-button,
 .icon-button {
   background: #111a24;
   border: 1px solid #233143;
@@ -3179,6 +3313,7 @@ button:disabled {
 
 .secondary-button:hover,
 .account-menu-button:hover,
+.account-refresh-button:hover,
 .icon-button:hover {
   background: #182333;
 }
@@ -3934,6 +4069,7 @@ select {
 .notification-item time,
 .push-row p,
 .push-row strong,
+.notification-status-line span,
 .account-meta-line span,
 .account-menu-header span,
 .account-menu-list > span,
@@ -3967,6 +4103,7 @@ select {
 }
 
 .notification-icon,
+.notification-status-line strong,
 .mode-badge.test,
 .mode-badge.live,
 .alert-log-table-heading span,
@@ -3975,6 +4112,12 @@ select {
   background: #111a24;
   border: 1px solid #263547;
   color: #cbd5e1;
+}
+
+.notification-status-line.active strong {
+  background: #10251f;
+  border-color: #1d7a4d;
+  color: #bbf7d0;
 }
 
 .cloud-tag.bullish,
@@ -4148,6 +4291,24 @@ select {
   color: #fde68a;
 }
 
+.alert.success {
+  background: #0d2418;
+  border-color: #1d7a4d;
+  color: #bbf7d0;
+}
+
+.alert.info {
+  background: #0f1d33;
+  border-color: #315b9f;
+  color: #bfdbfe;
+}
+
+.alert.error {
+  background: #2b1111;
+  border-color: #b94a48;
+  color: #fecaca;
+}
+
 .watchlist-tab {
   color: #cbd5e1;
 }
@@ -4290,5 +4451,91 @@ select {
 
   .risk-plan small {
     color: #fcd34d;
+  }
+}
+
+/* Header information architecture pass */
+.top-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.primary-nav {
+  flex: 0 1 auto;
+}
+
+.connection-summary {
+  flex: 0 1 auto;
+}
+
+.utility-actions {
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.utility-actions .account-menu-button {
+  min-width: auto;
+}
+
+@media (max-width: 980px) {
+  .topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .top-actions {
+    justify-content: stretch;
+  }
+
+  .primary-nav {
+    flex: 1 1 100%;
+    overflow-x: auto;
+  }
+
+  .primary-nav .account-menu-button {
+    flex: 1 0 auto;
+    justify-content: center;
+  }
+
+  .connection-summary {
+    flex: 1 1 420px;
+  }
+
+  .utility-actions {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .brand-block p {
+    display: none;
+  }
+
+  .top-actions {
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+
+  .primary-nav {
+    grid-column: 1 / -1;
+  }
+
+  .connection-summary {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+
+  .connection-summary span {
+    white-space: normal;
+  }
+
+  .utility-actions {
+    justify-content: end;
+  }
+
+  .utility-actions .account-menu-button span {
+    display: none;
   }
 }

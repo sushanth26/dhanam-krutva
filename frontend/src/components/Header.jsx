@@ -5,9 +5,14 @@ import { accountTypeText, findAccountId, isMarginAccount } from "../lib/market";
 export function Header({
   status,
   accounts,
+  accountCount,
+  accountsConfirmedAt,
+  accountsLoading,
+  accountsConfirmed,
   selectedAccountId,
   pageLoading,
   onSelectAccount,
+  onRefreshAccounts,
   notificationState,
   onEnableNotifications,
   onDisableNotifications,
@@ -30,7 +35,13 @@ export function Header({
   const unreadCount = notifications.filter((item) => !item.read).length;
   const pushEnabled = notificationState.permission === "granted" && notificationState.appEnabled !== false;
   const selectedAccount = accounts.find((account) => findAccountId(account) === selectedAccountId);
-  const selectedAccountLabel = findAccountId(selectedAccount) || `${accounts.length} accounts`;
+  const totalAccountCount = accountCount ?? accounts.length;
+  const selectedAccountLabel = findAccountId(selectedAccount) || `${totalAccountCount} accounts`;
+  const connectionLabel = accountsLoading ? "Checking Webull" : accountsConfirmed ? "Webull ready" : "Webull not ready";
+  const confirmedTime = accountsConfirmedAt ? new Date(accountsConfirmedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
+  const connectionDetail = accountsConfirmed
+    ? `${totalAccountCount} account${totalAccountCount === 1 ? "" : "s"} · checked ${confirmedTime || "now"} · 5 min prices/alerts`
+    : "Confirm accounts before prices or alerts run";
 
   useEffect(() => {
     function closeOverlaysOnOutsidePointer(event) {
@@ -65,110 +76,158 @@ export function Header({
   return (
     <header className="app-header">
       <section className="topbar">
-        <div>
+        <div className="brand-block">
           <h1>Dhanam Krutva</h1>
+          <p>Scanner, MTF alerts, and auto-trade controls</p>
         </div>
         <div className="top-actions">
-          <button
-            type="button"
-            className={`account-menu-button secondary-button ${activePage === "home" ? "active" : ""}`}
-            disabled={pageLoading}
-            onClick={() => onNavigate("home")}
-            aria-label="Open scanner"
-            title="Scanner"
-          >
-            <span>Scanner</span>
-          </button>
-          <button
-            type="button"
-            className={`account-menu-button secondary-button ${activePage === "alerts" ? "active" : ""}`}
-            disabled={pageLoading}
-            onClick={() => onNavigate("alerts")}
-            aria-label="Open alerts history"
-            title="Alerts"
-          >
-            <span>Alerts</span>
-            <b>{alertLogCount || 0}</b>
-          </button>
-          <div className="settings-menu-anchor" ref={settingsAnchorRef}>
+          <nav className="primary-nav" aria-label="Main views">
             <button
               type="button"
-              className="account-menu-button secondary-button"
+              className={`account-menu-button secondary-button ${activePage === "home" ? "active" : ""}`}
               disabled={pageLoading}
-              onClick={() => {
-                setSettingsOpen((open) => !open);
-                setAccountMenuOpen(false);
-                setNotificationsOpen(false);
-              }}
-              aria-label="Open settings menu"
-              title="Settings"
+              onClick={() => onNavigate("home")}
+              aria-label="Open scanner"
+              title="Scanner"
             >
-              <span>Settings</span>
-              <b>{settingsBadge}</b>
+              <span>Scanner</span>
             </button>
-            {settingsOpen ? (
-              <div className="settings-menu">
-                {settingsControls}
-              </div>
-            ) : null}
-          </div>
-          <div className="account-menu-anchor" ref={accountAnchorRef}>
             <button
               type="button"
-              className="account-menu-button secondary-button"
+              className={`account-menu-button secondary-button ${activePage === "mtfs" ? "active" : ""}`}
               disabled={pageLoading}
+              onClick={() => onNavigate("mtfs")}
+              aria-label="Open MTF signals"
+              title="MTF Signals"
+            >
+              <span>MTFs</span>
+            </button>
+            <button
+              type="button"
+              className={`account-menu-button secondary-button ${activePage === "trades" ? "active" : ""}`}
+              disabled={pageLoading}
+              onClick={() => onNavigate("trades")}
+              aria-label="Open auto trades"
+              title="Auto Trades"
+            >
+              <span>Trades</span>
+            </button>
+            <button
+              type="button"
+              className={`account-menu-button secondary-button ${activePage === "alerts" ? "active" : ""}`}
+              disabled={pageLoading}
+              onClick={() => onNavigate("alerts")}
+              aria-label="Open alerts history"
+              title="Alerts"
+            >
+              <span>Alerts</span>
+              <b>{alertLogCount || 0}</b>
+            </button>
+          </nav>
+          <div className={`connection-summary ${accountsConfirmed ? "ready" : "blocked"}`}>
+            <div>
+              <strong>{connectionLabel}</strong>
+              <span>{connectionDetail}</span>
+            </div>
+            <button
+              type="button"
+              className="account-refresh-button secondary-button"
+              disabled={accountsLoading}
               onClick={() => {
-                setAccountMenuOpen((open) => !open);
+                onRefreshAccounts();
+                setAccountMenuOpen(false);
                 setNotificationsOpen(false);
                 setSettingsOpen(false);
               }}
-              aria-label="Open account menu"
-              title="Accounts"
+              aria-label="Confirm Webull account API"
+              title="Confirm Webull account API"
             >
-              <span>Accounts</span>
-              <b>{accounts.length}</b>
+              {accountsLoading ? "Checking" : "Check API"}
             </button>
-            {accountMenuOpen ? (
-              <AccountMenu
+          </div>
+          <div className="utility-actions">
+            <div className="settings-menu-anchor" ref={settingsAnchorRef}>
+              <button
+                type="button"
+                className="account-menu-button secondary-button"
+                disabled={pageLoading}
+                onClick={() => {
+                  setSettingsOpen((open) => !open);
+                  setAccountMenuOpen(false);
+                  setNotificationsOpen(false);
+                }}
+                aria-label="Open settings menu"
+                title="Settings"
+              >
+                <span>Settings</span>
+                <b>{settingsBadge}</b>
+              </button>
+              {settingsOpen ? (
+                <div className="settings-menu">
+                  {settingsControls}
+                </div>
+              ) : null}
+            </div>
+            <div className="account-menu-anchor" ref={accountAnchorRef}>
+              <button
+                type="button"
+                className="account-menu-button secondary-button"
+                disabled={pageLoading}
+                onClick={() => {
+                  setAccountMenuOpen((open) => !open);
+                  setNotificationsOpen(false);
+                  setSettingsOpen(false);
+                }}
+                aria-label="Open account menu"
+                title="Accounts"
+              >
+                <span>Accounts</span>
+                <b>{totalAccountCount}</b>
+              </button>
+              {accountMenuOpen ? (
+                <AccountMenu
                 accounts={accounts}
+                accountCount={totalAccountCount}
                 environmentText={environmentText}
                 onSelectAccount={(accountId) => {
                   onSelectAccount(accountId);
                   setAccountMenuOpen(false);
+                  }}
+                  selectedAccountId={selectedAccountId}
+                  selectedAccountLabel={selectedAccountLabel}
+                  status={status}
+                />
+              ) : null}
+            </div>
+            <div className="notification-anchor" ref={notificationAnchorRef}>
+              <button
+                type="button"
+                className="icon-button notification-button"
+                disabled={pageLoading}
+                onClick={() => {
+                  setNotificationsOpen((open) => !open);
+                  setAccountMenuOpen(false);
+                  setSettingsOpen(false);
                 }}
-                selectedAccountId={selectedAccountId}
-                selectedAccountLabel={selectedAccountLabel}
-                status={status}
-              />
-            ) : null}
-          </div>
-          <div className="notification-anchor" ref={notificationAnchorRef}>
-            <button
-              type="button"
-              className="icon-button notification-button"
-              disabled={pageLoading}
-              onClick={() => {
-                setNotificationsOpen((open) => !open);
-                setAccountMenuOpen(false);
-                setSettingsOpen(false);
-              }}
-              aria-label="Open notifications"
-              title="Notifications"
-            >
-              <span aria-hidden="true">🔔</span>
-              {unreadCount ? <b>{unreadCount}</b> : null}
-            </button>
-            {notificationsOpen ? (
-              <NotificationDrawer
-                notificationLabel={notificationLabel}
-                notifications={notifications}
-                canEnableNotifications={notificationState.permission !== "denied"}
-                onDisableNotifications={onDisableNotifications}
-                onEnableNotifications={onEnableNotifications}
-                onMarkNotificationsRead={onMarkNotificationsRead}
-                pushEnabled={pushEnabled}
-              />
-            ) : null}
+                aria-label="Open notifications"
+                title="Notifications"
+              >
+                <span aria-hidden="true">🔔</span>
+                {unreadCount ? <b>{unreadCount}</b> : null}
+              </button>
+              {notificationsOpen ? (
+                <NotificationDrawer
+                  notificationLabel={notificationLabel}
+                  notificationState={notificationState}
+                  notifications={notifications}
+                  canEnableNotifications={notificationState.permission !== "denied"}
+                  onDisableNotifications={onDisableNotifications}
+                  onEnableNotifications={onEnableNotifications}
+                  onMarkNotificationsRead={onMarkNotificationsRead}
+                  pushEnabled={pushEnabled}
+                />
+              ) : null}
+            </div>
           </div>
         </div>
       </section>
@@ -178,6 +237,7 @@ export function Header({
 
 function AccountMenu({
   accounts,
+  accountCount,
   environmentText,
   onSelectAccount,
   selectedAccountId,
@@ -201,7 +261,7 @@ function AccountMenu({
         <MetaLine label="Endpoint" value={status?.endpoint || "-"} />
       </div>
       <div className="account-menu-list">
-        <span>Accounts {accounts.length}</span>
+        <span>Accounts {accountCount}</span>
         {accounts.length ? accounts.map((account, index) => {
           const accountId = findAccountId(account);
           const accountType = accountTypeText(account) || "WEBULL";
@@ -238,12 +298,20 @@ function MetaLine({ badge, badgeKind = "test", label, value }) {
 function NotificationDrawer({
   canEnableNotifications,
   notificationLabel,
+  notificationState,
   notifications,
   onDisableNotifications,
   onEnableNotifications,
   onMarkNotificationsRead,
   pushEnabled,
 }) {
+  const permissionText = notificationState.permission === "granted"
+    ? "Allowed"
+    : notificationState.permission === "denied" ? "Blocked" : "Not allowed yet";
+  const closedAppText = notificationState.webPushConfigured
+    ? (notificationState.subscribed ? "Ready" : "Not subscribed")
+    : "Not configured";
+  const actionLabel = pushEnabled ? "Disable this device" : notificationLabel;
   return (
     <section className="notification-drawer" aria-label="Notifications">
       <div className="notification-drawer-header">
@@ -252,13 +320,17 @@ function NotificationDrawer({
       </div>
       <div className="push-row">
         <span aria-hidden="true">🔔</span>
-        <p>Push notifications <strong>{pushEnabled ? "ON" : "OFF"}</strong> for this device.</p>
+        <div className="notification-state-grid">
+          <StatusLine label="Browser permission" value={permissionText} active={notificationState.permission === "granted"} />
+          <StatusLine label="This device alerts" value={pushEnabled ? "On" : "Off"} active={pushEnabled} />
+          <StatusLine label="Closed-app push" value={closedAppText} active={notificationState.webPushConfigured && notificationState.subscribed} />
+        </div>
         <button
           type="button"
           onClick={pushEnabled ? onDisableNotifications : onEnableNotifications}
           disabled={!pushEnabled && !canEnableNotifications}
         >
-          {pushEnabled ? "Turn off" : notificationLabel}
+          {actionLabel}
         </button>
       </div>
       <div className="notification-list">
@@ -282,6 +354,15 @@ function NotificationDrawer({
   );
 }
 
+function StatusLine({ active, label, value }) {
+  return (
+    <p className={`notification-status-line ${active ? "active" : ""}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </p>
+  );
+}
+
 function relativeTime(value) {
   const elapsedMs = Date.now() - new Date(value).getTime();
   const minutes = Math.max(0, Math.round(elapsedMs / 60000));
@@ -294,10 +375,9 @@ function relativeTime(value) {
 
 function notificationButtonLabel(state) {
   if (!state?.supported) return "No Notifications";
-  if (state.permission === "denied") return "Blocked in browser";
-  if (state.permission === "default") return "Allow notifications";
-  if (state.appEnabled === false) return "Turn on";
-  if (state.permission === "granted" && state.webPushConfigured && state.subscribed) return "Push Enabled";
-  if (state.permission === "granted") return "Notify Enabled";
-  return "Enable Notifications";
+  if (state.permission === "denied") return "Open browser settings";
+  if (state.permission === "default") return "Enable on this device";
+  if (state.appEnabled === false) return "Enable this device";
+  if (state.permission === "granted") return "Enabled";
+  return "Enable this device";
 }

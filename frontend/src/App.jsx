@@ -9,8 +9,8 @@ import { ALERT_STRATEGIES, filterQuotesByStrategy, loadStrategyState, saveStrate
 import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, flattenAccounts, formatPrice, isMarketRefreshWindow, marginTradingAccountId, matchEntryPrice, notificationMatchText, mtfSignature, preferredAccountId } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
-const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
-const WATCHLIST_SYNC_INTERVAL_MS = 2 * 60 * 1000;
+const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const WATCHLIST_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_NOTIFICATIONS = 20;
 const MAX_ALERT_LOG = 500;
 const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
@@ -22,9 +22,8 @@ const RETAINED_MTF_QUOTES_KEY = "dhanam-retained-mtf-quotes";
 const AUTO_TRADE_KEY = "dhanam-auto-trade";
 const AUTO_TRADE_EXECUTIONS_KEY = "dhanam-auto-trade-executions";
 const MAX_AUTO_TRADE_EXECUTIONS = 500;
-const WATCHLIST_REFRESH_CONCURRENCY = 3;
+const WATCHLIST_REFRESH_CONCURRENCY = 1;
 const OG_WATCHLIST_ID = "og";
-const PRE_MARKET_SCANNER_TAB = "pre-market-scanner";
 const SCANNER_ALERT_STRATEGY_ID = "pre-market-scanner";
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
@@ -649,10 +648,13 @@ export default function App() {
   const [scannerWatchlistIds, setScannerWatchlistIds] = useState(() => loadScannerWatchlistIds(loadWatchlists()));
   const [status, setStatus] = useState(null);
   const [accounts, setAccounts] = useState([]);
+  const [accountCount, setAccountCount] = useState(0);
+  const [accountsConfirmedAt, setAccountsConfirmedAt] = useState(null);
   const [selectedAccountId, setSelectedAccountId] = useState(null);
   const [quotesByTab, setQuotesByTab] = useState(() => initialTabState(loadWatchlists(), []));
   const [updatedTextByTab, setUpdatedTextByTab] = useState(() => initialTabState(loadWatchlists(), "Webull polling stopped"));
   const [alert, setAlert] = useState("");
+  const [alertKind, setAlertKind] = useState("info");
   const [liveAlert, setLiveAlert] = useState("");
   const [notificationState, setNotificationState] = useState({
     supported: false,
@@ -675,7 +677,7 @@ export default function App() {
   const [strategyState, setStrategyState] = useState(loadStrategyState);
   const [riskSettings, setRiskSettings] = useState(loadRiskSettings);
   const [autoTrade, setAutoTrade] = useState(loadAutoTradeSettings);
-  const [watchlistTab, setWatchlistTab] = useState(PRE_MARKET_SCANNER_TAB);
+  const [watchlistTab, setWatchlistTab] = useState(OG_WATCHLIST_ID);
   const [symbolInputs, setSymbolInputs] = useState({});
   const [newMtfRows, setNewMtfRows] = useState({});
   const [focusedMtfSymbol, setFocusedMtfSymbol] = useState("");
@@ -699,11 +701,11 @@ export default function App() {
   const alertLogRef = useRef(alertLog);
   const selectedAccountIdRef = useRef(selectedAccountId);
   const accountsRef = useRef(accounts);
+  const accountsConfirmedRef = useRef(false);
   const watchlistTabRef = useRef(watchlistTab);
   const watchlistsRef = useRef(watchlists);
   const retainedMtfQuotesRef = useRef(retainedMtfQuotesByTab);
-  const scannerSelected = watchlistTab === PRE_MARKET_SCANNER_TAB;
-  const activeWatchlist = scannerSelected ? null : (watchlists.find((item) => item.id === watchlistTab) || watchlists[0]);
+  const activeWatchlist = watchlists.find((item) => item.id === watchlistTab) || watchlists[0];
   const contextWatchlist = activeWatchlist || watchlists[0];
   const quotes = quotesByTab[contextWatchlist?.id] || [];
   const updatedText = updatedTextByTab[contextWatchlist?.id] || "";
@@ -767,24 +769,43 @@ export default function App() {
   async function refreshShell() {
     setLoadingKey("shell", true);
     try {
-      const nextStatus = await getJson("/api/status");
-      setStatus(nextStatus);
-      if (!nextStatus.configured) {
-        setAlert("Add WEBULL_APP_KEY and WEBULL_APP_SECRET to .env, then restart the server.");
-      } else {
-        setAlert("");
-      }
-
       const accountResponse = await getJson("/api/accounts");
       if (!accountResponse.ok) {
-        setAlert(accountErrorText(accountResponse));
-        return;
+        setAppAlert(accountErrorText(accountResponse), "error");
+        setAccounts([]);
+        setAccountCount(0);
+        setAccountsConfirmedAt(null);
+        setSelectedAccountId(null);
+        accountsConfirmedRef.current = false;
+        return false;
       }
       const nextAccounts = flattenAccounts(accountResponse.data);
       setAccounts(nextAccounts);
+      setAccountCount(accountResponse.account_count ?? nextAccounts.length);
       setSelectedAccountId((current) => preferredAccountId(nextAccounts, current));
+      accountsConfirmedRef.current = nextAccounts.length > 0;
+      if (!nextAccounts.length) {
+        setAccountsConfirmedAt(null);
+        setAppAlert("Webull account endpoint responded, but returned zero accounts.", "warning");
+        return false;
+      }
+
+      const nextStatus = await getJson("/api/status");
+      setStatus(nextStatus);
+      if (!nextStatus.configured) {
+        setAppAlert("Add WEBULL_APP_KEY and WEBULL_APP_SECRET to .env, then restart the server.", "error");
+        accountsConfirmedRef.current = false;
+        setAccountsConfirmedAt(null);
+        return false;
+      }
+      setAccountsConfirmedAt(new Date().toISOString());
+      setAppAlert(`Webull account API confirmed ${accountResponse.account_count ?? nextAccounts.length} account${(accountResponse.account_count ?? nextAccounts.length) === 1 ? "" : "s"}.`, "success");
+      return true;
     } catch (error) {
-      setAlert(error.message);
+      setAppAlert(error.message, "error");
+      accountsConfirmedRef.current = false;
+      setAccountsConfirmedAt(null);
+      return false;
     } finally {
       setLoadingKey("shell", false);
     }
@@ -800,7 +821,13 @@ export default function App() {
     return response.error || `Webull returned ${response.status_code}`;
   }
 
+  function setAppAlert(message, kind = "info") {
+    setAlert(message);
+    setAlertKind(kind);
+  }
+
   async function refreshWatchlists({ showLoading = true } = {}) {
+    if (!accountsConfirmedRef.current) return null;
     if (showLoading) setLoadingKey("watchlists", true);
     try {
       const payload = await getJson("/api/webull/watchlists");
@@ -826,6 +853,7 @@ export default function App() {
   }
 
   async function loadAlertHistory({ showLoading = false } = {}) {
+    if (!accountsConfirmedRef.current) return;
     if (showLoading) setLoadingKey("notifications", true);
     try {
       const payload = await getJson("/api/notifications/history?limit=500");
@@ -847,30 +875,11 @@ export default function App() {
     }
   }
 
-  async function loadLivePrices({ manual = false, showLoading = true } = {}) {
-    if (!manual && !isMarketRefreshWindow()) {
-      setUpdatedTextForTab(watchlistTabRef.current, "Auto-refresh paused until premarket open");
+  async function refreshAllPrices({ showLoading = true } = {}) {
+    if (!accountsConfirmedRef.current) {
+      setLiveAlert("Confirm Webull accounts before starting market data refresh.");
       return;
     }
-
-    setLiveAlert("");
-    if (showLoading) setLoadingKey("prices", true);
-    try {
-      const activeTab = watchlistTabRef.current;
-      if (activeTab === PRE_MARKET_SCANNER_TAB) {
-        await refreshScannerPrices({ showLoading: false });
-        return;
-      }
-      const selectedWatchlist = watchlistsRef.current.find((item) => item.id === activeTab);
-      await refreshWatchlistPrices(selectedWatchlist);
-    } catch (error) {
-      setLiveAlert(error.message);
-    } finally {
-      if (showLoading) setLoadingKey("prices", false);
-    }
-  }
-
-  async function refreshAllPrices({ showLoading = true } = {}) {
     setLiveAlert("");
     if (showLoading) setLoadingKey("prices", true);
     try {
@@ -883,6 +892,10 @@ export default function App() {
   }
 
   async function refreshScannerPrices({ showLoading = true } = {}) {
+    if (!accountsConfirmedRef.current) {
+      setLiveAlert("Confirm Webull accounts before starting market data refresh.");
+      return;
+    }
     setLiveAlert("");
     if (showLoading) setLoadingKey("prices", true);
     try {
@@ -901,6 +914,10 @@ export default function App() {
   }
 
   async function refreshScannerWatchlist(id) {
+    if (!accountsConfirmedRef.current) {
+      setLiveAlert("Confirm Webull accounts before starting market data refresh.");
+      return;
+    }
     const watchlist = watchlistsRef.current.find((item) => item.id === id);
     if (!watchlist) return;
     setLiveAlert("");
@@ -936,6 +953,11 @@ export default function App() {
   }
 
   async function refreshAutoTrades({ showLoading = true } = {}) {
+    if (!accountsConfirmedRef.current) {
+      setAutoTradeOrders(emptyAutoTradeOrders());
+      setAutoTradeAlert("Confirm Webull accounts before loading trades.");
+      return;
+    }
     const accountId = tradingAccountId;
     setAutoTradeAlert("");
     if (!accountId) {
@@ -959,6 +981,7 @@ export default function App() {
   }
 
   async function refreshWatchlistPrices(watchlist) {
+    if (!accountsConfirmedRef.current) return;
     if (!watchlist) return;
     const selectedSymbols = watchlist.symbols || [];
     if (!selectedSymbols.length) {
@@ -1283,7 +1306,6 @@ export default function App() {
 
   function addSymbolsToActiveWatchlist(event) {
     event.preventDefault();
-    if (watchlistTab === PRE_MARKET_SCANNER_TAB) return;
     const incoming = normalizeSymbols([symbolInputs[watchlistTab] || ""]);
     if (!incoming.length) return;
     updateWatchlists((current) => current.map((watchlist) => (
@@ -1360,7 +1382,6 @@ export default function App() {
 
   function switchWatchlistTab(tab) {
     setWatchlistTab(tab);
-    if (tab === PRE_MARKET_SCANNER_TAB) return;
     setUpdatedTextByTab((current) => ({
       ...current,
       [tab]: current[tab] || "Watchlist selected",
@@ -1421,12 +1442,11 @@ export default function App() {
       }
       return updated;
     });
-    setWatchlistTab((current) => (
-      current === PRE_MARKET_SCANNER_TAB || next.some((item) => item.id === current) ? current : OG_WATCHLIST_ID
-    ));
+    setWatchlistTab((current) => (next.some((item) => item.id === current) ? current : OG_WATCHLIST_ID));
   }
 
   async function refreshAppMarketData({ showLoading = true } = {}) {
+    if (!accountsConfirmedRef.current) return;
     await refreshWatchlists({ showLoading });
     await refreshAllPrices({ showLoading });
   }
@@ -1500,6 +1520,7 @@ export default function App() {
     watchlistSyncTimer.current = null;
 
     return () => {
+      if (!accountsConfirmedRef.current) return;
       if (!watchlistSyncTimer.current) {
         watchlistSyncTimer.current = setInterval(() => refreshWatchlists({ showLoading: false }), WATCHLIST_SYNC_INTERVAL_MS);
       }
@@ -1511,19 +1532,33 @@ export default function App() {
     };
   }
 
-  useEffect(() => {
-    refreshShell();
-    refreshAppMarketData();
+  function startBackgroundRefresh() {
+    if (!accountsConfirmedRef.current) return;
+    if (!passiveMarketTimer.current) {
+      passiveMarketTimer.current = setInterval(() => {
+        if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false });
+      }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
+    }
+    if (!watchlistSyncTimer.current) {
+      watchlistSyncTimer.current = setInterval(() => refreshWatchlists({ showLoading: false }), WATCHLIST_SYNC_INTERVAL_MS);
+    }
+  }
+
+  async function confirmAccountsAndStart() {
+    const confirmed = await refreshShell();
+    if (!confirmed) return;
+    await refreshAppMarketData();
     loadAlertHistory();
-    passiveMarketTimer.current = setInterval(() => {
-      if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false });
-    }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
-    watchlistSyncTimer.current = setInterval(() => refreshWatchlists({ showLoading: false }), WATCHLIST_SYNC_INTERVAL_MS);
     loadNotificationState(strategyStateRef.current)
       .then(setNotificationState)
       .catch(() => {
         setNotificationState((current) => ({ ...current, supported: false }));
       });
+    startBackgroundRefresh();
+  }
+
+  useEffect(() => {
+    confirmAccountsAndStart();
     return () => {
       if (passiveMarketTimer.current) clearInterval(passiveMarketTimer.current);
       if (watchlistSyncTimer.current) clearInterval(watchlistSyncTimer.current);
@@ -1551,8 +1586,10 @@ export default function App() {
           payload: event.data.payload || null,
         }),
       ]);
-      refreshAppMarketData({ showLoading: false });
-      loadAlertHistory({ showLoading: false });
+      if (accountsConfirmedRef.current) {
+        refreshAppMarketData({ showLoading: false });
+        loadAlertHistory({ showLoading: false });
+      }
     }
 
     navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
@@ -1633,12 +1670,12 @@ export default function App() {
   }, [scannerWatchlistIds]);
 
   useEffect(() => {
-    if (!notificationState.appEnabled) return;
+    if (!accountsConfirmedRef.current || !notificationState.appEnabled) return;
     syncNotificationPreferences(strategyState).catch(() => {});
   }, [notificationState.appEnabled, strategyState]);
 
   useEffect(() => {
-    if (activePage === "trades") refreshAutoTrades();
+    if (accountsConfirmedRef.current && activePage === "trades") refreshAutoTrades();
   }, [activePage, tradingAccountId]);
 
   return (
@@ -1646,9 +1683,14 @@ export default function App() {
       <Header
         status={status}
         accounts={accounts}
+        accountCount={accountCount}
+        accountsConfirmedAt={accountsConfirmedAt}
+        accountsLoading={loading.shell}
+        accountsConfirmed={accountsConfirmedRef.current}
         selectedAccountId={selectedAccountId}
         pageLoading={pageLoading}
         onSelectAccount={(accountId) => setSelectedAccountId(preferredAccountId(accounts, accountId))}
+        onRefreshAccounts={confirmAccountsAndStart}
         notificationState={notificationState}
         onEnableNotifications={enableAppNotifications}
         onDisableNotifications={disableAppNotifications}
@@ -1683,7 +1725,7 @@ export default function App() {
         </div>
       ) : null}
       <main className="shell">
-        {alert ? <div className="alert app-alert">{alert}</div> : null}
+        {alert ? <div className={`alert app-alert ${alertKind}`}>{alert}</div> : null}
 
         {activePage === "alerts" ? (
           <AlertLogPage
@@ -1754,8 +1796,6 @@ export default function App() {
                 onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
                 onSwitchTab={switchWatchlistTab}
                 onToggleAutoTrade={toggleWatchlistAutoTrade}
-                preMarketScannerCount={preMarketScannerRows.length}
-                preMarketScannerTabId={PRE_MARKET_SCANNER_TAB}
                 selectedWatchlist={contextWatchlist}
                 symbolInput={symbolInputs[watchlistTab] || ""}
                 watchlists={watchlists}
@@ -2351,13 +2391,10 @@ function WatchlistTabs({
   onSwitchTab,
   onSymbolInput,
   onToggleAutoTrade,
-  preMarketScannerCount,
-  preMarketScannerTabId,
   selectedWatchlist,
   symbolInput,
   watchlists,
 }) {
-  const scannerSelected = activeTab === preMarketScannerTabId;
   return (
     <section className="watchlist-panel" aria-label="Watchlists">
       <div className="watchlist-tabs" role="tablist" aria-label="Watchlist tabs">
@@ -2384,17 +2421,6 @@ function WatchlistTabs({
             ) : null}
           </span>
         ))}
-        <span className={`watchlist-tab scanner-tab ${scannerSelected ? "active" : ""}`}>
-          <button
-            type="button"
-            onClick={() => onSwitchTab(preMarketScannerTabId)}
-            role="tab"
-            aria-selected={scannerSelected}
-          >
-            Pre Market Scanner
-            <b>{preMarketScannerCount}</b>
-          </button>
-        </span>
         <button
           type="button"
           className="watchlist-add-tab"
@@ -2405,16 +2431,15 @@ function WatchlistTabs({
           +
         </button>
       </div>
-      {scannerSelected ? null : (
       <div className="daily-list-editor">
         <label className="watchlist-auto-trade-toggle">
           <input
             type="checkbox"
-            checked={selectedWatchlist?.autoTradeEnabled === false}
+            checked={selectedWatchlist?.autoTradeEnabled !== false}
             disabled={!selectedWatchlist || loading}
-            onChange={(event) => onToggleAutoTrade(selectedWatchlist.id, !event.target.checked)}
+            onChange={(event) => onToggleAutoTrade(selectedWatchlist.id, event.target.checked)}
           />
-          <span>Do not auto trade this watchlist</span>
+          <span>{selectedWatchlist?.autoTradeEnabled === false ? "Auto trade this list off" : "Auto trade this list on"}</span>
         </label>
         <form onSubmit={onAddSymbols}>
           <input
@@ -2426,7 +2451,6 @@ function WatchlistTabs({
           <button type="submit" disabled={loading}>Add</button>
         </form>
       </div>
-      )}
     </section>
   );
 }
