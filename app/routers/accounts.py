@@ -15,7 +15,8 @@ def status():
 @router.get("/api/accounts")
 def accounts():
     try:
-        return service().account_list()
+        payload = service().account_list()
+        return {**payload, "account_count": _account_count(payload.get("data"))}
     except WebullConfigurationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -58,3 +59,14 @@ def snapshot(account_id: str | None = Query(default=None)):
         return service().snapshot(account_id)
     except WebullConfigurationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _account_count(data) -> int:
+    if isinstance(data, list):
+        return len(data)
+    if isinstance(data, dict):
+        for key in ("accounts", "accountList", "account_list", "items", "data"):
+            value = data.get(key)
+            if isinstance(value, list):
+                return len(value)
+    return 0
