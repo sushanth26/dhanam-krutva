@@ -3483,6 +3483,30 @@ select {
   text-align: left;
 }
 
+.scanner-sort-button {
+  align-items: center;
+  background: transparent;
+  color: inherit;
+  display: inline-flex;
+  font: inherit;
+  font-weight: inherit;
+  gap: 6px;
+  justify-content: flex-start;
+  min-height: 0;
+  padding: 0;
+  text-transform: inherit;
+}
+
+.scanner-sort-button:hover {
+  background: transparent;
+  color: #e5edf7;
+}
+
+.scanner-sort-button span {
+  color: #64748b;
+  font-size: 10px;
+}
+
 .scanner-action {
   border-radius: 6px;
   min-width: 56px;
