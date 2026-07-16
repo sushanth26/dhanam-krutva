@@ -210,7 +210,7 @@ button:hover {
   border-top: 1px solid #dbe2d8;
   display: grid;
   gap: 10px;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto auto;
   padding: 12px 18px;
 }
 
@@ -265,6 +265,10 @@ button:hover {
   color: #4d5a55;
   min-height: 34px;
   padding: 0 12px;
+}
+
+.notification-retry-button {
+  white-space: nowrap;
 }
 
 .notification-list {

@@ -16,6 +16,7 @@ export function Header({
   notificationState,
   onEnableNotifications,
   onDisableNotifications,
+  onRetryNotificationCheck,
   notifications,
   onMarkNotificationsRead,
   activePage,
@@ -224,6 +225,7 @@ export function Header({
                   onDisableNotifications={onDisableNotifications}
                   onEnableNotifications={onEnableNotifications}
                   onMarkNotificationsRead={onMarkNotificationsRead}
+                  onRetryNotificationCheck={onRetryNotificationCheck}
                   pushEnabled={pushEnabled}
                 />
               ) : null}
@@ -303,6 +305,7 @@ function NotificationDrawer({
   onDisableNotifications,
   onEnableNotifications,
   onMarkNotificationsRead,
+  onRetryNotificationCheck,
   pushEnabled,
 }) {
   const permissionText = notificationState.permission === "granted"
@@ -331,6 +334,9 @@ function NotificationDrawer({
           disabled={!pushEnabled && !canEnableNotifications}
         >
           {actionLabel}
+        </button>
+        <button type="button" className="notification-retry-button" onClick={onRetryNotificationCheck}>
+          Retry MTF check
         </button>
       </div>
       <div className="notification-list">

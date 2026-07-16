@@ -1513,6 +1513,36 @@ export default function App() {
     }
   }
 
+  async function retryNotificationCheck() {
+    setLoadingKey("notifications", true);
+    try {
+      const payload = await postJson("/api/notifications/check", {});
+      if (payload.notification) {
+        addNotification({
+          title: payload.notification.title || "MTF check sent",
+          message: payload.notification.body || "Manual MTF notification check completed.",
+          kind: "system",
+        });
+        loadAlertHistory({ showLoading: false });
+      } else {
+        addNotification({
+          title: "MTF check complete",
+          message: "No new notification changes found.",
+          kind: "system",
+        });
+      }
+    } catch (error) {
+      setLiveAlert(error.message);
+      addNotification({
+        title: "MTF check paused",
+        message: error.message,
+        kind: "system",
+      });
+    } finally {
+      setLoadingKey("notifications", false);
+    }
+  }
+
   function pauseBackgroundRefresh() {
     if (passiveMarketTimer.current) clearInterval(passiveMarketTimer.current);
     if (watchlistSyncTimer.current) clearInterval(watchlistSyncTimer.current);
@@ -1694,6 +1724,7 @@ export default function App() {
         notificationState={notificationState}
         onEnableNotifications={enableAppNotifications}
         onDisableNotifications={disableAppNotifications}
+        onRetryNotificationCheck={retryNotificationCheck}
         notifications={bellNotifications}
         onMarkNotificationsRead={markNotificationsRead}
         activePage={activePage}

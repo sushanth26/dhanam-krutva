@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.config import get_settings
@@ -32,6 +32,19 @@ def notification_config():
         "vapid_public_key": settings.vapid_public_key,
         "poll_seconds": settings.mtf_push_poll_seconds,
     }
+
+
+@router.post("/check")
+def check_notifications(request: Request):
+    settings = get_settings()
+    monitor = getattr(request.app.state, "mtf_push_monitor", None)
+    if monitor is None:
+        monitor = MtfPushMonitor(settings)
+    try:
+        notification = monitor.check_once(manual=True)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"ok": True, "notification": notification, "monitor": monitor.status()}
 
 
 @router.post("/subscribe")
