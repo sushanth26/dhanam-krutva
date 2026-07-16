@@ -3689,9 +3689,11 @@ select {
     border-bottom: 1px solid #1f2a37;
     display: grid;
     gap: 8px;
-    grid-template-columns: 92px minmax(0, 1fr);
+    grid-template-columns: 76px minmax(0, 1fr);
+    overflow-wrap: normal;
     padding: 8px 10px;
     text-align: left;
+    word-break: normal;
   }
 
   .premarket-scanner-table th:first-child,
@@ -3718,6 +3720,16 @@ select {
   .premarket-scanner-table th:last-child,
   .premarket-scanner-table td:last-child {
     text-align: left;
+  }
+
+  .premarket-scanner-table .price-cell,
+  .premarket-scanner-table .scanner-action,
+  .premarket-scanner-table .cloud-tag,
+  .premarket-scanner-table td strong {
+    min-width: max-content;
+    overflow-wrap: normal;
+    white-space: nowrap;
+    word-break: keep-all;
   }
 
   .premarket-scanner-table .scanner-empty-row td {

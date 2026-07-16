@@ -452,7 +452,7 @@ def filter_payload_by_strategies(payload: dict[str, Any], strategy_state: dict[s
     if "matches" not in payload:
         return payload
 
-    strategies = normalize_strategy_state(strategy_state)
+    strategies = strategy_state if isinstance(strategy_state, dict) else {}
     filtered_matches = []
     for item in payload.get("matches", []):
         labels = []
@@ -464,7 +464,7 @@ def filter_payload_by_strategies(payload: dict[str, Any], strategy_state: dict[s
         }
         for label in item.get("labels", []):
             label_text = str(label or "")
-            if label_text and strategies.get(strategy_id_for_label(label_text), True):
+            if label_text and strategies.get(strategy_id_for_label(label_text)) is True:
                 labels.append(label_text)
                 if label_text in detail_by_label:
                     details.append(detail_by_label[label_text])

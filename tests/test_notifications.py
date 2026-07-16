@@ -223,7 +223,15 @@ def test_filter_payload_by_strategies_can_disable_10m_hourly_bounces_only():
         ],
     }
 
-    filtered = filter_payload_by_strategies(payload, {"ten-minute-bounce-hourly": False})
+    filtered = filter_payload_by_strategies(
+        payload,
+        {
+            "ten-minute-bounce-10m": True,
+            "ten-minute-bounce-hourly": False,
+            "ten-minute-bounce-daily-fast": True,
+            "ten-minute-bounce-daily-slow": True,
+        },
+    )
 
     assert filtered["matches"][0]["labels"] == [
         "10m bounce 34/50",
@@ -239,7 +247,10 @@ def test_filter_payload_by_strategies_can_disable_9ema_touch_only():
         ],
     }
 
-    filtered = filter_payload_by_strategies(payload, {"ten-minute-9ema-touch": False})
+    filtered = filter_payload_by_strategies(
+        payload,
+        {"ten-minute-bounce-10m": True, "ten-minute-9ema-touch": False},
+    )
 
     assert filtered["matches"][0]["labels"] == ["10m bounce 34/50"]
 
@@ -261,7 +272,12 @@ def test_filter_payload_by_strategies_can_disable_daily_bounces_only():
 
     filtered = filter_payload_by_strategies(
         payload,
-        {"ten-minute-bounce-daily-fast": False, "ten-minute-bounce-daily-slow": False},
+        {
+            "ten-minute-bounce-10m": True,
+            "ten-minute-bounce-hourly": True,
+            "ten-minute-bounce-daily-fast": False,
+            "ten-minute-bounce-daily-slow": False,
+        },
     )
 
     assert filtered["matches"][0]["labels"] == [
@@ -278,6 +294,16 @@ def test_filter_payload_by_strategies_skips_push_when_all_alerts_disabled():
     }
 
     assert filter_payload_by_strategies(payload, {"hourly-cloud": False}) is None
+
+
+def test_filter_payload_by_strategies_skips_unselected_missing_alerts():
+    payload = {
+        "matches": [
+            {"symbol": "BE", "labels": ["Hourly 34/50"]},
+        ],
+    }
+
+    assert filter_payload_by_strategies(payload, {}) is None
 
 
 def test_filter_payload_by_strategies_keeps_generic_test_payloads():

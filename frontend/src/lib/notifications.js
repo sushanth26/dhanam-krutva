@@ -19,7 +19,7 @@ export function notificationSupport() {
   };
 }
 
-export async function loadNotificationState() {
+export async function loadNotificationState(alertStrategies = {}) {
   const support = notificationSupport();
   if (!support.notifications || !support.serviceWorker) {
     return { supported: false, permission: "unsupported", webPushConfigured: false, subscribed: false, appEnabled: false };
@@ -32,7 +32,7 @@ export async function loadNotificationState() {
     await removeExistingSubscription(registration);
   }
   const subscription = appEnabled && support.push
-    ? await syncExistingSubscription(registration, config, Notification.permission)
+    ? await syncExistingSubscription(registration, config, Notification.permission, alertStrategies)
     : null;
   return {
     supported: true,
@@ -147,12 +147,12 @@ async function registerNotificationWorker() {
   return registration;
 }
 
-async function syncExistingSubscription(registration, config, permission) {
+async function syncExistingSubscription(registration, config, permission, alertStrategies = {}) {
   const existing = await registration.pushManager.getSubscription();
   if (permission !== "granted" || !config.web_push_configured || !config.vapid_public_key) {
     return existing;
   }
-  return ensureServerSubscription(registration, config, existing);
+  return ensureServerSubscription(registration, config, existing, alertStrategies);
 }
 
 async function removeExistingSubscription(registration) {

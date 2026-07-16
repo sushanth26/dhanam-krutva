@@ -720,7 +720,8 @@ export default function App() {
 
       const accountResponse = await getJson("/api/accounts");
       if (!accountResponse.ok) {
-        setAlert(accountResponse.error || `Webull returned ${accountResponse.status_code}`);
+        setAlert(accountErrorText(accountResponse));
+        return;
       }
       const nextAccounts = flattenAccounts(accountResponse.data);
       setAccounts(nextAccounts);
@@ -730,6 +731,16 @@ export default function App() {
     } finally {
       setLoadingKey("shell", false);
     }
+  }
+
+  function accountErrorText(response) {
+    if (response.webull_guard_active) {
+      const until = response.webull_guard_blocked_until
+        ? ` until ${new Date(response.webull_guard_blocked_until).toLocaleString()}`
+        : "";
+      return `Webull account login is paused${until}: ${response.error}`;
+    }
+    return response.error || `Webull returned ${response.status_code}`;
   }
 
   async function refreshWatchlists({ showLoading = true } = {}) {
@@ -856,6 +867,12 @@ export default function App() {
       fixed_stop_buffer: String(settings.fixedStopBuffer),
     });
     const payload = await getJson(`/api/webull/live-prices?${query.toString()}`);
+    if (!payload.ok) {
+      const errorText = livePriceErrorText(payload);
+      setUpdatedTextForTab(watchlist.id, errorText.status);
+      setLiveAlert(errorText.alert);
+      return;
+    }
     const nextQuotes = payload.quotes || [];
     const currentMtfs = filterQuotesByStrategy(alertableMtfQuotes(nextQuotes), strategyStateRef.current);
     const updatedAt = new Date().toLocaleTimeString();
@@ -869,6 +886,22 @@ export default function App() {
     if (payload.errors?.length) {
       setLiveAlert(`Some data failed: ${payload.errors.map((item) => item.source).join(", ")}`);
     }
+  }
+
+  function livePriceErrorText(payload) {
+    const firstError = payload.errors?.map((item) => item.error).find(Boolean);
+    const guardUntil = firstError?.webull_guard_blocked_until;
+    const guardSuffix = guardUntil ? ` until ${new Date(guardUntil).toLocaleString()}` : "";
+    if (firstError?.webull_guard_active) {
+      return {
+        status: "Webull polling blocked",
+        alert: `Webull polling is paused${guardSuffix}: ${firstError.error}`,
+      };
+    }
+    return {
+      status: "Webull polling failed",
+      alert: firstError?.error || "Webull live prices returned no fresh data.",
+    };
   }
 
   function setQuotesForTab(tab, nextQuotes) {
@@ -1316,7 +1349,7 @@ export default function App() {
       if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false });
     }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
     watchlistSyncTimer.current = setInterval(() => refreshWatchlists({ showLoading: false }), WATCHLIST_SYNC_INTERVAL_MS);
-    loadNotificationState()
+    loadNotificationState(strategyStateRef.current)
       .then(setNotificationState)
       .catch(() => {
         setNotificationState((current) => ({ ...current, supported: false }));
