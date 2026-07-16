@@ -3269,6 +3269,51 @@ button:disabled {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.scanner-watchlist-picker {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.scanner-watchlist-chip {
+  align-items: center;
+  background: #0f1722;
+  border: 1px solid #263547;
+  color: #8b9aad;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 32px;
+  max-width: 150px;
+  padding: 0 10px;
+}
+
+.scanner-watchlist-chip.active {
+  background: #172033;
+  border-color: #3b82f6;
+  color: #eff6ff;
+}
+
+.scanner-watchlist-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scanner-watchlist-chip b {
+  align-items: center;
+  background: #1f2a37;
+  border-radius: 999px;
+  color: inherit;
+  display: inline-flex;
+  font-size: 11px;
+  height: 20px;
+  justify-content: center;
+  min-width: 20px;
+  padding: 0 6px;
+}
+
 .scanner-metric {
   background: #0f1722;
   border: 1px solid #213044;

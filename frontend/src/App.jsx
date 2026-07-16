@@ -15,6 +15,7 @@ const MAX_NOTIFICATIONS = 20;
 const MAX_ALERT_LOG = 500;
 const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
 const WATCHLISTS_KEY = "dhanam-watchlists";
+const SCANNER_WATCHLISTS_KEY = "dhanam-scanner-watchlists";
 const RISK_SETTINGS_KEY = "dhanam-risk-settings";
 const ALERT_LOG_KEY = "dhanam-alert-log";
 const RETAINED_MTF_QUOTES_KEY = "dhanam-retained-mtf-quotes";
@@ -57,6 +58,23 @@ function loadWatchlists() {
 
 function saveWatchlists(watchlists) {
   window.localStorage.setItem(WATCHLISTS_KEY, JSON.stringify(watchlists));
+}
+
+function loadScannerWatchlistIds(watchlists) {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(SCANNER_WATCHLISTS_KEY) || "null");
+    if (Array.isArray(saved)) {
+      const ids = new Set(watchlists.map((watchlist) => watchlist.id));
+      return saved.filter((id) => ids.has(id));
+    }
+  } catch {
+    // Fall back to all watchlists.
+  }
+  return watchlists.map((watchlist) => watchlist.id);
+}
+
+function saveScannerWatchlistIds(ids) {
+  window.localStorage.setItem(SCANNER_WATCHLISTS_KEY, JSON.stringify(ids));
 }
 
 function normalizeWatchlists(watchlists) {
@@ -627,6 +645,7 @@ function scannerTrendRank(trend) {
 
 export default function App() {
   const [watchlists, setWatchlists] = useState(loadWatchlists);
+  const [scannerWatchlistIds, setScannerWatchlistIds] = useState(() => loadScannerWatchlistIds(loadWatchlists()));
   const [status, setStatus] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [selectedAccountId, setSelectedAccountId] = useState(null);
@@ -702,7 +721,11 @@ export default function App() {
       { bullish: [], bearish: [], chop: [] },
     );
   }, [quotes]);
-  const preMarketScannerRows = useMemo(() => preMarketScannerRowsFromWatchlists(watchlists, quotesByTab), [watchlists, quotesByTab]);
+  const scannerWatchlists = useMemo(() => {
+    const selectedIds = new Set(scannerWatchlistIds);
+    return watchlists.filter((watchlist) => selectedIds.has(watchlist.id));
+  }, [scannerWatchlistIds, watchlists]);
+  const preMarketScannerRows = useMemo(() => preMarketScannerRowsFromWatchlists(scannerWatchlists, quotesByTab), [scannerWatchlists, quotesByTab]);
   const scannerLongCount = useMemo(() => preMarketScannerRows.filter((row) => row.action === "Long").length, [preMarketScannerRows]);
   const scannerShortCount = useMemo(() => preMarketScannerRows.filter((row) => row.action === "Short").length, [preMarketScannerRows]);
   const allMtfQuotes = useMemo(() => {
@@ -834,7 +857,7 @@ export default function App() {
     try {
       const activeTab = watchlistTabRef.current;
       if (activeTab === PRE_MARKET_SCANNER_TAB) {
-        await refreshAllPrices({ showLoading: false });
+        await refreshScannerPrices({ showLoading: false });
         return;
       }
       const selectedWatchlist = watchlistsRef.current.find((item) => item.id === activeTab);
@@ -851,6 +874,26 @@ export default function App() {
     if (showLoading) setLoadingKey("prices", true);
     try {
       const lists = watchlistsRef.current;
+      for (const watchlist of lists) {
+        await refreshWatchlistPrices(watchlist);
+      }
+    } catch (error) {
+      setLiveAlert(error.message);
+    } finally {
+      if (showLoading) setLoadingKey("prices", false);
+    }
+  }
+
+  async function refreshScannerPrices({ showLoading = true } = {}) {
+    setLiveAlert("");
+    if (showLoading) setLoadingKey("prices", true);
+    try {
+      const selectedIds = new Set(scannerWatchlistIds);
+      const lists = watchlistsRef.current.filter((watchlist) => selectedIds.has(watchlist.id));
+      if (!lists.length) {
+        setLiveAlert("Select a list for the scanner.");
+        return;
+      }
       for (const watchlist of lists) {
         await refreshWatchlistPrices(watchlist);
       }
@@ -1293,6 +1336,18 @@ export default function App() {
     }));
   }
 
+  function toggleScannerWatchlist(id) {
+    setScannerWatchlistIds((current) => (
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id]
+    ));
+  }
+
+  function selectAllScannerWatchlists() {
+    setScannerWatchlistIds(watchlistsRef.current.map((watchlist) => watchlist.id));
+  }
+
   function toggleWatchlistAutoTrade(id, autoTradeEnabled) {
     updateWatchlists((current) => current.map((watchlist) => (
       watchlist.id === id ? { ...watchlist, autoTradeEnabled } : watchlist
@@ -1535,6 +1590,18 @@ export default function App() {
   }, [watchlists]);
 
   useEffect(() => {
+    const validIds = new Set(watchlists.map((watchlist) => watchlist.id));
+    setScannerWatchlistIds((current) => {
+      const next = current.filter((id) => validIds.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [watchlists]);
+
+  useEffect(() => {
+    saveScannerWatchlistIds(scannerWatchlistIds);
+  }, [scannerWatchlistIds]);
+
+  useEffect(() => {
     if (!notificationState.appEnabled) return;
     syncNotificationPreferences(strategyState).catch(() => {});
   }, [notificationState.appEnabled, strategyState]);
@@ -1621,11 +1688,18 @@ export default function App() {
                   <h2>Premarket Scanner</h2>
                 </div>
                 <div className="live-price-actions">
-                  <button type="button" onClick={() => refreshAllPrices()} disabled={loading.prices}>
+                  <button type="button" onClick={() => refreshScannerPrices()} disabled={loading.prices}>
                     {loading.prices ? "Updating" : "Update"}
                   </button>
                 </div>
               </div>
+
+              <ScannerWatchlistPicker
+                onSelectAll={selectAllScannerWatchlists}
+                onToggle={toggleScannerWatchlist}
+                selectedIds={scannerWatchlistIds}
+                watchlists={watchlists}
+              />
 
               <div className="scanner-metric-grid" aria-label="Premarket scanner summary">
                 <ScannerMetric label="Total" value={preMarketScannerRows.length} tone="neutral" />
@@ -2184,6 +2258,33 @@ function AutoTradePanel({ accountId, autoTrade, disabled, onChange }) {
         ))}
       </div>
     </section>
+  );
+}
+
+function ScannerWatchlistPicker({ onSelectAll, onToggle, selectedIds, watchlists }) {
+  const selected = new Set(selectedIds);
+  const allSelected = watchlists.length > 0 && selectedIds.length === watchlists.length;
+  return (
+    <div className="scanner-watchlist-picker" aria-label="Scanner watchlists">
+      <button
+        type="button"
+        className={`scanner-watchlist-chip ${allSelected ? "active" : ""}`}
+        onClick={onSelectAll}
+      >
+        All
+      </button>
+      {watchlists.map((watchlist) => (
+        <button
+          key={watchlist.id}
+          type="button"
+          className={`scanner-watchlist-chip ${selected.has(watchlist.id) ? "active" : ""}`}
+          onClick={() => onToggle(watchlist.id)}
+        >
+          <span>{watchlist.name}</span>
+          <b>{watchlist.symbols.length}</b>
+        </button>
+      ))}
+    </div>
   );
 }
 
