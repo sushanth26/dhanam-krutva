@@ -23,6 +23,7 @@ const AUTO_TRADE_EXECUTIONS_KEY = "dhanam-auto-trade-executions";
 const MAX_AUTO_TRADE_EXECUTIONS = 500;
 const OG_WATCHLIST_ID = "og";
 const PRE_MARKET_SCANNER_TAB = "pre-market-scanner";
+const SCANNER_ALERT_STRATEGY_ID = "pre-market-scanner";
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
   "ASTS", "AMD", "ARM", "AVGO", "DELL", "INTC", "APP", "LLY",
@@ -130,6 +131,10 @@ function shouldPromoteLocalWatchlists(serverWatchlists, localWatchlists) {
 
 function mtfRowId(tab, symbol) {
   return `${tab}:${symbol}`;
+}
+
+function scannerRowKey(row) {
+  return `${row.symbol}:${row.action}`;
 }
 
 function mtfRowSignature(quote) {
@@ -288,6 +293,47 @@ function mtfUrl(symbol) {
   return symbol ? `/?mtf=${encodeURIComponent(symbol)}` : "/";
 }
 
+function scannerNotificationDetails(enteredRows, exitedRows) {
+  const enteredSymbols = enteredRows.map((row) => row.symbol);
+  const exitedSymbols = exitedRows.map((row) => row.symbol);
+  const total = enteredRows.length + exitedRows.length;
+  const primary = enteredRows[0] || exitedRows[0] || null;
+  const enteredText = enteredRows.slice(0, 3).map(scannerRowText).join(" • ");
+  const exitedText = exitedRows.slice(0, 3).map(scannerExitText).join(" • ");
+  const bodyParts = [enteredText, exitedText].filter(Boolean);
+
+  if (total === 1 && primary) {
+    const entered = enteredRows.length === 1;
+    return {
+      title: `${primary.symbol} ${entered ? "entered" : "left"} Pre Market Scanner`,
+      body: entered ? scannerRowText(primary) : scannerExitText(primary),
+      badgeCount: 1,
+      tag: `scanner-${entered ? "in" : "out"}-${primary.symbol}-${primary.action}`,
+      targetSymbol: primary.symbol,
+      url: "/",
+    };
+  }
+
+  return {
+    title: `${total} scanner changes`,
+    body: bodyParts.join(" | ") || "Pre Market Scanner changed.",
+    badgeCount: total,
+    tag: "scanner-changes",
+    targetSymbol: primary?.symbol || "",
+    url: "/",
+    enteredSymbols,
+    exitedSymbols,
+  };
+}
+
+function scannerRowText(row) {
+  return `${row.symbol} ${row.action} ${row.trigger} @ ${formatPrice(row.price)}`;
+}
+
+function scannerExitText(row) {
+  return `${row.symbol} left ${row.action} ${row.trigger}`;
+}
+
 function quotesWithMatchStatus(quotes, status) {
   return quotes
     .map((quote) => ({
@@ -357,7 +403,7 @@ function saveAutoTradeSettings(settings) {
 }
 
 function defaultAutoTradeStrategies() {
-  return Object.fromEntries(ALERT_STRATEGIES.map((strategy) => [strategy.id, false]));
+  return Object.fromEntries(ALERT_STRATEGIES.filter((strategy) => !strategy.scannerOnly).map((strategy) => [strategy.id, false]));
 }
 
 function loadAutoTradeExecutions() {
@@ -638,6 +684,7 @@ export default function App() {
   const watchlistSyncTimer = useRef(null);
   const lastMtfSignature = useRef(initialTabState(loadWatchlists(), null));
   const lastMtfRows = useRef(initialTabState(loadWatchlists(), {}));
+  const lastScannerRows = useRef(null);
   const strategyStateRef = useRef(strategyState);
   const riskSettingsRef = useRef(riskSettings);
   const autoTradeRef = useRef(autoTrade);
@@ -693,7 +740,7 @@ export default function App() {
     [strategyState],
   );
   const autoLongEnabledCount = useMemo(
-    () => ALERT_STRATEGIES.filter((strategy) => autoTrade.strategies?.[strategy.id]).length,
+    () => ALERT_STRATEGIES.filter((strategy) => !strategy.scannerOnly && autoTrade.strategies?.[strategy.id]).length,
     [autoTrade.strategies],
   );
   const unreadNotificationCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
@@ -950,6 +997,45 @@ export default function App() {
     });
     showMtfDeviceNotification(notification);
     if (changed) autoBuyLongAlerts(tab, freshQuotes);
+  }
+
+  function notifyScannerUpdate(nextRows) {
+    const nextByKey = Object.fromEntries(nextRows.map((row) => [scannerRowKey(row), row]));
+    if (strategyStateRef.current?.[SCANNER_ALERT_STRATEGY_ID] === false) {
+      lastScannerRows.current = nextByKey;
+      return;
+    }
+    const previousByKey = lastScannerRows.current;
+    lastScannerRows.current = nextByKey;
+    if (previousByKey === null) {
+      return;
+    }
+
+    const enteredRows = nextRows.filter((row) => !previousByKey[scannerRowKey(row)]);
+    const exitedRows = Object.values(previousByKey).filter((row) => !nextByKey[scannerRowKey(row)]);
+    if (!enteredRows.length && !exitedRows.length) return;
+
+    const notification = scannerNotificationDetails(enteredRows, exitedRows);
+    publishScannerNotification(notification);
+  }
+
+  function publishScannerNotification(notification) {
+    appendAlertLog([
+      notificationHistoryEntry({
+        title: notification.title,
+        message: notification.body,
+        kind: "notification",
+        symbol: notification.targetSymbol,
+        source: "scanner",
+        payload: notification,
+      }),
+    ]);
+    addNotification({
+      title: notification.title,
+      message: notification.body,
+      kind: "scanner",
+    });
+    showScannerDeviceNotification(notification);
   }
 
   function appendAlertLog(entries) {
@@ -1285,6 +1371,18 @@ export default function App() {
     }).catch((error) => setLiveAlert(error.message));
   }
 
+  function showScannerDeviceNotification(notification) {
+    if (!notificationState.appEnabled || notificationState.permission !== "granted") return;
+    showDeviceNotification({
+      title: notification.title,
+      body: notification.body,
+      badgeCount: notification.badgeCount,
+      tag: notification.tag,
+      targetSymbol: notification.targetSymbol,
+      url: notification.url,
+    }).catch((error) => setLiveAlert(error.message));
+  }
+
   async function enableAppNotifications() {
     setLoadingKey("notifications", true);
     try {
@@ -1405,6 +1503,10 @@ export default function App() {
       document.querySelector(`[data-mtf-symbol="${focusedMtfSymbol}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
   }, [allMtfs, focusedMtfSymbol]);
+
+  useEffect(() => {
+    notifyScannerUpdate(preMarketScannerRows);
+  }, [preMarketScannerRows]);
 
   useEffect(() => {
     const canBadge = notificationState.appEnabled && notificationState.permission === "granted";
@@ -2069,7 +2171,8 @@ function AutoTradePanel({ accountId, autoTrade, disabled, onChange }) {
     });
   }
 
-  const enabledCount = ALERT_STRATEGIES.filter((strategy) => autoTrade.strategies?.[strategy.id]).length;
+  const autoTradeStrategies = ALERT_STRATEGIES.filter((strategy) => !strategy.scannerOnly);
+  const enabledCount = autoTradeStrategies.filter((strategy) => autoTrade.strategies?.[strategy.id]).length;
 
   return (
     <section className={`auto-trade-panel ${autoTrade.enabled ? "enabled" : ""}`} aria-label="Auto long trading">
@@ -2089,7 +2192,7 @@ function AutoTradePanel({ accountId, autoTrade, disabled, onChange }) {
         <em>{accountId ? `${enabledCount} strategy${enabledCount === 1 ? "" : "ies"}` : "Select account"}</em>
       </div>
       <div className="auto-strategy-grid">
-        {ALERT_STRATEGIES.map((strategy) => (
+        {autoTradeStrategies.map((strategy) => (
           <label key={strategy.id} className={`auto-strategy-chip ${autoTrade.strategies?.[strategy.id] ? "enabled" : ""}`}>
             <input
               type="checkbox"
