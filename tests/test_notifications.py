@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import app.notifications as notifications
 from app.notifications import (
     AlertHistoryStore,
+    MtfPushMonitor,
     PushSubscriptionStore,
     alert_history_entries_from_push,
     build_monitored_quotes,
@@ -173,6 +174,41 @@ def test_build_monitored_quotes_omits_deleted_symbols(tmp_path, monkeypatch):
     assert requested_symbols == ["BE", "PLTR"]
     assert "AAOI" not in requested_symbols
     assert [quote["symbol"] for quote in quotes] == ["BE", "PLTR"]
+
+
+def test_mtf_push_monitor_pauses_after_failed_webull_check_until_manual_retry(tmp_path, monkeypatch):
+    settings = SimpleNamespace(
+        alert_history_file=tmp_path / "alerts.json",
+        push_subscription_file=tmp_path / "push.json",
+        vapid_private_key=None,
+        vapid_subject="mailto:test@example.com",
+    )
+    monitor = MtfPushMonitor(settings)
+    calls = {"count": 0}
+
+    def failing_quotes(_settings):
+        calls["count"] += 1
+        raise RuntimeError("waiting for Webull app confirmation")
+
+    monkeypatch.setattr(notifications, "build_monitored_quotes", failing_quotes)
+
+    try:
+        monitor.check_once()
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("failed Webull check should surface for manual retry")
+
+    assert monitor.status()["paused_for_manual_retry"] is True
+    assert calls["count"] == 1
+
+    assert monitor.check_once() is None
+    assert calls["count"] == 1
+
+    monkeypatch.setattr(notifications, "build_monitored_quotes", lambda _settings: [])
+
+    assert monitor.check_once(manual=True) is None
+    assert monitor.status()["paused_for_manual_retry"] is False
 
 
 def test_filter_payload_by_strategies_removes_disabled_alerts():

@@ -509,8 +509,8 @@ class WebullService:
                 self.settings.region,
                 connect_timeout=5,
                 timeout=20,
-                auto_retry=True,
-                max_retry_num=1,
+                auto_retry=False,
+                max_retry_num=0,
             )
         api_client.add_endpoint(self.settings.region, self.settings.endpoint)
         if self.settings.access_token:

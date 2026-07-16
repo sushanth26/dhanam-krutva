@@ -100,3 +100,25 @@ def test_disabled_webull_guard_does_not_block_future_sdk_calls(tmp_path):
 
     assert service.status()["webull_guard_enabled"] is False
     assert result["ok"] is True
+
+
+def test_api_client_does_not_auto_retry_webull_calls(tmp_path, monkeypatch):
+    captured = {}
+
+    class FakeApiClient:
+        def __init__(self, *args, **kwargs):
+            captured["kwargs"] = kwargs
+
+        def add_endpoint(self, *_args):
+            pass
+
+        def set_token_dir(self, *_args):
+            pass
+
+    monkeypatch.setattr("app.webull_service.ApiClient", FakeApiClient)
+
+    service = WebullService(settings(tmp_path))
+    service._api_client()
+
+    assert captured["kwargs"]["auto_retry"] is False
+    assert captured["kwargs"]["max_retry_num"] == 0

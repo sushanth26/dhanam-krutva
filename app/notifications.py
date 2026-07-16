@@ -107,6 +107,8 @@ class MtfPushMonitor:
         self.store = PushSubscriptionStore(settings.push_subscription_file)
         self.task: asyncio.Task | None = None
         self.last_signature: str | None = None
+        self.paused_for_manual_retry = False
+        self.last_error: str | None = None
 
     def start(self) -> None:
         if self.task or not self.settings.push_configured:
@@ -126,24 +128,45 @@ class MtfPushMonitor:
     async def _run(self) -> None:
         while True:
             try:
-                if self.store.all() and is_market_refresh_window(self.settings.mtf_push_timezone):
+                if (
+                    not self.paused_for_manual_retry
+                    and self.store.all()
+                    and is_market_refresh_window(self.settings.mtf_push_timezone)
+                ):
                     await asyncio.to_thread(self.check_once)
             except Exception:
                 pass
             await asyncio.sleep(self.settings.mtf_push_poll_seconds)
 
-    def check_once(self) -> dict[str, Any] | None:
-        quotes = confirmed_mtf_quotes(build_monitored_quotes(self.settings))
-        signature = mtf_signature(quotes)
-        changed = self.last_signature is not None and signature != self.last_signature
-        self.last_signature = signature
-        if not changed:
+    def check_once(self, manual: bool = False) -> dict[str, Any] | None:
+        if self.paused_for_manual_retry and not manual:
             return None
+        if manual:
+            self.paused_for_manual_retry = False
+            self.last_error = None
+        try:
+            quotes = confirmed_mtf_quotes(build_monitored_quotes(self.settings))
+            signature = mtf_signature(quotes)
+            changed = self.last_signature is not None and signature != self.last_signature
+            self.last_signature = signature
+            self.last_error = None
+            if not changed:
+                return None
 
-        notification = mtf_notification_payload(quotes)
-        AlertHistoryStore(self.settings.alert_history_file).append(alert_history_entries_from_push(notification))
-        self.send(notification)
-        return notification
+            notification = mtf_notification_payload(quotes)
+            AlertHistoryStore(self.settings.alert_history_file).append(alert_history_entries_from_push(notification))
+            self.send(notification)
+            return notification
+        except Exception as exc:
+            self.paused_for_manual_retry = True
+            self.last_error = str(exc)
+            raise
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "paused_for_manual_retry": self.paused_for_manual_retry,
+            "last_error": self.last_error,
+        }
 
     def send(self, payload: dict[str, Any]) -> dict[str, int]:
         if not self.settings.push_configured:
@@ -207,8 +230,21 @@ def build_monitored_quotes(settings: Settings) -> list[dict[str, Any]]:
         if not chunk:
             continue
         payload = build_live_prices(webull, ",".join(chunk))
+        if payload.get("ok") is False:
+            first_error = next((item.get("error") for item in payload.get("errors", []) if item.get("error")), None)
+            raise RuntimeError(webull_error_message(first_error or payload))
         quotes.extend(payload.get("quotes", []))
     return quotes
+
+
+def webull_error_message(error: Any) -> str:
+    if isinstance(error, dict):
+        if error.get("webull_guard_active"):
+            blocked_until = error.get("webull_guard_blocked_until")
+            suffix = f" until {blocked_until}" if blocked_until else ""
+            return f"Webull calls are paused{suffix}: {error.get('error') or error.get('message') or 'manual retry required'}"
+        return str(error.get("error") or error.get("message") or error.get("error_code") or "Webull request failed")
+    return str(error or "Webull request failed")
 
 
 def mtf_notification_payload(quotes: list[dict[str, Any]]) -> dict[str, Any]:
