@@ -22,6 +22,7 @@ const RETAINED_MTF_QUOTES_KEY = "dhanam-retained-mtf-quotes";
 const AUTO_TRADE_KEY = "dhanam-auto-trade";
 const AUTO_TRADE_EXECUTIONS_KEY = "dhanam-auto-trade-executions";
 const MAX_AUTO_TRADE_EXECUTIONS = 500;
+const WATCHLIST_REFRESH_CONCURRENCY = 3;
 const OG_WATCHLIST_ID = "og";
 const PRE_MARKET_SCANNER_TAB = "pre-market-scanner";
 const SCANNER_ALERT_STRATEGY_ID = "pre-market-scanner";
@@ -873,10 +874,7 @@ export default function App() {
     setLiveAlert("");
     if (showLoading) setLoadingKey("prices", true);
     try {
-      const lists = watchlistsRef.current;
-      for (const watchlist of lists) {
-        await refreshWatchlistPrices(watchlist);
-      }
+      await refreshWatchlistBatch(watchlistsRef.current);
     } catch (error) {
       setLiveAlert(error.message);
     } finally {
@@ -894,13 +892,46 @@ export default function App() {
         setLiveAlert("Select a list for the scanner.");
         return;
       }
-      for (const watchlist of lists) {
-        await refreshWatchlistPrices(watchlist);
-      }
+      await refreshWatchlistBatch(lists);
     } catch (error) {
       setLiveAlert(error.message);
     } finally {
       if (showLoading) setLoadingKey("prices", false);
+    }
+  }
+
+  async function refreshScannerWatchlist(id) {
+    const watchlist = watchlistsRef.current.find((item) => item.id === id);
+    if (!watchlist) return;
+    setLiveAlert("");
+    setLoadingKey("prices", true);
+    try {
+      await refreshWatchlistPrices(watchlist);
+    } catch (error) {
+      setLiveAlert(error.message);
+    } finally {
+      setLoadingKey("prices", false);
+    }
+  }
+
+  async function refreshWatchlistBatch(lists) {
+    let index = 0;
+    const errors = [];
+    const workerCount = Math.min(WATCHLIST_REFRESH_CONCURRENCY, lists.length);
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (index < lists.length) {
+        const watchlist = lists[index];
+        index += 1;
+        try {
+          await refreshWatchlistPrices(watchlist);
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+    });
+    await Promise.all(workers);
+    if (errors.length) {
+      throw errors[0];
     }
   }
 
@@ -1695,8 +1726,10 @@ export default function App() {
               </div>
 
               <ScannerWatchlistPicker
+                loading={loading.prices}
                 onSelectAll={selectAllScannerWatchlists}
                 onToggle={toggleScannerWatchlist}
+                onUpdate={refreshScannerWatchlist}
                 selectedIds={scannerWatchlistIds}
                 watchlists={watchlists}
               />
@@ -2261,7 +2294,7 @@ function AutoTradePanel({ accountId, autoTrade, disabled, onChange }) {
   );
 }
 
-function ScannerWatchlistPicker({ onSelectAll, onToggle, selectedIds, watchlists }) {
+function ScannerWatchlistPicker({ loading, onSelectAll, onToggle, onUpdate, selectedIds, watchlists }) {
   const selected = new Set(selectedIds);
   const allSelected = watchlists.length > 0 && selectedIds.length === watchlists.length;
   return (
@@ -2274,15 +2307,27 @@ function ScannerWatchlistPicker({ onSelectAll, onToggle, selectedIds, watchlists
         All
       </button>
       {watchlists.map((watchlist) => (
-        <button
-          key={watchlist.id}
-          type="button"
-          className={`scanner-watchlist-chip ${selected.has(watchlist.id) ? "active" : ""}`}
-          onClick={() => onToggle(watchlist.id)}
-        >
-          <span>{watchlist.name}</span>
-          <b>{watchlist.symbols.length}</b>
-        </button>
+        <span key={watchlist.id} className={`scanner-watchlist-item ${selected.has(watchlist.id) ? "active" : ""}`}>
+          <button
+            type="button"
+            className="scanner-watchlist-chip"
+            onClick={() => onToggle(watchlist.id)}
+            aria-pressed={selected.has(watchlist.id)}
+          >
+            <span>{watchlist.name}</span>
+            <b>{watchlist.symbols.length}</b>
+          </button>
+          <button
+            type="button"
+            className="scanner-watchlist-update"
+            disabled={loading}
+            onClick={() => onUpdate(watchlist.id)}
+            aria-label={`Update ${watchlist.name}`}
+            title={`Update ${watchlist.name}`}
+          >
+            Update
+          </button>
+        </span>
       ))}
     </div>
   );

@@ -3276,6 +3276,18 @@ button:disabled {
   padding-bottom: 2px;
 }
 
+.scanner-watchlist-item {
+  border: 1px solid #263547;
+  border-radius: 6px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+.scanner-watchlist-item.active {
+  border-color: #3b82f6;
+}
+
 .scanner-watchlist-chip {
   align-items: center;
   background: #0f1722;
@@ -3289,10 +3301,30 @@ button:disabled {
   padding: 0 10px;
 }
 
-.scanner-watchlist-chip.active {
+.scanner-watchlist-item .scanner-watchlist-chip {
+  border: 0;
+  border-radius: 0;
+}
+
+.scanner-watchlist-chip.active,
+.scanner-watchlist-item.active .scanner-watchlist-chip {
   background: #172033;
-  border-color: #3b82f6;
   color: #eff6ff;
+}
+
+.scanner-watchlist-update {
+  background: #111a24;
+  border-left: 1px solid #263547;
+  border-radius: 0;
+  color: #cbd5e1;
+  flex: 0 0 auto;
+  font-size: 11px;
+  min-height: 32px;
+  padding: 0 8px;
+}
+
+.scanner-watchlist-update:hover {
+  background: #1f2a37;
 }
 
 .scanner-watchlist-chip span {
