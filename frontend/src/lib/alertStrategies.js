@@ -2,6 +2,13 @@ const STORAGE_KEY = "dhanam-alert-strategies";
 
 export const ALERT_STRATEGIES = [
   {
+    id: "pre-market-scanner",
+    name: "Pre Market Scanner",
+    description: "Stock enters or leaves the YH/YL premarket scanner.",
+    scannerOnly: true,
+    match: () => false,
+  },
+  {
     id: "hourly-cloud",
     name: "Hourly 34/50",
     description: "Price breaks through or touches the hourly 34/50 EMA cloud.",
