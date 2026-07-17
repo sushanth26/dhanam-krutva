@@ -4543,3 +4543,42 @@ select {
     display: none;
   }
 }
+
+/* Mobile overlay reachability fix */
+@media (max-width: 760px) {
+  .account-menu,
+  .notification-drawer,
+  .settings-menu {
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    left: max(10px, env(safe-area-inset-left, 0px));
+    max-height: none;
+    overscroll-behavior: contain;
+    position: fixed;
+    right: max(10px, env(safe-area-inset-right, 0px));
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    width: auto;
+    z-index: 500;
+  }
+
+  .account-menu,
+  .settings-menu {
+    overflow-y: auto;
+  }
+
+  .notification-drawer {
+    overflow: hidden;
+  }
+
+  .notification-list {
+    max-height: none;
+  }
+
+  .settings-menu-content {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .strategy-list,
+  .auto-strategy-grid {
+    padding-bottom: 6px;
+  }
+}

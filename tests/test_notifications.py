@@ -291,6 +291,21 @@ def test_filter_payload_by_strategies_can_disable_9ema_touch_only():
     assert filtered["matches"][0]["labels"] == ["10m bounce 34/50"]
 
 
+def test_filter_payload_by_strategies_can_disable_40ema_touch_only():
+    payload = {
+        "matches": [
+            {"symbol": "BE", "labels": ["10m bounce 34/50", "10m 40 EMA touch"]},
+        ],
+    }
+
+    filtered = filter_payload_by_strategies(
+        payload,
+        {"ten-minute-bounce-10m": True, "ten-minute-40ema-touch": False},
+    )
+
+    assert filtered["matches"][0]["labels"] == ["10m bounce 34/50"]
+
+
 def test_filter_payload_by_strategies_can_disable_daily_bounces_only():
     payload = {
         "matches": [

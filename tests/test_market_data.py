@@ -9,6 +9,7 @@ from app.market_data import (
     dedupe_mtf_signal_matches,
     ema_cloud_bounce_matches,
     ema_values,
+    forty_ema_touch_matches,
     mtf_matches,
     mtf_signal_matches,
     nine_ema_touch_matches,
@@ -270,6 +271,41 @@ def test_nine_ema_touch_matches_after_first_hour_requires_prior_34_50_cloud_touc
     )
 
     assert matches == []
+
+
+def test_forty_ema_touch_matches_buys_bullish_stock_at_40ema_with_34_50_cloud_stop():
+    matches = forty_ema_touch_matches(
+        [{"low": 103.5, "high": 106.5, "close": 106, "time": "2026-07-02T13:20:00"}],
+        {"5": 112, "12": 111, "34": 100, "40": 105, "50": 108},
+        risk_amount=100,
+    )
+
+    assert [match["label"] for match in matches] == ["10m 40 EMA touch"]
+    assert matches[0]["entry_price"] == 105
+    assert matches[0]["trade_action"] == "Long"
+    assert matches[0]["type"] == "10m_40ema_touch"
+    assert matches[0]["risk_plan"]["entry"] == 105
+    assert matches[0]["risk_plan"]["stop"] == 99
+    assert matches[0]["risk_plan"]["stop_buffer"] == 1
+    assert matches[0]["risk_plan"]["stop_mode"] == "10m-34-50-cloud"
+    assert matches[0]["risk_plan"]["risk_per_share"] == 6
+    assert matches[0]["risk_plan"]["shares"] == 16
+    assert matches[0]["stop_cloud_low"] == 100
+    assert matches[0]["stop_cloud_high"] == 108
+
+
+def test_forty_ema_touch_matches_ignores_non_bullish_or_not_touching():
+    bearish = forty_ema_touch_matches(
+        [{"low": 103.5, "high": 106.5, "close": 106}],
+        {"5": 96, "12": 97, "34": 100, "40": 105, "50": 108},
+    )
+    above_ema = forty_ema_touch_matches(
+        [{"low": 106, "high": 109, "close": 108}],
+        {"5": 112, "12": 111, "34": 100, "40": 105, "50": 108},
+    )
+
+    assert bearish == []
+    assert above_ema == []
 
 
 def test_mtf_matches_ignores_inside_cloud_ranges_but_keeps_touches():
