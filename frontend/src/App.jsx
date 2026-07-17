@@ -9,7 +9,7 @@ import { ALERT_STRATEGIES, filterQuotesByStrategy, loadStrategyState, saveStrate
 import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, flattenAccounts, formatPrice, isMarketRefreshWindow, marginTradingAccountId, matchEntryPrice, notificationMatchText, mtfSignature, preferredAccountId } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
-const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 30 * 1000;
 const MAX_NOTIFICATIONS = 20;
 const MAX_ALERT_LOG = 500;
 const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";

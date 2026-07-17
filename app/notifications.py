@@ -19,6 +19,7 @@ DEFAULT_ALERT_STRATEGIES = {
     "daily-slow-cloud": True,
     "ten-minute-bounce-10m": True,
     "ten-minute-9ema-touch": True,
+    "ten-minute-40ema-touch": True,
     "ten-minute-bounce-hourly": True,
     "ten-minute-bounce-daily-fast": True,
     "ten-minute-bounce-daily-slow": True,
@@ -450,6 +451,8 @@ def strategy_id_for_label(label: str) -> str:
         return "ten-minute-bounce-10m"
     if label == "10m 9 EMA touch":
         return "ten-minute-9ema-touch"
+    if label == "10m 40 EMA touch":
+        return "ten-minute-40ema-touch"
     if label == "10m bounce Hourly 34/50":
         return "ten-minute-bounce-hourly"
     if label == "10m bounce Daily 20/21":
