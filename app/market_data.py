@@ -107,6 +107,7 @@ def build_live_prices(
         ema_1h = ema_values(h1_candles, [20, 21, 34, 50, 55])
         ema_daily = ema_values(daily_candles, [20, 21, 50, 55])
         ten_minute_ema = ema_values(ten_minute_candles, [5, 9, 12, 34, 40, 50])
+        ten_minute_cloud = ema_cloud_context(ten_minute_candles, 5, 12)
         ten_minute_trend = cloud_status(ten_minute_ema, ["5", "12"], ["34", "50"])
         latest_10m_candle = latest_ten_minute_candle(ten_minute_candles)
         latest_10m_close = latest_10m_candle.get("close") if latest_10m_candle else None
@@ -124,8 +125,10 @@ def build_live_prices(
                 "change_ratio": snapshot_change_ratio(snapshot_map.get(symbol)),
                 "previous_day": previous_daily_range(daily_candles),
                 "ema_10m": ten_minute_ema,
+                "ema_10m_cloud": ten_minute_cloud,
                 "ema_1h": ema_1h,
                 "ema_daily": ema_daily,
+                "structure_10m": market_structure(ten_minute_candles),
                 "mtf_matches": mtf_signal_matches(
                     candle_price,
                     ten_minute_trend,
@@ -248,6 +251,159 @@ def ema_values(candles: list[dict[str, Any]], periods: list[int]) -> dict[str, f
     for period in periods:
         values[str(period)] = round(chart_ema(closes, period)[-1], 4) if len(closes) >= period else None
     return values
+
+
+def ema_cloud_context(candles: list[dict[str, Any]], fast_period: int = 5, slow_period: int = 12) -> dict[str, Any]:
+    confirmed = [candle for candle in candles if is_complete_ten_minute_candle(candle) and candle.get("close") is not None]
+    if len(confirmed) < slow_period:
+        return {"status": "Unknown", "bias": "Wait", "setup": "Unknown"}
+    latest_session = confirmed[-1].get("session_date")
+    if latest_session:
+        session_candles = [candle for candle in confirmed if candle.get("session_date") == latest_session]
+        if len(session_candles) >= slow_period:
+            confirmed = session_candles
+    closes = [float(candle["close"]) for candle in confirmed]
+    fast_values = chart_ema(closes, fast_period)
+    slow_values = chart_ema(closes, slow_period)
+
+    def position(index: int) -> dict[str, Any]:
+        fast = fast_values[index]
+        slow = slow_values[index]
+        low = min(fast, slow)
+        high = max(fast, slow)
+        close = closes[index]
+        if close > high:
+            status = "Above"
+        elif close < low:
+            status = "Below"
+        else:
+            status = "Inside"
+        return {
+            "status": status,
+            "close": round(close, 4),
+            "fast": round(fast, 4),
+            "slow": round(slow, 4),
+            "low": round(low, 4),
+            "high": round(high, 4),
+            "time": confirmed[index].get("time") or confirmed[index].get("sort_time") or confirmed[index].get("timestamp"),
+        }
+
+    current = position(-1)
+    previous = position(-2) if len(confirmed) >= 2 else {"status": "Unknown"}
+    setup = current["status"]
+    bias = "Wait"
+    if current["status"] == "Above":
+        setup = "Above 5/12"
+        bias = "Long"
+    elif current["status"] == "Below":
+        setup = "Below 5/12"
+        bias = "Short"
+    elif previous.get("status") == "Below":
+        setup = "Curl Up"
+        bias = "Long"
+    elif previous.get("status") == "Above":
+        setup = "Break Curl Down"
+        bias = "Short"
+    elif current["status"] == "Inside":
+        setup = "Curl Watch"
+
+    return {
+        **current,
+        "previous_status": previous.get("status", "Unknown"),
+        "previous_close": previous.get("close"),
+        "previous_time": previous.get("time"),
+        "setup": setup,
+        "bias": bias,
+    }
+
+
+def market_structure(candles: list[dict[str, Any]], lookback: int = 6) -> dict[str, Any]:
+    confirmed = [candle for candle in candles if is_complete_ten_minute_candle(candle)]
+    if len(confirmed) < 2:
+        return {"status": "Unknown"}
+    latest_session = confirmed[-1].get("session_date")
+    if latest_session:
+        session_candles = [candle for candle in confirmed if candle.get("session_date") == latest_session]
+        if len(session_candles) >= 2:
+            confirmed = session_candles
+    latest_range: dict[str, Any] | None = None
+    breaks: list[dict[str, Any]] = []
+    for index in range(1, len(confirmed)):
+        current = confirmed[index]
+        previous = confirmed[max(0, index - lookback):index]
+        highs = [candle.get("high") for candle in previous if candle.get("high") is not None]
+        lows = [candle.get("low") for candle in previous if candle.get("low") is not None]
+        broader_previous = confirmed[:index]
+        broader_highs = [candle.get("high") for candle in broader_previous if candle.get("high") is not None]
+        broader_lows = [candle.get("low") for candle in broader_previous if candle.get("low") is not None]
+        close = current.get("close")
+        if close is None or not highs or not lows:
+            continue
+        structure_high = max(highs)
+        structure_low = min(lows)
+        broader_high = max(broader_highs) if broader_highs else structure_high
+        broader_low = min(broader_lows) if broader_lows else structure_low
+        latest_range = {
+            "high": round(structure_high, 4),
+            "low": round(structure_low, 4),
+            "broader_high": round(broader_high, 4),
+            "broader_low": round(broader_low, 4),
+            "close": round(close, 4),
+            "time": current.get("time") or current.get("sort_time") or current.get("timestamp"),
+            "lookback": len(previous),
+        }
+        if close > structure_high:
+            breaks.append({
+                **latest_range,
+                "direction": "Bullish",
+                "status": "Bullish BOS",
+                "broad_break": close > broader_high,
+            })
+        elif close < structure_low:
+            breaks.append({
+                **latest_range,
+                "direction": "Bearish",
+                "status": "Bearish BOS",
+                "broad_break": close < broader_low,
+            })
+    if not latest_range:
+        return {"status": "Unknown"}
+    if not breaks:
+        return {**latest_range, "status": "Chop"}
+
+    latest_break = breaks[-1]
+    same_direction_count = 0
+    for structure_break in reversed(breaks):
+        if structure_break["direction"] != latest_break["direction"]:
+            break
+        same_direction_count += 1
+
+    current_close = latest_range.get("close")
+    still_holding_single_break = (
+        latest_break["direction"] == "Bullish"
+        and current_close is not None
+        and current_close > latest_break["high"]
+    ) or (
+        latest_break["direction"] == "Bearish"
+        and current_close is not None
+        and current_close < latest_break["low"]
+    )
+    if latest_break.get("broad_break") and (same_direction_count >= 2 or still_holding_single_break):
+        return {
+            **latest_range,
+            "status": latest_break["status"],
+            "break_count": same_direction_count,
+            "last_break_time": latest_break.get("time"),
+            "last_break_high": latest_break.get("high"),
+            "last_break_low": latest_break.get("low"),
+        }
+    return {
+        **latest_range,
+        "status": "Chop",
+        "break_count": same_direction_count,
+        "last_break_time": latest_break.get("time"),
+        "last_break_status": latest_break["status"],
+    }
 
 
 def chart_ema(values: list[float], period: int) -> list[float]:

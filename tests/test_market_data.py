@@ -6,12 +6,14 @@ from app.market_data import (
     batch_history_bars_chunked,
     build_live_prices,
     daily_volatility,
+    ema_cloud_context,
     dedupe_mtf_signal_matches,
     ema_cloud_bounce_matches,
     ema_values,
     forty_ema_touch_matches,
     mtf_matches,
     mtf_signal_matches,
+    market_structure,
     nine_ema_touch_matches,
     parse_symbols,
     previous_daily_range,
@@ -148,6 +150,28 @@ def test_aggregate_by_minutes_rolls_5m_bars_into_10m_buckets():
     assert aggregated[0]["source_count"] == 2
 
 
+def test_ema_cloud_context_marks_inside_from_below_as_curl_up():
+    closes = [100] * 20 + [93, 93, 93, 95.1]
+
+    context = ema_cloud_context([candle(index, close) for index, close in enumerate(closes)])
+
+    assert context["status"] == "Inside"
+    assert context["previous_status"] == "Below"
+    assert context["setup"] == "Curl Up"
+    assert context["bias"] == "Long"
+
+
+def test_ema_cloud_context_marks_inside_from_above_as_break_curl_down():
+    closes = [100] * 20 + [93, 93, 98.1, 96.8]
+
+    context = ema_cloud_context([candle(index, close) for index, close in enumerate(closes)])
+
+    assert context["status"] == "Inside"
+    assert context["previous_status"] == "Above"
+    assert context["setup"] == "Break Curl Down"
+    assert context["bias"] == "Short"
+
+
 def test_ema_values_returns_latest_values_by_period():
     candles = [candle(index, float(index + 1)) for index in range(12)]
 
@@ -156,6 +180,76 @@ def test_ema_values_returns_latest_values_by_period():
     assert values["5"] is not None
     assert values["12"] is not None
     assert values["20"] is None
+
+
+def test_market_structure_detects_bullish_bos():
+    candles = [candle(index, 100 + index) for index in range(8)]
+    candles[-1]["close"] = 120
+    candles[-1]["high"] = 121
+
+    structure = market_structure(candles, lookback=6)
+
+    assert structure["status"] == "Bullish BOS"
+    assert structure["high"] < structure["close"]
+
+
+def test_market_structure_detects_bearish_bos():
+    candles = [candle(index, 120 - index) for index in range(8)]
+    candles[-1]["close"] = 90
+    candles[-1]["low"] = 89
+
+    structure = market_structure(candles, lookback=6)
+
+    assert structure["status"] == "Bearish BOS"
+    assert structure["low"] > structure["close"]
+
+
+def test_market_structure_marks_inside_range_as_chop():
+    candles = [candle(index, 100 + (index % 2)) for index in range(8)]
+
+    structure = market_structure(candles, lookback=6)
+
+    assert structure["status"] == "Chop"
+
+
+def test_market_structure_marks_local_break_inside_broader_range_as_chop():
+    closes = [430, 421, 438, 429.5, 430.5, 429.8, 430.2, 429.4, 428.8, 428.1, 427.4, 426.2]
+    candles = [candle(index, close) for index, close in enumerate(closes)]
+
+    structure = market_structure(candles, lookback=6)
+
+    assert structure["status"] == "Chop"
+    assert structure["close"] == 426.2
+    assert structure["broader_low"] < structure["close"] < structure["broader_high"]
+    assert structure["last_break_status"] == "Bearish BOS"
+
+
+def test_market_structure_keeps_latest_bos_after_retest_inside_range():
+    candles = [candle(index, close) for index, close in enumerate([100, 101, 102, 101, 100, 99, 90, 94, 95])]
+
+    structure = market_structure(candles, lookback=6)
+
+    assert structure["status"] == "Bearish BOS"
+    assert structure["close"] == 95
+    assert structure["last_break_time"]
+
+
+def test_market_structure_marks_failed_bullish_bos_as_chop():
+    candles = [candle(index, close) for index, close in enumerate([100, 101, 102, 103, 104, 105, 110, 104])]
+
+    structure = market_structure(candles, lookback=6)
+
+    assert structure["status"] == "Chop"
+    assert structure["close"] == 104
+
+
+def test_market_structure_keeps_repeated_bullish_bos_during_orderly_pullback():
+    candles = [candle(index, close) for index, close in enumerate([100, 101, 102, 103, 104, 105, 110, 112, 111])]
+
+    structure = market_structure(candles, lookback=6)
+
+    assert structure["status"] == "Bullish BOS"
+    assert structure["break_count"] >= 2
 
 
 def test_previous_daily_range_uses_latest_completed_daily_candle():

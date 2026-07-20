@@ -3,13 +3,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertStrategies } from "./components/AlertStrategies";
 import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
-import { MtfTable, PreMarketScannerTable, PriceBucket } from "./components/PriceTables";
+import { MtfTable, PreMarketScannerTable, PriceBucket, SpyComparisonTable } from "./components/PriceTables";
 import { deleteJson, getJson, postJson } from "./lib/api";
 import { ALERT_STRATEGIES, filterQuotesByStrategy, loadStrategyState, saveStrategyState, strategyIdForMatch } from "./lib/alertStrategies";
 import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, flattenAccounts, formatPrice, isMarketRefreshWindow, marginTradingAccountId, matchEntryPrice, notificationMatchText, mtfSignature, preferredAccountId } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
-const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 30 * 1000;
+const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_NOTIFICATIONS = 20;
 const MAX_ALERT_LOG = 500;
 const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
@@ -20,10 +20,12 @@ const ALERT_LOG_KEY = "dhanam-alert-log";
 const RETAINED_MTF_QUOTES_KEY = "dhanam-retained-mtf-quotes";
 const AUTO_TRADE_KEY = "dhanam-auto-trade";
 const AUTO_TRADE_EXECUTIONS_KEY = "dhanam-auto-trade-executions";
+const BOS_STATE_KEY = "dhanam-bos-state";
 const MAX_AUTO_TRADE_EXECUTIONS = 500;
 const WATCHLIST_REFRESH_CONCURRENCY = 1;
 const OG_WATCHLIST_ID = "og";
 const SCANNER_ALERT_STRATEGY_ID = "pre-market-scanner";
+const SPY_SYMBOL = "SPY";
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
   "ASTS", "AMD", "ARM", "AVGO", "DELL", "INTC", "APP", "LLY",
@@ -369,6 +371,65 @@ function alertableMtfQuotes(quotes) {
     .filter((quote) => quote.mtf_matches.length);
 }
 
+function bosStatus(quote) {
+  return String(quote?.structure_10m?.status || "Unknown");
+}
+
+function isMonitorableBosStatus(status) {
+  return ["Bullish BOS", "Bearish BOS", "Chop"].includes(String(status || ""));
+}
+
+function bosNotificationDetails(changes) {
+  const targetSymbol = changes[0]?.symbol || "";
+  if (changes.length === 1) {
+    const change = changes[0];
+    return {
+      title: `${change.symbol}: ${appStructureLabel(change.nextStatus)}`,
+      body: change.previousStatus
+        ? `BOS changed from ${appStructureLabel(change.previousStatus)} to ${appStructureLabel(change.nextStatus)}.`
+        : `BOS is now ${appStructureLabel(change.nextStatus)}.`,
+      badgeCount: 1,
+      tag: `bos-${change.symbol}`,
+      targetSymbol,
+      url: "/#alerts",
+    };
+  }
+  const preview = changes.slice(0, 3).map((change) => `${change.symbol} ${appStructureLabel(change.nextStatus)}`).join(" | ");
+  return {
+    title: `${changes.length} BOS changes`,
+    body: changes.length > 3 ? `${preview}...` : preview,
+    badgeCount: changes.length,
+    tag: "bos-batch",
+    targetSymbol,
+    url: "/#alerts",
+  };
+}
+
+function spyCurlNotificationDetails(position) {
+  const setup = position.setup || "Curl Watch";
+  const bias = position.bias || "Wait";
+  const title = setup === "Curl Up"
+    ? "SPY Curl Up: attack Strong list"
+    : setup === "Break Curl Down"
+      ? "SPY Break Curl Down: attack Weak list"
+      : "SPY Curl Watch: 5/12 cloud";
+  const body = setup === "Curl Up"
+    ? "SPY is at the 5/12 cloud from below. Look for upside leaders."
+    : setup === "Break Curl Down"
+      ? "SPY is at the 5/12 cloud from above. Look for downside leaders."
+      : "SPY is inside the 5/12 cloud. Watch for curl direction.";
+  return {
+    title,
+    body,
+    badgeCount: 1,
+    tag: `spy-curl-${setup.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    targetSymbol: SPY_SYMBOL,
+    url: "/#spy",
+    setup,
+    bias,
+  };
+}
+
 function quotesWithTradeAction(quotes, action) {
   return quotes
     .map((quote) => splitMtfQuoteByAction(quote, action))
@@ -460,6 +521,19 @@ function loadAlertLog() {
 
 function saveAlertLog(items) {
   window.localStorage.setItem(ALERT_LOG_KEY, JSON.stringify(normalizeAlertHistoryItems(items).slice(0, MAX_ALERT_LOG)));
+}
+
+function loadBosState() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(BOS_STATE_KEY) || "{}");
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveBosState(items) {
+  window.localStorage.setItem(BOS_STATE_KEY, JSON.stringify(items || {}));
 }
 
 function normalizeAlertHistoryItems(items) {
@@ -625,6 +699,8 @@ function preMarketScannerRowsFromWatchlists(watchlists, quotesByTab) {
         distancePct: price > previousHigh
           ? ((price - previousHigh) / previousHigh) * 100
           : ((previousLow - price) / previousLow) * 100,
+        structure: quote.structure_10m?.status || "Unknown",
+        cloudBias: quote.ema_10m_cloud?.bias || "",
         watchlistName: watchlist.name,
       });
     }
@@ -642,6 +718,251 @@ function scannerTrendRank(trend) {
   return 2;
 }
 
+function emaCloudRange(emaSet, fastKey = "5", slowKey = "12") {
+  const fast = Number(emaSet?.[fastKey]);
+  const slow = Number(emaSet?.[slowKey]);
+  if (!Number.isFinite(fast) || !Number.isFinite(slow)) return null;
+  return {
+    fast,
+    slow,
+    low: Math.min(fast, slow),
+    high: Math.max(fast, slow),
+  };
+}
+
+function emaCloudPosition(quote) {
+  const price = Number(quote?.scanner_price ?? quote?.price);
+  const cloud = emaCloudRange(quote?.ema_10m);
+  const cloudContext = quote?.ema_10m_cloud || {};
+  if (!Number.isFinite(price) || !cloud) {
+    return { price, cloud, status: "Unknown", distancePct: null, setup: "Unknown", bias: "Wait", previousStatus: "Unknown" };
+  }
+  if (price >= cloud.low && price <= cloud.high) {
+    return {
+      price,
+      cloud,
+      status: "Inside",
+      distancePct: 0,
+      setup: cloudContext.setup || "Curl Watch",
+      bias: cloudContext.bias || "Wait",
+      previousStatus: cloudContext.previous_status || "Unknown",
+    };
+  }
+  const boundary = price > cloud.high ? cloud.high : cloud.low;
+  const status = price > cloud.high ? "Above" : "Below";
+  return {
+    price,
+    cloud,
+    status,
+    distancePct: boundary ? ((price - boundary) / boundary) * 100 : null,
+    setup: cloudContext.setup || (status === "Above" ? "Above 5/12" : "Below 5/12"),
+    bias: cloudContext.bias || (status === "Above" ? "Long" : "Short"),
+    previousStatus: cloudContext.previous_status || "Unknown",
+  };
+}
+
+function emaCloudTrendLabel(positionOrStatus) {
+  const position = typeof positionOrStatus === "string" ? { status: positionOrStatus } : positionOrStatus || {};
+  if (position.status === "Above") return "Bullish";
+  if (position.status === "Below") return "Bearish";
+  if (position.status === "Inside") return position.setup || "Curl Watch";
+  return "-";
+}
+
+function spyCloudDisplay(position) {
+  if (position?.status === "Inside") return position.setup || "Curl Zone";
+  return position?.status || "-";
+}
+
+function isDirectionalBos(status) {
+  return ["Bullish BOS", "Bearish BOS"].includes(String(status || ""));
+}
+
+function spyComparisonRowsFromWatchlists(watchlists, quotesByTab, spyQuote) {
+  const spyPosition = emaCloudPosition(spyQuote);
+  const spyTrend = emaCloudTrendLabel(spyPosition);
+  const rowsBySymbol = new Map();
+  for (const watchlist of watchlists) {
+    for (const quote of quotesByTab[watchlist.id] || []) {
+      const position = emaCloudPosition(quote);
+      if (!position.cloud || !Number.isFinite(position.price)) continue;
+      const structure = quote.structure_10m?.status || "Unknown";
+      if (!isDirectionalBos(structure)) continue;
+      const existing = rowsBySymbol.get(quote.symbol);
+      const watchlistNames = existing
+        ? [...existing.watchlistNames, watchlist.name]
+        : [watchlist.name];
+      rowsBySymbol.set(quote.symbol, {
+        symbol: quote.symbol,
+        watchlistName: watchlistNames.join(", "),
+        watchlistNames,
+        price: position.price,
+        ema5: position.cloud.fast,
+        ema12: position.cloud.slow,
+        status: position.status,
+        distancePct: position.distancePct,
+        cloudSetup: position.setup,
+        cloudBias: position.bias,
+        structure,
+        trend: cloudStatus(quote.ema_10m, ["5"], ["12"]),
+        spyPrice: spyPosition.price,
+        spyEma5: spyPosition.cloud?.fast ?? null,
+        spyEma12: spyPosition.cloud?.slow ?? null,
+        spyStatus: spyPosition.status,
+        spyTrend,
+      });
+    }
+  }
+  return [...rowsBySymbol.values()].sort((left, right) => (
+    spyStrengthRank(right.status) - spyStrengthRank(left.status)
+    || Math.abs(Number(left.distancePct || 0)) - Math.abs(Number(right.distancePct || 0))
+    || cloudTrendRank(left.trend) - cloudTrendRank(right.trend)
+    || left.symbol.localeCompare(right.symbol)
+  ));
+}
+
+function spyPlaybook(spyPositionOrStatus) {
+  const spyPosition = typeof spyPositionOrStatus === "string" ? { status: spyPositionOrStatus } : spyPositionOrStatus || {};
+  const spyStatus = spyPosition.status;
+  if (spyStatus === "Above") {
+    return {
+      focusLabel: "Strong Stocks",
+      focusStatus: "Above",
+      focusId: "strong",
+      tone: "strong",
+      title: "SPY strong: work the Strong list",
+      detail: "SPY is above its 5/12 cloud. Favor stocks above their own 5/12 cloud first.",
+    };
+  }
+  if (spyStatus === "Below") {
+    return {
+      focusLabel: "Weak Stocks",
+      focusStatus: "Below",
+      focusId: "weak",
+      tone: "weak",
+      title: "SPY weak: work the Weak list",
+      detail: "SPY is below its 5/12 cloud. Favor stocks below their own 5/12 cloud first.",
+    };
+  }
+  if (spyStatus === "Inside") {
+    if (spyPosition.bias === "Long") {
+      return {
+        focusLabel: "Strong Stocks",
+        focusStatus: "Above",
+        focusId: "strong",
+        tone: "strong",
+        title: "SPY at 5/12: high-value curl up",
+        detail: "This is the curl zone from below. Attack the Strong list and look for upside leaders.",
+      };
+    }
+    if (spyPosition.bias === "Short") {
+      return {
+        focusLabel: "Weak Stocks",
+        focusStatus: "Below",
+        focusId: "weak",
+        tone: "weak",
+        title: "SPY at 5/12: break curl down",
+        detail: "This is the rejection zone from above. Attack the Weak list and look for downside leaders.",
+      };
+    }
+    return {
+      focusLabel: "Wait / At 5/12",
+      focusStatus: "Inside",
+      focusId: "wait",
+      tone: "wait",
+      title: "SPY at 5/12: curl zone",
+      detail: "This is not weak. Watch for a curl up from below or a break curl down from above.",
+    };
+  }
+  return {
+    focusLabel: "-",
+    focusStatus: "",
+    focusId: "",
+    tone: "unknown",
+    title: "Waiting for SPY trend",
+    detail: "Refresh SPY to decide whether to focus Strong or Weak.",
+  };
+}
+
+function spyComparisonSections(rows, spyQuote) {
+  const spyPosition = emaCloudPosition(spyQuote);
+  const playbook = spyPlaybook(spyPosition);
+  const sectionConfig = [
+    {
+      id: "strong",
+      tone: "strong",
+      focusStatus: "Above",
+      action: "Long",
+      title: "Focus: Long",
+      subtitle: "Strong names closest to 5/12 first.",
+    },
+    {
+      id: "weak",
+      tone: "weak",
+      focusStatus: "Below",
+      action: "Short",
+      title: "Focus: Short",
+      subtitle: "Weak names closest to 5/12 first.",
+    },
+    {
+      id: "wait",
+      tone: "wait",
+      focusStatus: "Inside",
+      action: "Wait",
+      title: "Curl Watch",
+      subtitle: "Only clear long or short curl names.",
+    },
+  ];
+  const activeSection = sectionConfig.find((section) => section.id === playbook.focusId)
+    || sectionConfig.find((section) => section.focusStatus === playbook.focusStatus)
+    || sectionConfig[2];
+  return [{
+    ...activeSection,
+    badge: "Focus now",
+    rows: rows
+      .filter((row) => row.status === activeSection.focusStatus)
+      .map((row) => ({ ...row, focusAction: spyRowAction(row) }))
+      .filter((row) => row.focusAction === "Long" || row.focusAction === "Short")
+      .sort((left, right) => (
+        Math.abs(Number(left.distancePct || 0)) - Math.abs(Number(right.distancePct || 0))
+        || left.symbol.localeCompare(right.symbol)
+      )),
+  }];
+}
+
+function spyRowAction(row) {
+  const structure = String(row?.structure || "").toLowerCase();
+  const cloudBias = String(row?.cloudBias || "").toLowerCase();
+  if (row?.status === "Above" && structure.includes("bullish")) return "Long";
+  if (row?.status === "Below" && structure.includes("bearish")) return "Short";
+  if (row?.status === "Inside" && cloudBias === "long" && structure.includes("bullish")) return "Long";
+  if (row?.status === "Inside" && cloudBias === "short" && structure.includes("bearish")) return "Short";
+  return "Wait";
+}
+
+function SpyDecisionBanner({ playbook }) {
+  return (
+    <div className={`spy-decision-banner ${playbook.tone}`}>
+      <strong>{playbook.title}</strong>
+      <span>{playbook.detail}</span>
+    </div>
+  );
+}
+
+function spyStrengthRank(status) {
+  if (status === "Above") return 2;
+  if (status === "Inside") return 1;
+  if (status === "Below") return 0;
+  return -1;
+}
+
+function cloudTrendRank(trend) {
+  if (trend === "Bullish") return 0;
+  if (trend === "Bearish") return 1;
+  if (trend === "Chop") return 2;
+  return 3;
+}
+
 export default function App() {
   const [watchlists, setWatchlists] = useState(loadWatchlists);
   const [scannerWatchlistIds, setScannerWatchlistIds] = useState(() => loadScannerWatchlistIds(loadWatchlists()));
@@ -651,6 +972,8 @@ export default function App() {
   const [accountsConfirmedAt, setAccountsConfirmedAt] = useState(null);
   const [selectedAccountId, setSelectedAccountId] = useState(null);
   const [quotesByTab, setQuotesByTab] = useState(() => initialTabState(loadWatchlists(), []));
+  const [spyQuote, setSpyQuote] = useState(null);
+  const [spyUpdatedText, setSpyUpdatedText] = useState("SPY polling stopped");
   const [updatedTextByTab, setUpdatedTextByTab] = useState(() => initialTabState(loadWatchlists(), "Webull polling stopped"));
   const [alert, setAlert] = useState("");
   const [alertKind, setAlertKind] = useState("info");
@@ -668,6 +991,7 @@ export default function App() {
   const [activePage, setActivePage] = useState(() => {
     if (window.location.hash === "#alerts") return "alerts";
     if (window.location.hash === "#mtfs") return "mtfs";
+    if (window.location.hash === "#spy") return "spy";
     if (window.location.hash === "#trades") return "trades";
     return "home";
   });
@@ -677,6 +1001,7 @@ export default function App() {
   const [riskSettings, setRiskSettings] = useState(loadRiskSettings);
   const [autoTrade, setAutoTrade] = useState(loadAutoTradeSettings);
   const [watchlistTab, setWatchlistTab] = useState(OG_WATCHLIST_ID);
+  const [homeView, setHomeView] = useState("spy");
   const [symbolInputs, setSymbolInputs] = useState({});
   const [newMtfRows, setNewMtfRows] = useState({});
   const [focusedMtfSymbol, setFocusedMtfSymbol] = useState("");
@@ -692,6 +1017,8 @@ export default function App() {
   const lastMtfSignature = useRef(initialTabState(loadWatchlists(), null));
   const lastMtfRows = useRef(initialTabState(loadWatchlists(), {}));
   const lastScannerRows = useRef(null);
+  const lastBosRows = useRef(loadBosState());
+  const lastSpyCurlSignature = useRef(null);
   const strategyStateRef = useRef(strategyState);
   const riskSettingsRef = useRef(riskSettings);
   const autoTradeRef = useRef(autoTrade);
@@ -727,6 +1054,30 @@ export default function App() {
     return watchlists.filter((watchlist) => selectedIds.has(watchlist.id));
   }, [scannerWatchlistIds, watchlists]);
   const preMarketScannerRows = useMemo(() => preMarketScannerRowsFromWatchlists(scannerWatchlists, quotesByTab), [scannerWatchlists, quotesByTab]);
+  const spyComparisonRows = useMemo(
+    () => spyComparisonRowsFromWatchlists(watchlists, quotesByTab, spyQuote),
+    [quotesByTab, spyQuote, watchlists],
+  );
+  const spyFocusStatus = spyPlaybook(emaCloudPosition(spyQuote)).focusStatus;
+  const spyFocusCount = spyFocusStatus
+    ? spyComparisonRows.filter((row) => row.status === spyFocusStatus).length
+    : spyComparisonRows.length;
+  const structureBySymbol = useMemo(() => {
+    const structureMap = {};
+    watchlists.forEach((watchlist) => {
+      (quotesByTab[watchlist.id] || []).forEach((quote) => {
+        const symbol = String(quote.symbol || "").toUpperCase();
+        if (!symbol) return;
+        const status = quote.structure_10m?.status || "Unknown";
+        if (!structureMap[symbol] || structureMap[symbol] === "Unknown" || status !== "Unknown") {
+          structureMap[symbol] = status;
+        }
+      });
+    });
+    const spySymbol = String(spyQuote?.symbol || "").toUpperCase();
+    if (spySymbol) structureMap[spySymbol] = spyQuote?.structure_10m?.status || "Unknown";
+    return structureMap;
+  }, [quotesByTab, spyQuote, watchlists]);
   const scannerLongCount = useMemo(() => preMarketScannerRows.filter((row) => row.action === "Long").length, [preMarketScannerRows]);
   const scannerShortCount = useMemo(() => preMarketScannerRows.filter((row) => row.action === "Short").length, [preMarketScannerRows]);
   const allMtfQuotes = useMemo(() => {
@@ -881,7 +1232,8 @@ export default function App() {
     setLiveAlert("");
     if (showLoading) setLoadingKey("prices", true);
     try {
-      await refreshWatchlistBatch(watchlistsRef.current);
+      await refreshWatchlistBatch(watchlistsRef.current, { force: showLoading });
+      await refreshSpyQuote({ force: showLoading });
     } catch (error) {
       setLiveAlert(error.message);
     } finally {
@@ -903,7 +1255,7 @@ export default function App() {
         setLiveAlert("Select a list for the scanner.");
         return;
       }
-      await refreshWatchlistBatch(lists);
+      await refreshWatchlistBatch(lists, { force: showLoading });
     } catch (error) {
       setLiveAlert(error.message);
     } finally {
@@ -921,7 +1273,7 @@ export default function App() {
     setLiveAlert("");
     setLoadingKey("prices", true);
     try {
-      await refreshWatchlistPrices(watchlist);
+      await refreshWatchlistPrices(watchlist, { force: true });
     } catch (error) {
       setLiveAlert(error.message);
     } finally {
@@ -929,7 +1281,7 @@ export default function App() {
     }
   }
 
-  async function refreshWatchlistBatch(lists) {
+  async function refreshWatchlistBatch(lists, { force = false } = {}) {
     let index = 0;
     const errors = [];
     const workerCount = Math.min(WATCHLIST_REFRESH_CONCURRENCY, lists.length);
@@ -938,7 +1290,7 @@ export default function App() {
         const watchlist = lists[index];
         index += 1;
         try {
-          await refreshWatchlistPrices(watchlist);
+          await refreshWatchlistPrices(watchlist, { force });
         } catch (error) {
           errors.push(error);
         }
@@ -978,7 +1330,7 @@ export default function App() {
     }
   }
 
-  async function refreshWatchlistPrices(watchlist) {
+  async function refreshWatchlistPrices(watchlist, { force = false } = {}) {
     if (!accountsConfirmedRef.current) return;
     if (!watchlist) return;
     const selectedSymbols = watchlist.symbols || [];
@@ -994,6 +1346,7 @@ export default function App() {
       stop_mode: settings.stopMode,
       fixed_stop_buffer: String(settings.fixedStopBuffer),
     });
+    if (force) query.set("force", "true");
     const payload = await getJson(`/api/webull/live-prices?${query.toString()}`);
     if (!payload.ok) {
       const errorText = livePriceErrorText(payload);
@@ -1009,11 +1362,35 @@ export default function App() {
     clearRetainedMtfQuotes();
     setQuotesForTab(watchlist.id, nextQuotes);
     setUpdatedTextForTab(watchlist.id, `Updated ${updatedAt} from ${payload.source || "webull"}`);
+    notifyBosUpdate(watchlist.id, watchlist.name, nextQuotes);
     notifyMtfUpdate(watchlist.id, currentMtfs);
 
     if (payload.errors?.length) {
       setLiveAlert(`Some data failed: ${payload.errors.map((item) => item.source).join(", ")}`);
     }
+  }
+
+  async function refreshSpyQuote({ force = false } = {}) {
+    if (!accountsConfirmedRef.current) return;
+    const settings = riskSettingsRef.current;
+    const query = new URLSearchParams({
+      symbols: SPY_SYMBOL,
+      risk_amount: String(settings.riskAmount),
+      stop_mode: settings.stopMode,
+      fixed_stop_buffer: String(settings.fixedStopBuffer),
+    });
+    if (force) query.set("force", "true");
+    const payload = await getJson(`/api/webull/live-prices?${query.toString()}`);
+    if (!payload.ok) {
+      const errorText = livePriceErrorText(payload);
+      setSpyUpdatedText(errorText.status);
+      setLiveAlert(errorText.alert);
+      return;
+    }
+    const [nextSpyQuote] = payload.quotes || [];
+    setSpyQuote(nextSpyQuote || null);
+    setSpyUpdatedText(`SPY updated ${new Date().toLocaleTimeString()} from ${payload.source || "webull"}`);
+    notifySpyCurlUpdate(nextSpyQuote);
   }
 
   function livePriceErrorText(payload) {
@@ -1080,6 +1457,90 @@ export default function App() {
     if (changed) autoBuyLongAlerts(tab, freshQuotes);
   }
 
+  function notifyBosUpdate(tab, watchlistName, nextQuotes) {
+    const previousRows = lastBosRows.current || {};
+    const nextRows = { ...previousRows };
+    const changes = [];
+    for (const quote of nextQuotes) {
+      const symbol = String(quote.symbol || "").toUpperCase();
+      const nextStatus = bosStatus(quote);
+      if (!symbol || !isMonitorableBosStatus(nextStatus)) continue;
+      const previous = previousRows[symbol];
+      nextRows[symbol] = {
+        status: nextStatus,
+        structureTime: quote.structure_10m?.time || "",
+        watchlistId: tab,
+        watchlistName,
+        updatedAt: new Date().toISOString(),
+      };
+      if (!previous || previous.status === nextStatus) continue;
+      changes.push({
+        symbol,
+        previousStatus: previous.status,
+        nextStatus,
+        watchlistName,
+        structureTime: quote.structure_10m?.time || "",
+      });
+    }
+    lastBosRows.current = nextRows;
+    saveBosState(nextRows);
+    if (!changes.length) return;
+    publishBosNotification(bosNotificationDetails(changes), changes);
+  }
+
+  function publishBosNotification(notification, changes) {
+    appendAlertLog(changes.map((change) => notificationHistoryEntry({
+      title: `${change.symbol}: ${appStructureLabel(change.nextStatus)}`,
+      message: change.previousStatus
+        ? `BOS changed from ${appStructureLabel(change.previousStatus)} to ${appStructureLabel(change.nextStatus)}.`
+        : `BOS is now ${appStructureLabel(change.nextStatus)}.`,
+      kind: "notification",
+      symbol: change.symbol,
+      source: "bos-monitor",
+      payload: {
+        ...notification,
+        status: change.nextStatus,
+        previousStatus: change.previousStatus,
+        structureTime: change.structureTime,
+        watchlistName: change.watchlistName,
+      },
+    })));
+    addNotification({
+      title: notification.title,
+      message: notification.body,
+      kind: "bos",
+    });
+    showBosDeviceNotification(notification);
+  }
+
+  function notifySpyCurlUpdate(nextSpyQuote) {
+    const position = emaCloudPosition(nextSpyQuote);
+    const signature = position.status === "Inside" ? `${position.setup || "Curl Watch"}:${position.bias || "Wait"}` : "";
+    const previousSignature = lastSpyCurlSignature.current;
+    lastSpyCurlSignature.current = signature;
+    if (!signature || previousSignature === null || previousSignature === signature) return;
+    publishSpyCurlNotification(spyCurlNotificationDetails(position));
+  }
+
+  function publishSpyCurlNotification(notification) {
+    appendAlertLog([
+      notificationHistoryEntry({
+        title: notification.title,
+        message: notification.body,
+        kind: "notification",
+        symbol: notification.targetSymbol,
+        source: "spy-curl-watch",
+        payload: notification,
+      }),
+    ]);
+    addNotification({
+      title: notification.title,
+      message: notification.body,
+      kind: "spy",
+    });
+    showSpyDeviceNotification(notification);
+  }
+
   function notifyScannerUpdate(nextRows) {
     const nextByKey = Object.fromEntries(nextRows.map((row) => [scannerRowKey(row), row]));
     if (strategyStateRef.current?.[SCANNER_ALERT_STRATEGY_ID] === false) {
@@ -1143,7 +1604,7 @@ export default function App() {
 
   function navigatePage(page) {
     setActivePage(page);
-    const hash = page === "alerts" ? "#alerts" : page === "mtfs" ? "#mtfs" : page === "trades" ? "#trades" : "";
+    const hash = page === "alerts" ? "#alerts" : page === "mtfs" ? "#mtfs" : page === "spy" ? "#spy" : page === "trades" ? "#trades" : "";
     window.history.replaceState(null, "", hash || window.location.pathname);
   }
 
@@ -1329,6 +1790,10 @@ export default function App() {
     const tabRows = { ...(lastMtfRows.current[tab] || {}) };
     delete tabRows[symbol];
     lastMtfRows.current = { ...lastMtfRows.current, [tab]: tabRows };
+    const nextBosRows = { ...lastBosRows.current };
+    delete nextBosRows[String(symbol || "").toUpperCase()];
+    lastBosRows.current = nextBosRows;
+    saveBosState(nextBosRows);
     dismissNewMtfRow(tab, symbol);
   }
 
@@ -1370,6 +1835,14 @@ export default function App() {
     const nextRows = { ...lastMtfRows.current };
     delete nextRows[id];
     lastMtfRows.current = nextRows;
+    const removedSymbols = new Set((watchlist.symbols || []).map((symbol) => String(symbol || "").toUpperCase()));
+    const nextBosRows = Object.fromEntries(
+      Object.entries(lastBosRows.current || {}).filter(([symbol, row]) => (
+        !removedSymbols.has(symbol) || row.watchlistId !== id
+      )),
+    );
+    lastBosRows.current = nextBosRows;
+    saveBosState(nextBosRows);
     setNewMtfRows((current) => Object.fromEntries(
       Object.entries(current).filter(([rowId]) => !rowId.startsWith(`${id}:`)),
     ));
@@ -1449,6 +1922,16 @@ export default function App() {
     await refreshAllPrices({ showLoading });
   }
 
+  function selectHomeView(view) {
+    setHomeView(view);
+    if (!accountsConfirmedRef.current || loading.prices) return;
+    if (view === "spy" && !spyQuote) {
+      refreshAllPrices({ showLoading: false });
+    } else if (view === "watchlist" && !(quotesByTab[contextWatchlist?.id] || []).length) {
+      refreshAllPrices({ showLoading: false });
+    }
+  }
+
   function showMtfDeviceNotification(notification) {
     if (!notificationState.appEnabled || notificationState.permission !== "granted") return;
     showDeviceNotification({
@@ -1462,6 +1945,30 @@ export default function App() {
   }
 
   function showScannerDeviceNotification(notification) {
+    if (!notificationState.appEnabled || notificationState.permission !== "granted") return;
+    showDeviceNotification({
+      title: notification.title,
+      body: notification.body,
+      badgeCount: notification.badgeCount,
+      tag: notification.tag,
+      targetSymbol: notification.targetSymbol,
+      url: notification.url,
+    }).catch((error) => setLiveAlert(error.message));
+  }
+
+  function showBosDeviceNotification(notification) {
+    if (!notificationState.appEnabled || notificationState.permission !== "granted") return;
+    showDeviceNotification({
+      title: notification.title,
+      body: notification.body,
+      badgeCount: notification.badgeCount,
+      tag: notification.tag,
+      targetSymbol: notification.targetSymbol,
+      url: notification.url,
+    }).catch((error) => setLiveAlert(error.message));
+  }
+
+  function showSpyDeviceNotification(notification) {
     if (!notificationState.appEnabled || notificationState.permission !== "granted") return;
     showDeviceNotification({
       title: notification.title,
@@ -1754,6 +2261,7 @@ export default function App() {
               focusMtfSymbol(symbol);
               navigatePage("mtfs");
             }}
+            structureBySymbol={structureBySymbol}
           />
         ) : activePage === "mtfs" ? (
           <MtfPage
@@ -1764,6 +2272,14 @@ export default function App() {
             onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
             shortMtfs={shortMtfs}
           />
+        ) : activePage === "spy" ? (
+          <SpyComparisonPage
+            loading={loading.prices}
+            onRefresh={refreshAllPrices}
+            rows={spyComparisonRows}
+            spyQuote={spyQuote}
+            updatedText={spyUpdatedText}
+          />
         ) : activePage === "trades" ? (
           <AutoTradesPage
             accountId={tradingAccountId}
@@ -1771,70 +2287,87 @@ export default function App() {
             loading={loading.trades}
             orders={autoTradeOrders}
             onRefresh={refreshAutoTrades}
+            structureBySymbol={structureBySymbol}
           />
         ) : (
           <div className="market-command-center">
             <section className="premarket-focus-panel">
               <div className="scanner-hero">
                 <div>
-                  <h2>Premarket Scanner</h2>
+                  <h2>{homeView === "watchlist" ? "Watchlist" : "v/s SPY"}</h2>
                 </div>
                 <div className="live-price-actions">
-                  <button type="button" onClick={() => refreshScannerPrices()} disabled={loading.prices}>
+                  <button type="button" onClick={() => refreshAllPrices()} disabled={loading.prices}>
                     {loading.prices ? "Updating" : "Update"}
                   </button>
                 </div>
               </div>
 
-              <ScannerWatchlistPicker
-                loading={loading.prices}
-                onSelectAll={selectAllScannerWatchlists}
-                onToggle={toggleScannerWatchlist}
-                onUpdate={refreshScannerWatchlist}
-                selectedIds={scannerWatchlistIds}
-                watchlists={watchlists}
-              />
-
-              <div className="scanner-metric-grid" aria-label="Premarket scanner summary">
-                <ScannerMetric label="Total" value={preMarketScannerRows.length} tone="neutral" />
-                <ScannerMetric label="Long" value={scannerLongCount} tone="long" />
-                <ScannerMetric label="Short" value={scannerShortCount} tone="short" />
+              <div className="workspace-view-tabs" role="tablist" aria-label="Scanner views">
+                <button
+                  type="button"
+                  className={homeView === "spy" ? "active" : ""}
+                  onClick={() => selectHomeView("spy")}
+                  role="tab"
+                  aria-selected={homeView === "spy"}
+                >
+                  v/s SPY <span>{spyFocusCount}</span>
+                </button>
+                <button
+                  type="button"
+                  className={homeView === "watchlist" ? "active" : ""}
+                  onClick={() => selectHomeView("watchlist")}
+                  role="tab"
+                  aria-selected={homeView === "watchlist"}
+                >
+                  Watchlist <span>{contextWatchlist?.symbols?.length || 0}</span>
+                </button>
               </div>
 
               {liveAlert ? <div className="alert">{liveAlert}</div> : null}
-              <PreMarketScannerTable rows={preMarketScannerRows} />
-            </section>
 
-            <aside className="watchlist-control-rail">
-              <WatchlistTabs
-                activeTab={watchlistTab}
-                onAddSymbols={addSymbolsToActiveWatchlist}
-                onAddTab={addWatchlist}
-                onDeleteTab={deleteWatchlist}
-                loading={loading.watchlists || loading.prices}
-                onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
-                onSwitchTab={switchWatchlistTab}
-                onToggleAutoTrade={toggleWatchlistAutoTrade}
-                selectedWatchlist={contextWatchlist}
-                symbolInput={symbolInputs[watchlistTab] || ""}
-                watchlists={watchlists}
-              />
-            </aside>
+              {homeView === "spy" ? (
+                <SpyComparisonInline
+                  rows={spyComparisonRows}
+                  spyQuote={spyQuote}
+                  updatedText={spyUpdatedText}
+                />
+              ) : homeView === "watchlist" ? (
+                <WatchlistWorkspace
+                  activeTab={watchlistTab}
+                  contextWatchlist={contextWatchlist}
+                  loading={loading.watchlists || loading.prices}
+                  onAddSymbols={addSymbolsToActiveWatchlist}
+                  onAddTab={addWatchlist}
+                  onDeleteTab={deleteWatchlist}
+                  onRemoveSymbol={removeSymbolFromWatchlist}
+                  onSwitchTab={switchWatchlistTab}
+                  onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
+                  onToggleAutoTrade={toggleWatchlistAutoTrade}
+                  symbolInput={symbolInputs[watchlistTab] || ""}
+                  trendBuckets={trendBuckets}
+                  updatedText={updatedText}
+                  watchlists={watchlists}
+                />
+              ) : (
+                <>
+                  <ScannerWatchlistPicker
+                    loading={loading.prices}
+                    onSelectAll={selectAllScannerWatchlists}
+                    onToggle={toggleScannerWatchlist}
+                    selectedIds={scannerWatchlistIds}
+                    watchlists={watchlists}
+                  />
 
-            <section className="intraday-context-panel">
-              <div className="section-heading">
-                <div>
-                  <h2>{contextWatchlist?.name || "Watchlist"}</h2>
-                </div>
-              </div>
-              <div className="active-watchlist-tables">
-                <div className="trend-price-grid">
-                  <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol, contextWatchlist?.id)} />
-                  <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol, contextWatchlist?.id)} />
-                  <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => removeSymbolFromWatchlist(symbol, contextWatchlist?.id)} />
-                </div>
-                <p className="muted">{updatedText}</p>
-              </div>
+                  <div className="scanner-metric-grid" aria-label="Gap scanner summary">
+                    <ScannerMetric label="Total" value={preMarketScannerRows.length} tone="neutral" />
+                    <ScannerMetric label="Gap Up" value={scannerLongCount} tone="long" />
+                    <ScannerMetric label="Gap Down" value={scannerShortCount} tone="short" />
+                  </div>
+
+                  <PreMarketScannerTable rows={preMarketScannerRows} />
+                </>
+              )}
             </section>
           </div>
         )}
@@ -1908,6 +2441,129 @@ function MtfPage({
   );
 }
 
+function SpyComparisonPage({ loading, onRefresh, rows, spyQuote, updatedText }) {
+  const spyPosition = emaCloudPosition(spyQuote);
+  const spyTrend = emaCloudTrendLabel(spyPosition);
+  const spyReady = Boolean(spyQuote && spyPosition.cloud);
+  const playbook = spyPlaybook(spyPosition);
+  const sections = spyComparisonSections(rows, spyQuote);
+
+  return (
+    <section className="spy-page global-mtf-panel">
+      <div className="mtf-page-header">
+        <div>
+          <h2>v/s SPY</h2>
+          <p className="muted">{updatedText}</p>
+        </div>
+        <button type="button" className="secondary-button" onClick={() => onRefresh()} disabled={loading}>
+          {loading ? "Updating" : "Update"}
+        </button>
+      </div>
+
+      <div className="spy-summary-grid" aria-label="SPY 5/12 EMA summary">
+        <SummaryTile label="SPY 5/12" value={spyReady ? spyCloudDisplay(spyPosition) : "-"} />
+        <SummaryTile label="Market Bias" value={spyReady ? spyTrend : "-"} />
+        <SummaryTile label="Go To" value={spyReady ? playbook.focusLabel : "-"} />
+      </div>
+
+      <SpyDecisionBanner playbook={playbook} />
+
+      <div className="spy-comparison-sections">
+        {sections.map((section) => (
+          <SpyComparisonTable
+            key={section.id}
+            rows={section.rows}
+            spyQuote={spyQuote}
+            title={section.title}
+            subtitle={section.subtitle}
+            tone={section.tone}
+            badge={section.badge}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SpyComparisonInline({ rows, spyQuote, updatedText }) {
+  const spyPosition = emaCloudPosition(spyQuote);
+  const spyTrend = emaCloudTrendLabel(spyPosition);
+  const spyReady = Boolean(spyQuote && spyPosition.cloud);
+  const playbook = spyPlaybook(spyPosition);
+  const sections = spyComparisonSections(rows, spyQuote);
+
+  return (
+    <div className="spy-inline-panel">
+      <div className="spy-summary-grid compact" aria-label="SPY 5/12 EMA summary">
+        <SummaryTile label="SPY 5/12" value={spyReady ? spyCloudDisplay(spyPosition) : "-"} />
+        <SummaryTile label="Market Bias" value={spyReady ? spyTrend : "-"} />
+        <SummaryTile label="Go To" value={spyReady ? playbook.focusLabel : "-"} />
+      </div>
+      <SpyDecisionBanner playbook={playbook} />
+      <p className="muted">{updatedText}</p>
+      <div className="spy-comparison-sections">
+        {sections.map((section) => (
+          <SpyComparisonTable
+            key={section.id}
+            rows={section.rows}
+            spyQuote={spyQuote}
+            title={section.title}
+            subtitle={section.subtitle}
+            tone={section.tone}
+            badge={section.badge}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WatchlistWorkspace({
+  activeTab,
+  contextWatchlist,
+  loading,
+  onAddSymbols,
+  onAddTab,
+  onDeleteTab,
+  onRemoveSymbol,
+  onSwitchTab,
+  onSymbolInput,
+  onToggleAutoTrade,
+  symbolInput,
+  trendBuckets,
+  updatedText,
+  watchlists,
+}) {
+  return (
+    <div className="watchlist-workspace">
+      <WatchlistTabs
+        activeTab={activeTab}
+        onAddSymbols={onAddSymbols}
+        onAddTab={onAddTab}
+        onDeleteTab={onDeleteTab}
+        loading={loading}
+        onSymbolInput={onSymbolInput}
+        onSwitchTab={onSwitchTab}
+        onToggleAutoTrade={onToggleAutoTrade}
+        selectedWatchlist={contextWatchlist}
+        symbolInput={symbolInput}
+        watchlists={watchlists}
+      />
+      <div className="section-heading">
+        <div>
+          <h2>{contextWatchlist?.name || "Watchlist"}</h2>
+          <p className="muted">{updatedText}</p>
+        </div>
+      </div>
+      <div className="trend-price-grid">
+        <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
+        <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
+        <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
+      </div>
+    </div>
+  );
+}
+
 function MtfSignalGroup({
   buyState,
   direction,
@@ -1959,7 +2615,7 @@ function mtfStrategySections(quotes) {
   }).filter((section) => section.quotes.length);
 }
 
-function AutoTradesPage({ accountId, alert, loading, orders, onRefresh }) {
+function AutoTradesPage({ accountId, alert, loading, orders, onRefresh, structureBySymbol }) {
   const [tableView, setTableView] = useState("all");
   const buckets = orders?.buckets || emptyAutoTradeOrders().buckets;
   const counts = orders?.counts || emptyAutoTradeOrders().counts;
@@ -2012,7 +2668,7 @@ function AutoTradesPage({ accountId, alert, loading, orders, onRefresh }) {
           </button>
         ))}
       </div>
-      <OrderBucket title={activeTable.label} items={visibleOrders} />
+      <OrderBucket title={activeTable.label} items={visibleOrders} structureBySymbol={structureBySymbol} />
     </section>
   );
 }
@@ -2026,7 +2682,18 @@ function SummaryTile({ label, value }) {
   );
 }
 
-function OrderBucket({ title, items }) {
+function OrderBucket({ title, items, structureBySymbol = {} }) {
+  const columns = [
+    { key: "symbol", label: "Symbol", value: (item) => item.symbol || "" },
+    { key: "structure", label: "BOS", value: (item) => structureBySymbol[String(item.symbol || "").toUpperCase()] || "Unknown" },
+    { key: "side", label: "Side", value: (item) => item.side || "" },
+    { key: "status", label: "Status", value: (item) => item.status || "" },
+    { key: "quantity", label: "Qty", value: (item) => Number(item.quantity) },
+    { key: "order", label: "Order", value: (item) => item.order_type || "" },
+    { key: "time", label: "Time", value: (item) => Date.parse(item.updated_at || item.created_at || "") || 0 },
+  ];
+  const { sortedItems, sort, toggleSort } = useSortedItems(items, columns, { key: "time", direction: "desc" });
+
   return (
     <section className="auto-trade-bucket">
       <div className="auto-trade-bucket-heading">
@@ -2037,18 +2704,20 @@ function OrderBucket({ title, items }) {
         <table className="auto-trade-table">
           <thead>
             <tr>
-              <th>Symbol</th>
-              <th>Side</th>
-              <th>Status</th>
-              <th>Qty</th>
-              <th>Order</th>
-              <th>Time</th>
+              {columns.map((column) => (
+                <AppSortHeader key={column.key} column={column} sort={sort} onSort={toggleSort} />
+              ))}
             </tr>
           </thead>
           <tbody>
-            {items.length ? items.map((item, index) => (
+            {sortedItems.length ? sortedItems.map((item, index) => (
               <tr key={orderRowKey(item, index)}>
                 <td data-label="Symbol"><strong>{item.symbol || "-"}</strong></td>
+                <td data-label="BOS">
+                  <span className={`structure-pill ${appStructureClass(structureBySymbol[String(item.symbol || "").toUpperCase()])}`}>
+                    {appStructureLabel(structureBySymbol[String(item.symbol || "").toUpperCase()])}
+                  </span>
+                </td>
                 <td data-label="Side"><span className={`order-side-pill ${orderSideClass(item.side)}`}>{item.side || "-"}</span></td>
                 <td data-label="Status"><span className={`order-status-pill ${orderStatusClass(item.status)}`}>{item.status || "-"}</span></td>
                 <td data-label="Qty">{orderQuantityText(item)}</td>
@@ -2063,7 +2732,7 @@ function OrderBucket({ title, items }) {
               </tr>
             )) : (
               <tr>
-                <td colSpan="6" className="alert-log-empty-cell">No {title.toLowerCase()} orders found</td>
+                <td colSpan="7" className="alert-log-empty-cell">No {title.toLowerCase()} orders found</td>
               </tr>
             )}
           </tbody>
@@ -2111,7 +2780,66 @@ function orderTimeText(item) {
   return value ? formatDateTime(value) : "-";
 }
 
-function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
+function AppSortHeader({ column, sort, onSort }) {
+  const active = sort.key === column.key;
+  const direction = active ? sort.direction : "";
+  return (
+    <th className={column.className || ""}>
+      <button
+        type="button"
+        className={`sort-header-button ${active ? "active" : ""}`}
+        onClick={() => onSort(column.key)}
+        aria-label={`Sort by ${column.label}${active ? ` ${direction === "asc" ? "descending" : "ascending"}` : ""}`}
+      >
+        {column.label}
+        <span aria-hidden="true">{active ? (direction === "asc" ? "▲" : "▼") : "↕"}</span>
+      </button>
+    </th>
+  );
+}
+
+function useSortedItems(items, columns, defaultSort) {
+  const [sort, setSort] = useState(defaultSort || { key: columns[0]?.key || "", direction: "asc" });
+  const sortedItems = useMemo(() => {
+    const column = columns.find((item) => item.key === sort.key) || columns[0];
+    if (!column) return items;
+    const direction = sort.direction === "desc" ? -1 : 1;
+    return [...items].sort((left, right) => compareSortValues(column.value(left), column.value(right)) * direction);
+  }, [columns, items, sort]);
+
+  function toggleSort(key) {
+    setSort((current) => ({
+      key,
+      direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
+    }));
+  }
+
+  return { sortedItems, sort, toggleSort };
+}
+
+function compareSortValues(left, right) {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) return leftNumber - rightNumber;
+  return String(left ?? "").localeCompare(String(right ?? ""), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function appStructureLabel(value) {
+  const text = String(value || "Unknown");
+  if (text === "Bullish BOS") return "Bull BOS";
+  if (text === "Bearish BOS") return "Bear BOS";
+  return text;
+}
+
+function appStructureClass(value) {
+  const text = String(value || "").toLowerCase();
+  if (text.includes("bullish")) return "bullish";
+  if (text.includes("bearish")) return "bearish";
+  if (text.includes("chop") || text.includes("intact")) return "chop";
+  return "unknown";
+}
+
+function AlertLogPage({ alertLog, onClear, onSelectSymbol, structureBySymbol }) {
   const [query, setQuery] = useState("");
   const searched = useMemo(() => {
     const needle = query.trim().toUpperCase();
@@ -2146,12 +2874,22 @@ function AlertLogPage({ alertLog, onClear, onSelectSymbol }) {
       <AlertLogTable
         items={searched}
         onSelectSymbol={onSelectSymbol}
+        structureBySymbol={structureBySymbol}
       />
     </section>
   );
 }
 
-function AlertLogTable({ items, onSelectSymbol }) {
+function AlertLogTable({ items, onSelectSymbol, structureBySymbol = {} }) {
+  const columns = [
+    { key: "symbol", label: "Symbol", value: (item) => item.symbol || "" },
+    { key: "structure", label: "BOS", value: (item) => structureBySymbol[String(item.symbol || "").toUpperCase()] || "Unknown" },
+    { key: "type", label: "Type", value: (item) => item.kind || "notification" },
+    { key: "notification", label: "Notification", value: (item) => item.title || item.reason || "" },
+    { key: "time", label: "Time", value: (item) => Date.parse(item.alertedAt || item.createdAt || "") || 0 },
+  ];
+  const { sortedItems, sort, toggleSort } = useSortedItems(items, columns, { key: "time", direction: "desc" });
+
   return (
     <section className="alert-log-table-card history">
       <div className="alert-log-table-heading">
@@ -2163,19 +2901,23 @@ function AlertLogTable({ items, onSelectSymbol }) {
         <table className="alert-log-table">
           <thead>
             <tr>
-              <th>Symbol</th>
-              <th>Type</th>
-              <th>Notification</th>
-              <th>Time</th>
+              {columns.map((column) => (
+                <AppSortHeader key={column.key} column={column} sort={sort} onSort={toggleSort} />
+              ))}
             </tr>
           </thead>
           <tbody>
-            {items.length ? items.map((item) => (
+            {sortedItems.length ? sortedItems.map((item) => (
               <tr key={item.id}>
                 <td data-label="Symbol">
                   {item.symbol ? (
                     <button type="button" onClick={() => onSelectSymbol(item.symbol)}>{item.symbol}</button>
                   ) : "-"}
+                </td>
+                <td data-label="BOS">
+                  <span className={`structure-pill ${appStructureClass(structureBySymbol[String(item.symbol || "").toUpperCase()])}`}>
+                    {appStructureLabel(structureBySymbol[String(item.symbol || "").toUpperCase()])}
+                  </span>
                 </td>
                 <td data-label="Type">{item.kind || "notification"}</td>
                 <td data-label="Notification">
@@ -2193,7 +2935,7 @@ function AlertLogTable({ items, onSelectSymbol }) {
               </tr>
             )) : (
               <tr>
-                <td colSpan="4" className="alert-log-empty-cell">No notifications saved yet</td>
+                <td colSpan="5" className="alert-log-empty-cell">No notifications saved yet</td>
               </tr>
             )}
           </tbody>
@@ -2353,7 +3095,7 @@ function AutoTradePanel({ accountId, autoTrade, disabled, onChange }) {
   );
 }
 
-function ScannerWatchlistPicker({ loading, onSelectAll, onToggle, onUpdate, selectedIds, watchlists }) {
+function ScannerWatchlistPicker({ onSelectAll, onToggle, selectedIds, watchlists }) {
   const selected = new Set(selectedIds);
   const allSelected = watchlists.length > 0 && selectedIds.length === watchlists.length;
   return (
@@ -2375,16 +3117,6 @@ function ScannerWatchlistPicker({ loading, onSelectAll, onToggle, onUpdate, sele
           >
             <span>{watchlist.name}</span>
             <b>{watchlist.symbols.length}</b>
-          </button>
-          <button
-            type="button"
-            className="scanner-watchlist-update"
-            disabled={loading}
-            onClick={() => onUpdate(watchlist.id)}
-            aria-label={`Update ${watchlist.name}`}
-            title={`Update ${watchlist.name}`}
-          >
-            Update
           </button>
         </span>
       ))}

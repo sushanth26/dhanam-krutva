@@ -6,6 +6,8 @@ from app.notifications import (
     MtfPushMonitor,
     PushSubscriptionStore,
     alert_history_entries_from_push,
+    bos_notification_payload,
+    bos_state_changes,
     build_monitored_quotes,
     confirmed_mtf_quotes,
     describe_mtf_matches,
@@ -174,6 +176,88 @@ def test_build_monitored_quotes_omits_deleted_symbols(tmp_path, monkeypatch):
     assert requested_symbols == ["BE", "PLTR"]
     assert "AAOI" not in requested_symbols
     assert [quote["symbol"] for quote in quotes] == ["BE", "PLTR"]
+
+
+def test_bos_state_changes_baselines_first_scan_without_alerts():
+    state, changes = bos_state_changes(
+        None,
+        [
+            {"symbol": "NBIS", "structure_10m": {"status": "Chop", "time": "2026-07-20T10:00:00"}},
+            {"symbol": "MRVL", "structure_10m": {"status": "Bullish BOS", "time": "2026-07-20T10:10:00"}},
+        ],
+    )
+
+    assert changes == []
+    assert state["NBIS"]["status"] == "Chop"
+    assert state["MRVL"]["status"] == "Bullish BOS"
+
+
+def test_bos_state_changes_reports_only_active_structure_transitions():
+    previous = {
+        "NBIS": {"status": "Chop", "structure_time": "2026-07-20T10:00:00"},
+        "MRVL": {"status": "Bullish BOS", "structure_time": "2026-07-20T10:00:00"},
+    }
+
+    _state, changes = bos_state_changes(
+        previous,
+        [
+            {"symbol": "NBIS", "structure_10m": {"status": "Bearish BOS", "time": "2026-07-20T10:10:00"}},
+            {"symbol": "MRVL", "structure_10m": {"status": "Bullish BOS", "time": "2026-07-20T10:10:00"}},
+            {"symbol": "BE", "structure_10m": {"status": "Unknown", "time": "2026-07-20T10:10:00"}},
+        ],
+    )
+
+    assert changes == [
+        {
+            "symbol": "NBIS",
+            "previous_status": "Chop",
+            "status": "Bearish BOS",
+            "structure_time": "2026-07-20T10:10:00",
+        }
+    ]
+
+
+def test_bos_notification_payload_uses_table_labels():
+    payload = bos_notification_payload([
+        {
+            "symbol": "NBIS",
+            "previous_status": "Chop",
+            "status": "Bearish BOS",
+            "structure_time": "2026-07-20T10:10:00",
+        }
+    ])
+
+    assert payload["title"] == "NBIS: Bear BOS"
+    assert payload["body"] == "BOS changed from Chop to Bear BOS."
+    assert payload["tag"] == "bos-NBIS"
+    assert payload["targetSymbol"] == "NBIS"
+
+
+def test_push_monitor_sends_bos_change_when_mtf_signature_is_unchanged(tmp_path, monkeypatch):
+    settings = SimpleNamespace(
+        alert_history_file=tmp_path / "alerts.json",
+        push_subscription_file=tmp_path / "push.json",
+        vapid_private_key=None,
+        vapid_subject="mailto:test@example.com",
+    )
+    monitor = MtfPushMonitor(settings)
+    sent = []
+    quote_sets = iter([
+        [{"symbol": "NBIS", "structure_10m": {"status": "Chop"}, "mtf_matches": []}],
+        [{"symbol": "NBIS", "structure_10m": {"status": "Bearish BOS"}, "mtf_matches": []}],
+    ])
+
+    monkeypatch.setattr(notifications, "build_monitored_quotes", lambda _settings: next(quote_sets))
+    monkeypatch.setattr(monitor, "send", lambda payload: sent.append(payload) or {"sent": 1, "removed": 0})
+
+    assert monitor.check_once() is None
+    payload = monitor.check_once()
+
+    assert payload["title"] == "NBIS: Bear BOS"
+    assert sent == [payload]
+    history = AlertHistoryStore(settings.alert_history_file).all()
+    assert history[0]["source"] == "server-push"
+    assert history[0]["symbol"] == "NBIS"
 
 
 def test_mtf_push_monitor_pauses_after_failed_webull_check_until_manual_retry(tmp_path, monkeypatch):

@@ -108,11 +108,12 @@ class MtfPushMonitor:
         self.store = PushSubscriptionStore(settings.push_subscription_file)
         self.task: asyncio.Task | None = None
         self.last_signature: str | None = None
+        self.last_bos_state: dict[str, dict[str, Any]] | None = None
         self.paused_for_manual_retry = False
         self.last_error: str | None = None
 
     def start(self) -> None:
-        if self.task or not self.settings.push_configured:
+        if self.task or not self.settings.mtf_push_enabled or not self.settings.push_configured:
             return
         self.task = asyncio.create_task(self._run())
 
@@ -146,18 +147,27 @@ class MtfPushMonitor:
             self.paused_for_manual_retry = False
             self.last_error = None
         try:
-            quotes = confirmed_mtf_quotes(build_monitored_quotes(self.settings))
-            signature = mtf_signature(quotes)
+            quotes = build_monitored_quotes(self.settings)
+            mtf_quotes = confirmed_mtf_quotes(quotes)
+            signature = mtf_signature(mtf_quotes)
             changed = self.last_signature is not None and signature != self.last_signature
             self.last_signature = signature
+            next_bos_state, bos_changes = bos_state_changes(self.last_bos_state, quotes)
+            self.last_bos_state = next_bos_state
             self.last_error = None
-            if not changed:
+            notifications = []
+            if changed:
+                notifications.append(mtf_notification_payload(mtf_quotes))
+            if bos_changes:
+                notifications.append(bos_notification_payload(bos_changes))
+            if not notifications:
                 return None
 
-            notification = mtf_notification_payload(quotes)
-            AlertHistoryStore(self.settings.alert_history_file).append(alert_history_entries_from_push(notification))
-            self.send(notification)
-            return notification
+            history = AlertHistoryStore(self.settings.alert_history_file)
+            for notification in notifications:
+                history.append(alert_history_entries_from_push(notification))
+                self.send(notification)
+            return notifications[0] if len(notifications) == 1 else {"ok": True, "notifications": notifications}
         except Exception as exc:
             self.paused_for_manual_retry = True
             self.last_error = str(exc)
@@ -236,6 +246,93 @@ def build_monitored_quotes(settings: Settings) -> list[dict[str, Any]]:
             raise RuntimeError(webull_error_message(first_error or payload))
         quotes.extend(payload.get("quotes", []))
     return quotes
+
+
+def bos_state_from_quotes(quotes: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    state = {}
+    for quote in quotes:
+        symbol = str(quote.get("symbol") or "").upper()
+        structure = quote.get("structure_10m") if isinstance(quote.get("structure_10m"), dict) else {}
+        status = str(structure.get("status") or "Unknown")
+        if not symbol or not is_monitorable_bos_status(status):
+            continue
+        state[symbol] = {
+            "status": status,
+            "structure_time": structure.get("time") or "",
+        }
+    return state
+
+
+def bos_state_changes(
+    previous_state: dict[str, dict[str, Any]] | None,
+    quotes: list[dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    next_state = bos_state_from_quotes(quotes)
+    if previous_state is None:
+        return next_state, []
+
+    changes = []
+    for symbol, current in next_state.items():
+        previous = previous_state.get(symbol)
+        if not previous or previous.get("status") == current.get("status"):
+            continue
+        changes.append(
+            {
+                "symbol": symbol,
+                "previous_status": previous.get("status"),
+                "status": current.get("status"),
+                "structure_time": current.get("structure_time") or "",
+            }
+        )
+    return next_state, changes
+
+
+def is_monitorable_bos_status(status: str) -> bool:
+    return status in {"Bullish BOS", "Bearish BOS", "Chop"}
+
+
+def bos_label(status: Any) -> str:
+    text = str(status or "Unknown")
+    if text == "Bullish BOS":
+        return "Bull BOS"
+    if text == "Bearish BOS":
+        return "Bear BOS"
+    return text
+
+
+def bos_notification_payload(changes: list[dict[str, Any]]) -> dict[str, Any]:
+    target_symbol = str(changes[0].get("symbol") or "").upper() if changes else ""
+    if len(changes) == 1:
+        change = changes[0]
+        symbol = str(change.get("symbol") or "").upper()
+        status = bos_label(change.get("status"))
+        previous_status = bos_label(change.get("previous_status"))
+        return {
+            "title": f"{symbol}: {status}",
+            "body": f"BOS changed from {previous_status} to {status}.",
+            "badgeCount": 1,
+            "badge_count": 1,
+            "tag": f"bos-{symbol}",
+            "targetSymbol": symbol,
+            "target_symbol": symbol,
+            "url": "/#alerts",
+            "changes": changes,
+        }
+
+    preview = " | ".join(f"{change.get('symbol')} {bos_label(change.get('status'))}" for change in changes[:3])
+    if len(changes) > 3:
+        preview += "..."
+    return {
+        "title": f"{len(changes)} BOS changes",
+        "body": preview,
+        "badgeCount": len(changes),
+        "badge_count": len(changes),
+        "tag": "bos-batch",
+        "targetSymbol": target_symbol,
+        "target_symbol": target_symbol,
+        "url": "/#alerts",
+        "changes": changes,
+    }
 
 
 def webull_error_message(error: Any) -> str:
