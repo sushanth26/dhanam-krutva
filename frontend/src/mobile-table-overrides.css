@@ -1,0 +1,135 @@
+@media (max-width: 760px) {
+  .spy-comparison-bucket .live-price-table-wrap,
+  .trend-price-grid .live-price-table-wrap {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .spy-comparison-table,
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) {
+    border-collapse: collapse;
+    display: table;
+    table-layout: fixed;
+  }
+
+  .spy-comparison-table {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) {
+    min-width: 580px;
+    width: 580px;
+  }
+
+  .spy-comparison-table thead,
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) thead {
+    display: table-header-group;
+  }
+
+  .spy-comparison-table tbody,
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) tbody {
+    display: table-row-group;
+    padding: 0;
+  }
+
+  .spy-comparison-table tr,
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) tr {
+    border: 0;
+    border-radius: 0;
+    display: table-row;
+    gap: 0;
+    padding: 0;
+  }
+
+  .spy-comparison-table th,
+  .spy-comparison-table td,
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) th,
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) td {
+    display: table-cell;
+    padding: 10px 8px;
+    text-align: left;
+    vertical-align: middle;
+    width: auto;
+  }
+
+  .spy-comparison-table td::before,
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) td::before {
+    content: none;
+    display: none;
+  }
+
+  .spy-comparison-table th:first-child,
+  .spy-comparison-table td:first-child {
+    width: 36%;
+  }
+
+  .spy-comparison-table th:nth-child(2),
+  .spy-comparison-table td:nth-child(2) {
+    width: 38%;
+  }
+
+  .spy-comparison-table th:nth-child(3),
+  .spy-comparison-table td:nth-child(3) {
+    text-align: right;
+    width: 26%;
+  }
+
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) th:first-child,
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) td:first-child {
+    width: 84px;
+  }
+
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) th:nth-child(2),
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) td:nth-child(2) {
+    width: 96px;
+  }
+
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) th:nth-child(3),
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) td:nth-child(3) {
+    width: 106px;
+  }
+
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) th:nth-child(4),
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) td:nth-child(4) {
+    width: 82px;
+  }
+
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) th:nth-child(5),
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) td:nth-child(5) {
+    width: 82px;
+  }
+
+  .spy-comparison-table .scanner-empty-row,
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) .scanner-empty-row {
+    display: table-row;
+  }
+
+  .spy-comparison-table .scanner-empty-row td,
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) .scanner-empty-row td {
+    display: table-cell;
+  }
+
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) .row-action-cell {
+    width: 52px;
+  }
+
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) .row-delete-button {
+    min-height: 32px;
+    min-width: 32px;
+  }
+
+  .spy-comparison-table td:nth-child(2) strong,
+  .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) td:first-child strong,
+  .structure-pill,
+  .spy-position-pill,
+  .direction-pill,
+  .cloud-tag,
+  .watchlist-cell,
+  .price-cell {
+    overflow-wrap: normal;
+    white-space: nowrap;
+    word-break: normal;
+  }
+}

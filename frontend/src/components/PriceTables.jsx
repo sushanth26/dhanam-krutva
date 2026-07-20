@@ -14,7 +14,15 @@ export function MtfTable({
   onBuy,
   onDismissNew,
 }) {
-  const sortedQuotes = [...quotes].sort(compareMtfQuoteRecency);
+  const columns = [
+    { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
+    ...(showWatchlist ? [{ key: "watchlist", label: "Watchlist", value: (quote) => quote.watchlist_name || "" }] : []),
+    { key: "structure", label: "BOS", value: (quote) => quote.structure_10m?.status || "Unknown" },
+    { key: "bias", label: "Bias", value: (quote) => tradeActionForMatches(quote.mtf_matches) || directionalBiasForQuote(quote) },
+    { key: "plan", label: "Trade plan", value: (quote) => mtfPlanSortValue(quote) },
+    { key: "time", label: "Time", value: (quote) => latestMtfTime(quote) },
+  ];
+  const { sortedRows: sortedQuotes, sort, toggleSort } = useSortableRows(quotes, columns, { key: "time", direction: "desc" });
 
   return (
     <section className="price-bucket mtf-bucket">
@@ -29,10 +37,9 @@ export function MtfTable({
         <table className={`live-price-table ${showWatchlist ? "global-mtf-table" : ""}`}>
           <thead>
             <tr>
-              <th>Symbol</th>
-              {showWatchlist ? <th>Watchlist</th> : null}
-              <th>Trade plan</th>
-              <th>Time</th>
+              {columns.map((column) => (
+                <SortHeader key={column.key} column={column} sort={sort} onSort={toggleSort} />
+              ))}
               <th className="action-col" aria-label="Actions"></th>
             </tr>
           </thead>
@@ -48,7 +55,7 @@ export function MtfTable({
                 onDismissNew={onDismissNew}
               />
             )) : (
-              <tr><td colSpan={showWatchlist ? 5 : 4}>{emptyText}</td></tr>
+              <tr><td colSpan={columns.length + 1}>{emptyText}</td></tr>
             )}
           </tbody>
         </table>
@@ -58,6 +65,15 @@ export function MtfTable({
 }
 
 export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
+  const columns = [
+    { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
+    { key: "trend", label: "Trend", value: (quote) => cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]) },
+    { key: "structure", label: "BOS", value: (quote) => quote.structure_10m?.status || "Unknown" },
+    { key: "bias", label: "Bias", value: (quote) => directionalBiasForQuote(quote) },
+    { key: "price", label: "Last", className: "price-col", value: (quote) => Number(quote.price) },
+  ];
+  const { sortedRows, sort, toggleSort } = useSortableRows(quotes, columns, { key: "symbol", direction: "asc" });
+
   return (
     <section className="price-bucket">
       <div className="bucket-heading">
@@ -68,17 +84,17 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
         <table className="live-price-table">
           <thead>
             <tr>
-              <th>Symbol</th>
-              <th>Trend</th>
-              <th className="price-col">Last</th>
+              {columns.map((column) => (
+                <SortHeader key={column.key} column={column} sort={sort} onSort={toggleSort} />
+              ))}
               {onRemoveSymbol ? <th className="action-col" aria-label="Actions"></th> : null}
             </tr>
           </thead>
           <tbody>
-            {quotes.length ? quotes.map((quote) => (
+            {sortedRows.length ? sortedRows.map((quote) => (
               <PriceRow key={quote.symbol} quote={quote} onRemoveSymbol={onRemoveSymbol} />
             )) : (
-              <tr><td colSpan={onRemoveSymbol ? "4" : "3"}>No {kind} stocks right now.</td></tr>
+              <tr><td colSpan={columns.length + (onRemoveSymbol ? 1 : 0)}>No {kind} stocks right now.</td></tr>
             )}
           </tbody>
         </table>
@@ -88,52 +104,47 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
 }
 
 export function PreMarketScannerTable({ rows }) {
-  const [listSort, setListSort] = useState(null);
-  const sortedRows = useMemo(() => sortScannerRows(rows, listSort), [rows, listSort]);
-
-  function toggleListSort() {
-    setListSort((current) => (current === "asc" ? "desc" : "asc"));
-  }
+  const columns = [
+    { key: "symbol", label: "Stock", value: (row) => row.symbol || "" },
+    { key: "gap", label: "Gap", value: (row) => gapActionLabel(row.action) },
+    { key: "trend", label: "10m", className: "scanner-trend-col", value: (row) => row.trend || "" },
+    { key: "structure", label: "BOS", value: (row) => row.structure || "Unknown" },
+    { key: "bias", label: "Bias", value: (row) => directionalBiasForRow(row) },
+    { key: "trigger", label: "Level", className: "scanner-trigger-col", value: (row) => row.trigger || "" },
+    { key: "price", label: "Last", className: "price-col", value: (row) => Number(row.price) },
+    { key: "previousHigh", label: "YH", className: "price-col", value: (row) => Number(row.previousHigh) },
+    { key: "previousLow", label: "YL", className: "price-col", value: (row) => Number(row.previousLow) },
+    { key: "move", label: "Move", className: "price-col scanner-move-col", value: (row) => Number(row.distancePct) },
+    { key: "list", label: "List", className: "scanner-list-col", value: (row) => row.watchlistName || "" },
+  ];
+  const { sortedRows, sort, toggleSort } = useSortableRows(rows, columns, { key: "gap", direction: "asc" });
 
   return (
     <section className="price-bucket premarket-scanner-bucket">
       <div className="bucket-heading">
-        <h3>Scanner</h3>
+        <h3>Gap Up / Down</h3>
         <span>{rows.length}</span>
       </div>
       <div className="live-price-table-wrap">
         <table className="live-price-table premarket-scanner-table">
           <thead>
             <tr>
-              <th>Stock</th>
-              <th>Side</th>
-              <th className="scanner-trend-col">10m</th>
-              <th className="scanner-trigger-col">Break</th>
-              <th className="price-col">Last</th>
-              <th className="price-col">YH</th>
-              <th className="price-col">YL</th>
-              <th className="price-col scanner-move-col">Move</th>
-              <th className="scanner-list-col">
-                <button
-                  type="button"
-                  className="scanner-sort-button"
-                  onClick={toggleListSort}
-                  aria-label={`Sort scanner by list ${listSort === "asc" ? "descending" : "ascending"}`}
-                >
-                  List {listSort ? <span>{listSort === "asc" ? "A-Z" : "Z-A"}</span> : null}
-                </button>
-              </th>
+              {columns.map((column) => (
+                <SortHeader key={column.key} column={column} sort={sort} onSort={toggleSort} />
+              ))}
             </tr>
           </thead>
           <tbody>
             {sortedRows.length ? sortedRows.map((row) => (
               <tr key={row.symbol} className={`stock-row scanner-${row.action.toLowerCase()}`}>
                 <td data-label="Stock"><strong>{row.symbol}</strong></td>
-                <td data-label="Side" className="scanner-side-cell">
-                  <span className={`scanner-action ${row.action.toLowerCase()}`}>{row.action}</span>
+                <td data-label="Gap" className="scanner-side-cell">
+                  <span className={`scanner-action ${row.action.toLowerCase()}`}>{gapActionLabel(row.action)}</span>
                 </td>
                 <td data-label="10m" className="scanner-trend-cell"><CloudTag status={row.trend} /></td>
-                <td data-label="Break" className="scanner-trigger-cell">{row.trigger}</td>
+                <td data-label="BOS"><span className={`structure-pill ${structureClass(row.structure)}`}>{structureLabel(row.structure)}</span></td>
+                <td data-label="Bias"><DirectionPill value={directionalBiasForRow(row)} /></td>
+                <td data-label="Level" className="scanner-trigger-cell">{gapTriggerLabel(row.trigger)}</td>
                 <td data-label="Last" className="price-cell last-price-cell">{formatPrice(row.price)}</td>
                 <td data-label="YH" className="price-cell range-high-cell">{formatPrice(row.previousHigh)}</td>
                 <td data-label="YL" className="price-cell range-low-cell">{formatPrice(row.previousLow)}</td>
@@ -141,7 +152,7 @@ export function PreMarketScannerTable({ rows }) {
                 <td data-label="List" className="scanner-list-cell">{row.watchlistName || "-"}</td>
               </tr>
             )) : (
-              <tr className="scanner-empty-row"><td colSpan="9">No setups.</td></tr>
+              <tr className="scanner-empty-row"><td colSpan="11">No gap up or gap down names.</td></tr>
             )}
           </tbody>
         </table>
@@ -150,27 +161,181 @@ export function PreMarketScannerTable({ rows }) {
   );
 }
 
+export function SpyComparisonTable({ rows, spyQuote, subtitle = "", title = "Watchlist 5/12 Cloud", tone = "", badge = "" }) {
+  const columns = [
+    { key: "action", label: "Long/Short", value: (row) => row.focusAction || directionalBiasForRow(row) },
+    { key: "symbol", label: "Stock", value: (row) => row.symbol || "" },
+    { key: "price", label: "Last", className: "price-col", value: (row) => Number(row.price) },
+  ];
+  const { sortedRows, sort, toggleSort } = useSortableRows(rows, columns, { key: "__focusOrder", direction: "asc" });
+  const bucketClassName = [
+    "price-bucket",
+    "spy-comparison-bucket",
+    tone ? `spy-${tone}` : "",
+    badge ? "is-priority" : "",
+  ].filter(Boolean).join(" ");
+
+  return (
+    <section className={bucketClassName}>
+      <div className="bucket-heading">
+        <div className="bucket-title">
+          <h3>
+            {title}
+            {badge ? <small className="spy-focus-badge">{badge}</small> : null}
+          </h3>
+          {subtitle ? <p>{subtitle}</p> : null}
+        </div>
+        <span>{rows.length}</span>
+      </div>
+      <div className="live-price-table-wrap">
+        <table className="live-price-table spy-comparison-table">
+          <thead>
+            <tr>
+              {columns.map((column) => (
+                <SortHeader key={column.key} column={column} sort={sort} onSort={toggleSort} />
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sortedRows.length ? sortedRows.map((row) => (
+              <tr key={row.symbol} className={`stock-row trend-${String(row.trend || "chop").toLowerCase()}`}>
+                <td data-label="Long/Short"><DirectionPill value={row.focusAction || directionalBiasForRow(row)} /></td>
+                <td data-label="Stock"><strong>{row.symbol}</strong></td>
+                <td data-label="Last" className="price-cell muted-price">{formatPrice(row.price)}</td>
+              </tr>
+            )) : (
+              <tr className="scanner-empty-row">
+                <td colSpan="3">No focus names right now.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function structureLabel(value) {
+  const text = String(value || "Unknown");
+  if (text === "Bullish BOS") return "Bull BOS";
+  if (text === "Bearish BOS") return "Bear BOS";
+  return text;
+}
+
+function cloudSetupLabel(value) {
+  const text = String(value || "-");
+  if (text === "Break Curl Down") return "Break Curl";
+  if (text === "Above 5/12") return "Above";
+  if (text === "Below 5/12") return "Below";
+  return text;
+}
+
+function structureClass(value) {
+  const text = String(value || "").toLowerCase();
+  if (text.includes("bullish")) return "bullish";
+  if (text.includes("bearish")) return "bearish";
+  if (text.includes("chop") || text.includes("intact")) return "chop";
+  return "unknown";
+}
+
+function directionalBiasForQuote(quote) {
+  return directionalBiasForRow({
+    cloudBias: quote?.ema_10m_cloud?.bias,
+    trend: cloudStatus(quote?.ema_10m, ["5", "12"], ["34", "50"]),
+    structure: quote?.structure_10m?.status,
+  });
+}
+
+function directionalBiasForRow(row) {
+  const structure = String(row?.structure || "").toLowerCase();
+  const cloud = String(row?.status || row?.trend || "").toLowerCase();
+  const cloudBias = String(row?.cloudBias || "").toLowerCase();
+  const action = String(row?.action || "").toLowerCase();
+  const bullishStructure = structure.includes("bullish");
+  const bearishStructure = structure.includes("bearish");
+  const bullishCloud = cloud === "above" || cloud === "bullish";
+  const bearishCloud = cloud === "below" || cloud === "bearish";
+  if (bullishStructure && (bullishCloud || cloudBias === "long" || action === "long")) return "Long";
+  if (bearishStructure && (bearishCloud || cloudBias === "short" || action === "short")) return "Short";
+  return "Wait";
+}
+
+function DirectionPill({ value }) {
+  const label = value || "Wait";
+  return <span className={`direction-pill ${label.toLowerCase()}`}>{label}</span>;
+}
+
+function gapActionLabel(action) {
+  if (action === "Long") return "Gap Up";
+  if (action === "Short") return "Gap Down";
+  return action || "-";
+}
+
+function gapTriggerLabel(trigger) {
+  if (trigger === "Above YH") return "Above YH";
+  if (trigger === "Below YL") return "Below YL";
+  return trigger || "-";
+}
+
 function formatPercent(value) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? `${numeric.toFixed(2)}%` : "-";
 }
 
-function sortScannerRows(rows, listSort) {
-  if (!listSort) return rows;
-  return [...rows].sort((left, right) => {
-    const sideCompare = scannerSideRank(left) - scannerSideRank(right);
-    const listCompare = String(left.watchlistName || "").localeCompare(String(right.watchlistName || ""));
-    const symbolCompare = String(left.symbol || "").localeCompare(String(right.symbol || ""));
-    return listSort === "asc"
-      ? sideCompare || listCompare || symbolCompare
-      : sideCompare || -listCompare || symbolCompare;
-  });
+function formatDistance(value) {
+  const numeric = Math.abs(Number(value));
+  return Number.isFinite(numeric) ? `${numeric.toFixed(2)}%` : "-";
 }
 
-function scannerSideRank(row) {
-  if (row?.trend === "Bullish" || row?.action === "Long") return 0;
-  if (row?.trend === "Bearish" || row?.action === "Short") return 1;
-  return 2;
+function SortHeader({ column, sort, onSort }) {
+  const active = sort.key === column.key;
+  const direction = active ? sort.direction : "";
+  return (
+    <th className={column.className || ""}>
+      <button
+        type="button"
+        className={`sort-header-button ${active ? "active" : ""}`}
+        onClick={() => onSort(column.key)}
+        aria-label={`Sort by ${column.label}${active ? ` ${direction === "asc" ? "descending" : "ascending"}` : ""}`}
+      >
+        {column.label}
+        <span aria-hidden="true">{active ? (direction === "asc" ? "▲" : "▼") : "↕"}</span>
+      </button>
+    </th>
+  );
+}
+
+function useSortableRows(rows, columns, defaultSort) {
+  const [sort, setSort] = useState(defaultSort || { key: columns[0]?.key || "", direction: "asc" });
+  const sortedRows = useMemo(() => {
+    const column = columns.find((item) => item.key === sort.key);
+    if (!column) return rows;
+    const direction = sort.direction === "desc" ? -1 : 1;
+    return [...rows].sort((left, right) => compareSortValues(column.value(left), column.value(right)) * direction);
+  }, [columns, rows, sort]);
+
+  function toggleSort(key) {
+    setSort((current) => ({
+      key,
+      direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
+    }));
+  }
+
+  return { sortedRows, sort, toggleSort };
+}
+
+function compareSortValues(left, right) {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  const bothNumeric = Number.isFinite(leftNumber) && Number.isFinite(rightNumber);
+  if (bothNumeric) return leftNumber - rightNumber;
+  return String(left ?? "").localeCompare(String(right ?? ""), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function mtfPlanSortValue(quote) {
+  const riskPlan = aPlusPlusRiskPlan(quote.mtf_matches);
+  if (riskPlan?.entry != null) return Number(riskPlan.entry);
+  return tradeActionForMatches(quote.mtf_matches) || "";
 }
 
 function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }) {
@@ -198,24 +363,19 @@ function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }
       )}
     >
       {showWatchlist ? (
-        <td className="watchlist-cell">
+        <td className="watchlist-cell" data-label="Watchlist">
           {quote.watchlist_name || "-"}
           {quote.is_new ? <NewTag onDismiss={dismissNew} symbol={quote.symbol} /> : null}
         </td>
       ) : null}
-      <td className="mtf-plan-cell">
+      <td data-label="BOS"><span className={`structure-pill ${structureClass(quote.structure_10m?.status)}`}>{structureLabel(quote.structure_10m?.status)}</span></td>
+      <td data-label="Bias"><DirectionPill value={tradeAction || directionalBiasForQuote(quote)} /></td>
+      <td className="mtf-plan-cell" data-label="Trade plan">
         {riskPlan ? <RiskPlan plan={riskPlan} /> : <span className="confirmed-setup">Confirmed</span>}
       </td>
-      <td className="trigger-time">{triggerTime}</td>
+      <td className="trigger-time" data-label="Time">{triggerTime}</td>
     </BaseRow>
   );
-}
-
-function compareMtfQuoteRecency(left, right) {
-  const rightTime = latestMtfTime(right);
-  const leftTime = latestMtfTime(left);
-  if (rightTime !== leftTime) return rightTime - leftTime;
-  return String(left.symbol || "").localeCompare(String(right.symbol || ""));
 }
 
 function latestMtfTime(quote) {
@@ -298,7 +458,9 @@ function PriceRow({ quote, onRemoveSymbol }) {
   const tenMinuteStatus = cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
   return (
     <BaseRow quote={quote} trend={tenMinuteStatus} action={onRemoveSymbol ? <RemoveCell onRemove={() => onRemoveSymbol(quote.symbol)} symbol={quote.symbol} /> : null}>
-      <td><CloudTag status={tenMinuteStatus} /></td>
+      <td data-label="Trend"><CloudTag status={tenMinuteStatus} /></td>
+      <td data-label="BOS"><span className={`structure-pill ${structureClass(quote.structure_10m?.status)}`}>{structureLabel(quote.structure_10m?.status)}</span></td>
+      <td data-label="Bias"><DirectionPill value={directionalBiasForQuote(quote)} /></td>
     </BaseRow>
   );
 }
@@ -307,9 +469,9 @@ function BaseRow({ quote, children, trend = "", action = null, className = "", d
   const rowClass = [trend ? `trend-${String(trend).toLowerCase()}` : "", className].filter(Boolean).join(" ");
   return (
     <tr className={`stock-row ${rowClass}`} data-mtf-symbol={dataMtfSymbol} id={id} onClick={onClick}>
-      <td><strong>{quote.symbol}</strong></td>
+      <td data-label="Symbol"><strong>{quote.symbol}</strong></td>
       {children}
-      {showPrice ? <td className="price-cell">{formatPrice(quote.price)}</td> : null}
+      {showPrice ? <td className="price-cell" data-label="Last">{formatPrice(quote.price)}</td> : null}
       {action}
     </tr>
   );

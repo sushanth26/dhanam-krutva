@@ -24,6 +24,7 @@ def settings(tmp_path: Path) -> Settings:
         webull_guard_file=tmp_path / "webull-guard.json",
         webull_verify_cooldown_seconds=3600,
         webull_rate_limit_cooldown_seconds=300,
+        mtf_push_enabled=False,
         mtf_push_poll_seconds=300,
         mtf_push_timezone="America/Chicago",
     )

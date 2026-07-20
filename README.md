@@ -81,7 +81,7 @@ VAPID_PUBLIC_KEY=...
 VAPID_PRIVATE_KEY=...
 VAPID_SUBJECT=mailto:you@example.com
 PUSH_SUBSCRIPTION_FILE=/data/push-subscriptions.json
-MTF_PUSH_POLL_SECONDS=300
+MTF_PUSH_POLL_SECONDS=30
 MTF_PUSH_TIMEZONE=America/Chicago
 ```
 
@@ -111,6 +111,7 @@ other routes are protected with HTTP Basic Auth when `APP_PASSWORD` is set.
 | Daily 50/55 | Alert when price closes out of the daily 50/55 EMA cloud. Long above cloud, short below cloud. | Target is 1:1 from entry to SL. Long SL is $3 below the daily 50/55 cloud; short SL is $3 above it. |
 | 10m bounce/rejection 34/50 | Enter only after a 10m candle touches the 10m 34/50 cloud and closes back above it for long, or below it for short. | Target is 1:1. Long SL below 10m 34/50 cloud; short SL above 10m 34/50 cloud. |
 | 10m 9 EMA touch | From 9:30-10:30 ET, alert/trade when bullish 10m trend touches the 9 EMA. After 10:30 ET, only if one of the recent 4 prior 10m candles touched the 10m 34/50 cloud. | Target is 1:1. SL below 10m 34/50 cloud. |
+| 10m 40 EMA touch | Alert/trade when bullish 10m trend touches the 40 EMA. | Target is 1:1. SL below 10m 34/50 cloud. |
 | 10m bounce/rejection 1hr 34/50 | Alert when a 10m candle touches the hourly 34/50 cloud and closes back in the trend direction. | Target is 1:1. Long SL below 10m 34/50 cloud; short SL above the touched cloud. |
 | 10m bounce/rejection Daily 20/21 | Alert when a 10m candle touches the daily 20/21 cloud and closes back in the trend direction. | Target is 1:1. Long SL below 10m 34/50 cloud; short SL above the touched cloud. |
 | 10m bounce/rejection Daily 50/55 | Alert when a 10m candle touches the daily 50/55 cloud and closes back in the trend direction. | Target is 1:1. Long SL below 10m 34/50 cloud; short SL above the touched cloud. |
