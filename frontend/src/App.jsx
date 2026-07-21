@@ -9,7 +9,7 @@ import { ALERT_STRATEGIES, filterQuotesByStrategy, loadStrategyState, saveStrate
 import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, flattenAccounts, formatPrice, isMarketRefreshWindow, marginTradingAccountId, matchEntryPrice, notificationMatchText, mtfSignature, preferredAccountId } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
-const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 60 * 1000;
 const MAX_NOTIFICATIONS = 20;
 const MAX_ALERT_LOG = 500;
 const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
@@ -991,9 +991,9 @@ export default function App() {
   const [activePage, setActivePage] = useState(() => {
     if (window.location.hash === "#alerts") return "alerts";
     if (window.location.hash === "#mtfs") return "mtfs";
-    if (window.location.hash === "#spy") return "spy";
     if (window.location.hash === "#trades") return "trades";
-    return "home";
+    if (window.location.hash === "#watchlist") return "watchlist";
+    return "mtfs";
   });
   const [autoTradeOrders, setAutoTradeOrders] = useState(() => emptyAutoTradeOrders());
   const [autoTradeAlert, setAutoTradeAlert] = useState("");
@@ -1094,7 +1094,22 @@ export default function App() {
     ));
     return filterQuotesByStrategy(matches, strategyState);
   }, [newMtfRows, quotesByTab, strategyState, watchlists]);
+  const allMtfTouchQuotes = useMemo(() => {
+    const touched = watchlists.flatMap((watchlist) => (
+      (quotesByTab[watchlist.id] || [])
+        .filter((quote) => quote.mtf_touches_today?.length)
+        .map((quote) => ({
+          ...quote,
+          mtf_matches: quote.mtf_touches_today,
+          watchlist_id: watchlist.id,
+          watchlist_name: watchlist.name,
+          is_new: Boolean(newMtfRows[mtfRowId(watchlist.id, quote.symbol)]),
+        }))
+    ));
+    return filterQuotesByStrategy(touched, strategyState);
+  }, [newMtfRows, quotesByTab, strategyState, watchlists]);
   const allMtfs = useMemo(() => quotesWithMatchStatus(allMtfQuotes, "confirmed"), [allMtfQuotes]);
+  const allTouchedMtfs = useMemo(() => quotesWithMatchStatus(allMtfTouchQuotes, "confirmed"), [allMtfTouchQuotes]);
   const longMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Long"), [allMtfs]);
   const shortMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Short"), [allMtfs]);
   const enabledStrategyCount = useMemo(
@@ -1225,7 +1240,7 @@ export default function App() {
     }
   }
 
-  async function refreshAllPrices({ showLoading = true } = {}) {
+  async function refreshAllPrices({ showLoading = true, force = false } = {}) {
     if (!accountsConfirmedRef.current) {
       setLiveAlert("Confirm Webull accounts before starting market data refresh.");
       return;
@@ -1233,8 +1248,7 @@ export default function App() {
     setLiveAlert("");
     if (showLoading) setLoadingKey("prices", true);
     try {
-      await refreshWatchlistBatch(watchlistsRef.current, { force: showLoading });
-      await refreshSpyQuote({ force: showLoading });
+      await refreshWatchlistBatch(watchlistsRef.current, { force: force || showLoading });
     } catch (error) {
       setLiveAlert(error.message);
     } finally {
@@ -1604,8 +1618,17 @@ export default function App() {
   }
 
   function navigatePage(page) {
-    setActivePage(page);
-    const hash = page === "alerts" ? "#alerts" : page === "mtfs" ? "#mtfs" : page === "spy" ? "#spy" : page === "trades" ? "#trades" : "";
+    const nextPage = page === "home" || page === "spy" ? "mtfs" : page;
+    setActivePage(nextPage);
+    const hash = nextPage === "alerts"
+      ? "#alerts"
+      : nextPage === "mtfs"
+        ? "#mtfs"
+        : nextPage === "trades"
+          ? "#trades"
+          : nextPage === "watchlist"
+            ? "#watchlist"
+            : "";
     window.history.replaceState(null, "", hash || window.location.pathname);
   }
 
@@ -1917,10 +1940,10 @@ export default function App() {
     setWatchlistTab((current) => (next.some((item) => item.id === current) ? current : OG_WATCHLIST_ID));
   }
 
-  async function refreshAppMarketData({ showLoading = true } = {}) {
+  async function refreshAppMarketData({ showLoading = true, force = false } = {}) {
     if (!accountsConfirmedRef.current) return;
     await refreshWatchlists({ showLoading });
-    await refreshAllPrices({ showLoading });
+    await refreshAllPrices({ showLoading, force });
   }
 
   function selectHomeView(view) {
@@ -2057,7 +2080,7 @@ export default function App() {
       if (!accountsConfirmedRef.current) return;
       if (!passiveMarketTimer.current) {
         passiveMarketTimer.current = setInterval(() => {
-          if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false });
+          if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false, force: true });
         }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
       }
     };
@@ -2067,7 +2090,7 @@ export default function App() {
     if (!accountsConfirmedRef.current) return;
     if (!passiveMarketTimer.current) {
       passiveMarketTimer.current = setInterval(() => {
-        if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false });
+        if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false, force: true });
       }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
     }
   }
@@ -2094,7 +2117,7 @@ export default function App() {
   useEffect(() => {
     if (!accountsConfirmedAt || initialMarketLoadStarted.current) return;
     initialMarketLoadStarted.current = true;
-    refreshAppMarketData({ showLoading: true });
+    refreshAppMarketData({ showLoading: true, force: true });
   }, [accountsConfirmedAt]);
 
   useEffect(() => {
@@ -2138,11 +2161,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!focusedMtfSymbol || !allMtfs.some((quote) => quote.symbol === focusedMtfSymbol)) return;
+    if (!focusedMtfSymbol || !allTouchedMtfs.some((quote) => quote.symbol === focusedMtfSymbol)) return;
     window.requestAnimationFrame(() => {
       document.querySelector(`[data-mtf-symbol="${focusedMtfSymbol}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
-  }, [allMtfs, focusedMtfSymbol]);
+  }, [allTouchedMtfs, focusedMtfSymbol]);
 
   useEffect(() => {
     notifyScannerUpdate(preMarketScannerRows);
@@ -2274,18 +2297,9 @@ export default function App() {
           <MtfPage
             buyState={buyState}
             focusedSymbol={focusedMtfSymbol}
-            longMtfs={longMtfs}
+            mtfQuotes={allTouchedMtfs}
             onBuy={buyMtfQuote}
             onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
-            shortMtfs={shortMtfs}
-          />
-        ) : activePage === "spy" ? (
-          <SpyComparisonPage
-            loading={loading.prices}
-            onRefresh={refreshAllPrices}
-            rows={spyComparisonRows}
-            spyQuote={spyQuote}
-            updatedText={spyUpdatedText}
           />
         ) : activePage === "trades" ? (
           <AutoTradesPage
@@ -2296,87 +2310,31 @@ export default function App() {
             onRefresh={refreshAutoTrades}
             structureBySymbol={structureBySymbol}
           />
+        ) : activePage === "watchlist" ? (
+          <WatchlistWorkspace
+            activeTab={watchlistTab}
+            contextWatchlist={contextWatchlist}
+            loading={loading.prices || loading.watchlists}
+            onAddSymbols={addSymbolsToActiveWatchlist}
+            onAddTab={addWatchlist}
+            onDeleteTab={deleteWatchlist}
+            onRemoveSymbol={removeSymbolFromWatchlist}
+            onSwitchTab={switchWatchlistTab}
+            onSymbolInput={(tab, value) => setSymbolInputs((current) => ({ ...current, [tab]: value }))}
+            onToggleAutoTrade={toggleWatchlistAutoTrade}
+            symbolInput={symbolInputs[watchlistTab] || ""}
+            trendBuckets={trendBuckets}
+            updatedText={updatedText}
+            watchlists={watchlists}
+          />
         ) : (
-          <div className="market-command-center">
-            <section className="premarket-focus-panel">
-              <div className="scanner-hero">
-                <div>
-                  <h2>{homeView === "watchlist" ? "Watchlist" : "v/s SPY"}</h2>
-                </div>
-                <div className="live-price-actions">
-                  <button type="button" onClick={() => refreshAllPrices()} disabled={loading.prices}>
-                    {loading.prices ? "Updating" : "Update"}
-                  </button>
-                </div>
-              </div>
-
-              <div className="workspace-view-tabs" role="tablist" aria-label="Scanner views">
-                <button
-                  type="button"
-                  className={homeView === "spy" ? "active" : ""}
-                  onClick={() => selectHomeView("spy")}
-                  role="tab"
-                  aria-selected={homeView === "spy"}
-                >
-                  v/s SPY <span>{spyFocusCount}</span>
-                </button>
-                <button
-                  type="button"
-                  className={homeView === "watchlist" ? "active" : ""}
-                  onClick={() => selectHomeView("watchlist")}
-                  role="tab"
-                  aria-selected={homeView === "watchlist"}
-                >
-                  Watchlist <span>{contextWatchlist?.symbols?.length || 0}</span>
-                </button>
-              </div>
-
-              {liveAlert ? <div className="alert">{liveAlert}</div> : null}
-
-              {homeView === "spy" ? (
-                <SpyComparisonInline
-                  rows={spyComparisonRows}
-                  spyQuote={spyQuote}
-                  updatedText={spyUpdatedText}
-                />
-              ) : homeView === "watchlist" ? (
-                <WatchlistWorkspace
-                  activeTab={watchlistTab}
-                  contextWatchlist={contextWatchlist}
-                  loading={loading.watchlists || loading.prices}
-                  onAddSymbols={addSymbolsToActiveWatchlist}
-                  onAddTab={addWatchlist}
-                  onDeleteTab={deleteWatchlist}
-                  onRemoveSymbol={removeSymbolFromWatchlist}
-                  onSwitchTab={switchWatchlistTab}
-                  onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
-                  onToggleAutoTrade={toggleWatchlistAutoTrade}
-                  symbolInput={symbolInputs[watchlistTab] || ""}
-                  trendBuckets={trendBuckets}
-                  updatedText={updatedText}
-                  watchlists={watchlists}
-                />
-              ) : (
-                <>
-                  <ScannerWatchlistPicker
-                    loading={loading.prices}
-                    onSelectAll={selectAllScannerWatchlists}
-                    onToggle={toggleScannerWatchlist}
-                    selectedIds={scannerWatchlistIds}
-                    watchlists={watchlists}
-                  />
-
-                  <div className="scanner-metric-grid" aria-label="Gap scanner summary">
-                    <ScannerMetric label="Total" value={preMarketScannerRows.length} tone="neutral" />
-                    <ScannerMetric label="Gap Up" value={scannerLongCount} tone="long" />
-                    <ScannerMetric label="Gap Down" value={scannerShortCount} tone="short" />
-                  </div>
-
-                  <PreMarketScannerTable rows={preMarketScannerRows} />
-                </>
-              )}
-            </section>
-          </div>
+          <MtfPage
+            buyState={buyState}
+            focusedSymbol={focusedMtfSymbol}
+            mtfQuotes={allTouchedMtfs}
+            onBuy={buyMtfQuote}
+            onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
+          />
         )}
         <HiddenLegacyPanels />
       </main>
@@ -2387,65 +2345,74 @@ export default function App() {
 function MtfPage({
   buyState,
   focusedSymbol,
-  longMtfs,
+  mtfQuotes,
   onBuy,
   onDismissNew,
-  shortMtfs,
 }) {
-  const [tableView, setTableView] = useState("long");
-  const tableViews = [
-    { id: "long", label: "Long signals", direction: "Long", count: longMtfs.length },
-    { id: "short", label: "Short signals", direction: "Short", count: shortMtfs.length },
-  ];
-  const selectedQuotes = tableView === "short" ? shortMtfs : longMtfs;
-  const selectedView = tableViews.find((item) => item.id === tableView) || tableViews[0];
-  const totalCount = longMtfs.length + shortMtfs.length;
-
-  useEffect(() => {
-    if (!focusedSymbol) return;
-    const symbol = focusedSymbol.toUpperCase();
-    if (shortMtfs.some((quote) => quote.symbol === symbol)) {
-      setTableView("short");
-    } else if (longMtfs.some((quote) => quote.symbol === symbol)) {
-      setTableView("long");
-    }
-  }, [focusedSymbol, longMtfs, shortMtfs]);
+  const totalCount = mtfQuotes.length;
+  const [signalFilter, setSignalFilter] = useState("all");
+  const [timeMode, setTimeMode] = useState("pm-live");
+  const [query, setQuery] = useState("");
+  const visibleQuotes = useMemo(() => {
+    const normalizedQuery = query.trim().toUpperCase();
+    return mtfQuotes.filter((quote) => {
+      const signal = mtfPageSignal(quote);
+      const matchesSignal = signalFilter === "all"
+        || (signalFilter === "long" && signal === "Long")
+        || (signalFilter === "wait" && signal !== "Long" && signal !== "Short");
+      const matchesQuery = !normalizedQuery
+        || String(quote.symbol || "").toUpperCase().includes(normalizedQuery)
+        || String(quote.watchlist_name || "").toUpperCase().includes(normalizedQuery)
+        || (quote.mtf_matches || []).some((match) => String(match.display_label || match.label || "").toUpperCase().includes(normalizedQuery));
+      return matchesSignal && matchesQuery;
+    });
+  }, [mtfQuotes, query, signalFilter]);
+  const longCount = mtfQuotes.filter((quote) => mtfPageSignal(quote) === "Long").length;
+  const waitCount = mtfQuotes.filter((quote) => !["Long", "Short"].includes(mtfPageSignal(quote))).length;
 
   return (
     <section className="mtf-page global-mtf-panel">
       <div className="mtf-page-header">
         <div>
-          <h2>MTF Signals</h2>
-          <p className="muted">Long and short signals from every watchlist.</p>
+          <h2>MTF Touches Today</h2>
+          <span>{visibleQuotes.length} of {totalCount}</span>
         </div>
-        <strong>{totalCount}</strong>
+        <div className="mtf-toolbar" aria-label="MTF touch filters">
+          <div className="mtf-segmented" aria-label="Signal filter">
+            <button type="button" className={signalFilter === "all" ? "active" : ""} onClick={() => setSignalFilter("all")}>All</button>
+            <button type="button" className={signalFilter === "long" ? "active" : ""} onClick={() => setSignalFilter("long")}>Long <b>{longCount}</b></button>
+            <button type="button" className={signalFilter === "wait" ? "active" : ""} onClick={() => setSignalFilter("wait")}>Wait <b>{waitCount}</b></button>
+          </div>
+          <div className="mtf-segmented" aria-label="Time window">
+            <button type="button" className={timeMode === "pm-live" ? "active" : ""} onClick={() => setTimeMode("pm-live")}>PM -&gt; live</button>
+            <button type="button" className={timeMode === "all-day" ? "active" : ""} onClick={() => setTimeMode("all-day")}>All day</button>
+          </div>
+          <label className="mtf-filter-field">
+            <span>⌕</span>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter symbol..." />
+          </label>
+        </div>
       </div>
 
-      <div className="table-view-tabs mtf-view-tabs" role="tablist" aria-label="MTF table view">
-        {tableViews.map((view) => (
-          <button
-            key={view.id}
-            type="button"
-            className={tableView === view.id ? "active" : ""}
-            onClick={() => setTableView(view.id)}
-            role="tab"
-            aria-selected={tableView === view.id}
-          >
-            {view.label} <span>{view.count}</span>
-          </button>
-        ))}
-      </div>
-      <MtfSignalGroup
+      <MtfTable
         buyState={buyState}
+        compact
+        hideHeading
+        emptyText="No watchlist stocks have touched an MTF today."
         focusedSymbol={focusedSymbol}
-        direction={selectedView.direction}
-        label={selectedView.label}
-        onBuy={onBuy}
         onDismissNew={onDismissNew}
-        quotes={selectedQuotes}
+        quotes={visibleQuotes}
+        showWatchlist
       />
     </section>
   );
+}
+
+function mtfPageSignal(quote) {
+  const actions = new Set((quote.mtf_matches || []).map((match) => match.trade_action).filter(Boolean));
+  if (actions.has("Long") && !actions.has("Short")) return "Long";
+  if (actions.has("Short") && !actions.has("Long")) return "Short";
+  return "Wait";
 }
 
 function SpyComparisonPage({ loading, onRefresh, rows, spyQuote, updatedText }) {
@@ -2542,7 +2509,7 @@ function WatchlistWorkspace({
   watchlists,
 }) {
   return (
-    <div className="watchlist-workspace">
+    <div className="watchlist-workspace watchlist-design-page">
       <WatchlistTabs
         activeTab={activeTab}
         onAddSymbols={onAddSymbols}
@@ -2563,63 +2530,12 @@ function WatchlistWorkspace({
         </div>
       </div>
       <div className="trend-price-grid">
-        <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
-        <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
-        <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
+        <PriceBucket compact title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
+        <PriceBucket compact title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
+        <PriceBucket compact title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
       </div>
     </div>
   );
-}
-
-function MtfSignalGroup({
-  buyState,
-  direction,
-  focusedSymbol,
-  label,
-  onBuy,
-  onDismissNew,
-  quotes,
-}) {
-  const strategySections = mtfStrategySections(quotes);
-
-  return (
-    <section className="mtf-signal-group">
-      <div className="mtf-signal-heading">
-        <h3>{label}</h3>
-        <span>{quotes.length}</span>
-      </div>
-      <div className="mtf-strategy-sections">
-        {strategySections.length ? strategySections.map((section) => (
-          <MtfTable
-            key={section.id}
-            quotes={section.quotes}
-            title={section.name}
-            subtitle={`${direction} setup`}
-            showWatchlist
-            buyState={buyState}
-            emptyText="None"
-            focusedSymbol={focusedSymbol}
-            onBuy={onBuy}
-            onDismissNew={onDismissNew}
-          />
-        )) : (
-          <div className="mtf-empty-state">No {label.toLowerCase()} MTFs right now.</div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function mtfStrategySections(quotes) {
-  return ALERT_STRATEGIES.map((strategy) => {
-    const strategyQuotes = quotes
-      .map((quote) => ({
-        ...quote,
-        mtf_matches: (quote.mtf_matches || []).filter((match) => strategy.match(match)),
-      }))
-      .filter((quote) => quote.mtf_matches.length);
-    return { id: strategy.id, name: strategy.name, quotes: strategyQuotes };
-  }).filter((section) => section.quotes.length);
 }
 
 function AutoTradesPage({ accountId, alert, loading, orders, onRefresh, structureBySymbol }) {
@@ -3197,14 +3113,14 @@ function WatchlistTabs({
             disabled={!selectedWatchlist || loading}
             onChange={(event) => onToggleAutoTrade(selectedWatchlist.id, event.target.checked)}
           />
-          <span>{selectedWatchlist?.autoTradeEnabled === false ? "Auto trade this list off" : "Auto trade this list on"}</span>
+          <span>{selectedWatchlist?.autoTradeEnabled === false ? "Auto-trade OFF" : "Auto-trade ON"}</span>
         </label>
         <form onSubmit={onAddSymbols}>
           <input
             aria-label={`Add symbols to ${selectedWatchlist?.name || "watchlist"}`}
             placeholder="Add ticker"
             value={symbolInput}
-            onChange={(event) => onSymbolInput(event.target.value)}
+            onChange={(event) => onSymbolInput(activeTab, event.target.value)}
           />
           <button type="submit" disabled={loading}>Add</button>
         </form>

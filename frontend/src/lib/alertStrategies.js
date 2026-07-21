@@ -30,7 +30,7 @@ export const ALERT_STRATEGIES = [
     id: "ten-minute-bounce-10m",
     name: "10m bounce/rejection 34/50",
     description: "10m candle touches the 10m 34/50 EMA cloud with trend direction.",
-    match: (match) => String(match?.label || "") === "10m bounce 34/50",
+    match: (match) => ["10m bounce 34/50", "10m 34/50 touch"].includes(String(match?.label || "")),
   },
   {
     id: "ten-minute-9ema-touch",

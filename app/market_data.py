@@ -129,6 +129,12 @@ def build_live_prices(
                 "ema_1h": ema_1h,
                 "ema_daily": ema_daily,
                 "structure_10m": market_structure(ten_minute_candles),
+                "mtf_touches_today": session_mtf_touch_matches(
+                    ten_minute_candles,
+                    ten_minute_ema,
+                    ema_1h,
+                    ema_daily,
+                ),
                 "mtf_matches": mtf_signal_matches(
                     candle_price,
                     ten_minute_trend,
@@ -559,6 +565,62 @@ def mtf_signal_matches(
         match.setdefault("status", "confirmed")
         visible_matches.append(match)
     return dedupe_mtf_signal_matches(visible_matches)
+
+
+def session_mtf_touch_matches(
+    ten_minute_candles: list[dict[str, Any]],
+    ema_10m: dict[str, float | None],
+    ema_1h: dict[str, float | None],
+    ema_daily: dict[str, float | None],
+) -> list[dict[str, Any]]:
+    session_candles = current_session_ten_minute_candles(ten_minute_candles)
+    checks = [
+        ("10m 34/50 touch", "10m", ema_10m.get("34"), ema_10m.get("50")),
+        ("Hourly 34/50", "hourly", ema_1h.get("34"), ema_1h.get("50")),
+        ("Daily 20/21", "daily", ema_daily.get("20"), ema_daily.get("21")),
+        ("Daily 50/55", "daily", ema_daily.get("50"), ema_daily.get("55")),
+    ]
+    latest_by_label: dict[str, dict[str, Any]] = {}
+    for candle in session_candles:
+        low = candle.get("low")
+        close = candle.get("close")
+        if low is None or close is None:
+            continue
+        high = candle.get("high")
+        high = high if high is not None else max(value for value in (candle.get("open"), close, low) if value is not None)
+        candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
+        for label, timeframe, first, second in checks:
+            if first is None or second is None:
+                continue
+            cloud_low = min(first, second)
+            cloud_high = max(first, second)
+            if not candle_touches_cloud(low, high, cloud_low, cloud_high):
+                continue
+            latest_by_label[label] = {
+                "label": label,
+                "display_label": label,
+                "timeframe": timeframe,
+                "cloud_low": round(cloud_low, 4),
+                "cloud_high": round(cloud_high, 4),
+                "candle_low": round(low, 4),
+                "candle_high": round(high, 4),
+                "candle_close": round(close, 4),
+                "entry_price": round(close, 4),
+                "candle_time": candle_time,
+                "type": "mtf_cloud_touch_today",
+                "status": "confirmed",
+                "direction": "touch",
+            }
+    return list(latest_by_label.values())
+
+
+def current_session_ten_minute_candles(candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not candles:
+        return []
+    latest_session = candles[-1].get("session_date")
+    if not latest_session:
+        return candles
+    return [candle for candle in candles if candle.get("session_date") == latest_session]
 
 
 def mtf_signal_cloud_family(match: dict[str, Any]) -> str:

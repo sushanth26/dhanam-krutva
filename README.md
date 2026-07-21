@@ -82,13 +82,15 @@ VAPID_PRIVATE_KEY=...
 VAPID_SUBJECT=mailto:you@example.com
 PUSH_SUBSCRIPTION_FILE=/data/push-subscriptions.json
 MTF_PUSH_ENABLED=true
-MTF_PUSH_POLL_SECONDS=30
+MTF_PUSH_POLL_SECONDS=60
 MTF_PUSH_TIMEZONE=America/Chicago
 ```
 
 `MTF_PUSH_ENABLED` defaults to true when omitted, so use
 `MTF_PUSH_ENABLED=false` only when you intentionally want Railway push polling
-off while keeping manual notification checks available.
+off while keeping manual notification checks available. `MTF_PUSH_POLL_SECONDS`
+defaults to 60, so the backend checks for push alerts once per minute during
+weekdays from 3:00 AM through 5:59 PM in `MTF_PUSH_TIMEZONE`.
 
 After the first deploy, open the installed phone app, sign in, and tap
 `Enable Notifications` once. Keep the same VAPID keys in Railway and keep

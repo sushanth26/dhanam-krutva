@@ -11,36 +11,49 @@ export function MtfTable({
   buyState = {},
   emptyText = "No stocks are on hourly or daily EMA clouds right now.",
   focusedSymbol = "",
+  compact = false,
+  hideHeading = false,
   onBuy,
   onDismissNew,
 }) {
-  const columns = [
+  const columns = compact ? [
+    { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
+    { key: "mtf", label: "MTF", value: (quote) => mtfLabels(quote.mtf_matches).join(" ") },
+    { key: "sourceTime", label: "Source · Time", value: (quote) => latestMtfTime(quote) },
+    { key: "signal", label: "Signal", value: (quote) => tradeActionForMatches(quote.mtf_matches) || "Wait" },
+    { key: "bias", label: "Bias", value: (quote) => biasSummaryForQuote(quote).label },
+  ] : [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     ...(showWatchlist ? [{ key: "watchlist", label: "Watchlist", value: (quote) => quote.watchlist_name || "" }] : []),
+    { key: "mtf", label: "MTF", value: (quote) => mtfLabels(quote.mtf_matches).join(" ") },
     { key: "structure", label: "BOS", value: (quote) => quote.structure_10m?.status || "Unknown" },
     { key: "bias", label: "Bias", value: (quote) => tradeActionForMatches(quote.mtf_matches) || directionalBiasForQuote(quote) },
     { key: "plan", label: "Trade plan", value: (quote) => mtfPlanSortValue(quote) },
     { key: "time", label: "Time", value: (quote) => latestMtfTime(quote) },
   ];
-  const { sortedRows: sortedQuotes, sort, toggleSort } = useSortableRows(quotes, columns, { key: "time", direction: "desc" });
+  const defaultSort = compact ? { key: "sourceTime", direction: "desc" } : { key: "time", direction: "desc" };
+  const { sortedRows: sortedQuotes, sort, toggleSort } = useSortableRows(quotes, columns, defaultSort);
+  const showActions = Boolean(onBuy) && !compact;
 
   return (
     <section className="price-bucket mtf-bucket">
-      <div className="bucket-heading">
-        <div className="bucket-title">
-          <h3>{title}</h3>
-          {subtitle ? <p>{subtitle}</p> : null}
+      {hideHeading ? null : (
+        <div className="bucket-heading">
+          <div className="bucket-title">
+            <h3>{title}</h3>
+            {subtitle ? <p>{subtitle}</p> : null}
+          </div>
+          <span>{quotes.length}</span>
         </div>
-        <span>{quotes.length}</span>
-      </div>
+      )}
       <div className="live-price-table-wrap">
-        <table className={`live-price-table ${showWatchlist ? "global-mtf-table" : ""}`}>
+        <table className={`live-price-table ${showWatchlist ? "global-mtf-table" : ""} ${compact ? "compact-mtf-table" : ""}`}>
           <thead>
             <tr>
               {columns.map((column) => (
                 <SortHeader key={column.key} column={column} sort={sort} onSort={toggleSort} />
               ))}
-              <th className="action-col" aria-label="Actions"></th>
+              {showActions ? <th className="action-col" aria-label="Actions"></th> : null}
             </tr>
           </thead>
           <tbody>
@@ -51,11 +64,12 @@ export function MtfTable({
                 focused={quote.symbol === focusedSymbol}
                 quote={quote}
                 showWatchlist={showWatchlist}
+                compact={compact}
                 onBuy={onBuy}
                 onDismissNew={onDismissNew}
               />
             )) : (
-              <tr><td colSpan={columns.length + 1}>{emptyText}</td></tr>
+              <tr><td colSpan={columns.length + (showActions ? 1 : 0)}>{emptyText}</td></tr>
             )}
           </tbody>
         </table>
@@ -64,18 +78,23 @@ export function MtfTable({
   );
 }
 
-export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
-  const columns = [
+export function PriceBucket({ title, quotes, kind, compact = false, onRemoveSymbol }) {
+  const columns = compact ? [
+    { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
+    { key: "structure", label: "Structure", value: (quote) => quote.structure_10m?.status || "Unknown" },
+    { key: "bias", label: "Bias", value: (quote) => watchlistBiasSortValue(quote) },
+  ] : [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     { key: "trend", label: "Trend", value: (quote) => cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]) },
     { key: "structure", label: "BOS", value: (quote) => quote.structure_10m?.status || "Unknown" },
-    { key: "bias", label: "Bias", value: (quote) => directionalBiasForQuote(quote) },
+    { key: "bias", label: "Bias", value: (quote) => watchlistBiasSortValue(quote) },
     { key: "price", label: "Last", className: "price-col", value: (quote) => Number(quote.price) },
   ];
-  const { sortedRows, sort, toggleSort } = useSortableRows(quotes, columns, { key: "symbol", direction: "asc" });
+  const { sortedRows, sort, toggleSort } = useSortableRows(quotes, columns, { key: "bias", direction: "asc" });
+  const showActions = Boolean(onRemoveSymbol) && !compact;
 
   return (
-    <section className="price-bucket">
+    <section className={`price-bucket ${compact ? "compact-watchlist-bucket" : ""} ${kind ? `watchlist-${kind}` : ""}`}>
       <div className="bucket-heading">
         <h3>{title}</h3>
         <span>{quotes.length}</span>
@@ -87,14 +106,14 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
               {columns.map((column) => (
                 <SortHeader key={column.key} column={column} sort={sort} onSort={toggleSort} />
               ))}
-              {onRemoveSymbol ? <th className="action-col" aria-label="Actions"></th> : null}
+              {showActions ? <th className="action-col" aria-label="Actions"></th> : null}
             </tr>
           </thead>
           <tbody>
             {sortedRows.length ? sortedRows.map((quote) => (
-              <PriceRow key={quote.symbol} quote={quote} onRemoveSymbol={onRemoveSymbol} />
+              <PriceRow key={quote.symbol} compact={compact} quote={quote} onRemoveSymbol={showActions ? onRemoveSymbol : null} />
             )) : (
-              <tr><td colSpan={columns.length + (onRemoveSymbol ? 1 : 0)}>No {kind} stocks right now.</td></tr>
+              <tr><td colSpan={columns.length + (showActions ? 1 : 0)}>No {kind} stocks right now.</td></tr>
             )}
           </tbody>
         </table>
@@ -246,6 +265,12 @@ function directionalBiasForQuote(quote) {
   });
 }
 
+function watchlistBiasSortValue(quote) {
+  const bias = directionalBiasForQuote(quote);
+  const rank = { Long: 0, Wait: 1, Short: 2 }[bias] ?? 3;
+  return `${rank}-${quote.symbol || ""}`;
+}
+
 function directionalBiasForRow(row) {
   const structure = String(row?.structure || "").toLowerCase();
   const cloud = String(row?.status || row?.trend || "").toLowerCase();
@@ -338,12 +363,50 @@ function mtfPlanSortValue(quote) {
   return tradeActionForMatches(quote.mtf_matches) || "";
 }
 
-function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }) {
+function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDismissNew }) {
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
   const riskPlan = aPlusPlusRiskPlan(quote.mtf_matches);
   const tradeAction = tradeActionForMatches(quote.mtf_matches);
   const dismissNew = quote.is_new ? () => onDismissNew?.(quote) : undefined;
   const rowId = ["mtf-row", quote.watchlist_id || "tab", quote.symbol].join("-");
+  const mtfTags = (
+    <td className="mtf-label-cell" data-label="MTF">
+      <span className="mtf-tag-stack">
+        {mtfLabels(quote.mtf_matches).map((label) => (
+          <MtfTouchPill key={label} label={label} />
+        ))}
+      </span>
+    </td>
+  );
+  const watchlistCell = showWatchlist ? (
+    <td className="watchlist-cell" data-label="Watchlist">
+      {quote.watchlist_name || "-"}
+      {quote.is_new ? <NewTag onDismiss={dismissNew} symbol={quote.symbol} /> : null}
+    </td>
+  ) : null;
+
+  if (compact) {
+    return (
+      <BaseRow
+        className={focused ? "focused-mtf-row" : ""}
+        dataMtfSymbol={quote.symbol}
+        id={rowId}
+        quote={quote}
+        showPrice={false}
+        onClick={dismissNew}
+      >
+        {mtfTags}
+        <td className="source-time-cell" data-label="Source · Time">
+          <span className="source-pill">{quote.watchlist_name || "-"}</span>
+          {quote.is_new ? <NewTag onDismiss={dismissNew} symbol={quote.symbol} /> : null}
+          <time>{triggerTime}</time>
+        </td>
+        <td className="signal-cell" data-label="Signal"><DirectionPill value={tradeAction || "Wait"} /></td>
+        <td className="bias-cell" data-label="Bias"><BiasMeter bias={biasSummaryForQuote(quote)} /></td>
+      </BaseRow>
+    );
+  }
+
   return (
     <BaseRow
       className={focused ? "focused-mtf-row" : ""}
@@ -362,12 +425,8 @@ function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }
         />
       )}
     >
-      {showWatchlist ? (
-        <td className="watchlist-cell" data-label="Watchlist">
-          {quote.watchlist_name || "-"}
-          {quote.is_new ? <NewTag onDismiss={dismissNew} symbol={quote.symbol} /> : null}
-        </td>
-      ) : null}
+      {watchlistCell}
+      {mtfTags}
       <td data-label="BOS"><span className={`structure-pill ${structureClass(quote.structure_10m?.status)}`}>{structureLabel(quote.structure_10m?.status)}</span></td>
       <td data-label="Bias"><DirectionPill value={tradeAction || directionalBiasForQuote(quote)} /></td>
       <td className="mtf-plan-cell" data-label="Trade plan">
@@ -378,11 +437,59 @@ function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }
   );
 }
 
+function MtfTouchPill({ label }) {
+  const normalized = String(label || "").trim();
+  const timeframe = mtfTimeframeLabel(normalized);
+  const level = normalized.replace(/^(Daily|Hourly|Hour|1D|1H|10m)\s*/i, "").replace(/\s*touch$/i, "").trim();
+  return (
+    <span className={`mtf-touch-pill tf-${timeframe.toLowerCase()}`}>
+      <b>{timeframe}</b>
+      <span>{level || normalized}</span>
+    </span>
+  );
+}
+
+function mtfTimeframeLabel(label) {
+  const text = String(label || "").toLowerCase();
+  if (text.startsWith("daily") || text.startsWith("1d")) return "1D";
+  if (text.startsWith("hour") || text.startsWith("1h")) return "1H";
+  if (text.startsWith("10m")) return "10m";
+  return "MTF";
+}
+
+function mtfLabels(matches = []) {
+  const labels = [];
+  const seen = new Set();
+  for (const match of matches) {
+    const label = String(match.display_label || match.label || "").trim();
+    if (!label || seen.has(label)) continue;
+    labels.push(label);
+    seen.add(label);
+  }
+  return labels;
+}
+
 function latestMtfTime(quote) {
   const times = (quote.mtf_matches || [])
     .map((match) => Date.parse(match.candle_time || ""))
     .filter(Number.isFinite);
   return times.length ? Math.max(...times) : 0;
+}
+
+function biasSummaryForQuote(quote) {
+  const direction = directionalBiasForQuote(quote);
+  if (direction === "Long") return { label: "Bullish", tone: "bullish", icon: "▲" };
+  if (direction === "Short") return { label: "Bearish", tone: "bearish", icon: "▼" };
+  return { label: "Neutral", tone: "neutral", icon: "−" };
+}
+
+function BiasMeter({ bias }) {
+  return (
+    <span className={`bias-meter ${bias.tone}`}>
+      <span>{bias.icon}</span>
+      <b>{bias.label}</b>
+    </span>
+  );
 }
 
 function RiskPlan({ plan }) {
@@ -454,8 +561,16 @@ function NewTag({ onDismiss, symbol }) {
   );
 }
 
-function PriceRow({ quote, onRemoveSymbol }) {
+function PriceRow({ compact, quote, onRemoveSymbol }) {
   const tenMinuteStatus = cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
+  if (compact) {
+    return (
+      <BaseRow quote={quote} trend={tenMinuteStatus} showPrice={false}>
+        <td data-label="Structure"><span className={`structure-pill ${structureClass(quote.structure_10m?.status)}`}>{structureLabel(quote.structure_10m?.status)}</span></td>
+        <td data-label="Bias"><DirectionPill value={directionalBiasForQuote(quote)} /></td>
+      </BaseRow>
+    );
+  }
   return (
     <BaseRow quote={quote} trend={tenMinuteStatus} action={onRemoveSymbol ? <RemoveCell onRemove={() => onRemoveSymbol(quote.symbol)} symbol={quote.symbol} /> : null}>
       <td data-label="Trend"><CloudTag status={tenMinuteStatus} /></td>
@@ -469,12 +584,32 @@ function BaseRow({ quote, children, trend = "", action = null, className = "", d
   const rowClass = [trend ? `trend-${String(trend).toLowerCase()}` : "", className].filter(Boolean).join(" ");
   return (
     <tr className={`stock-row ${rowClass}`} data-mtf-symbol={dataMtfSymbol} id={id} onClick={onClick}>
-      <td data-label="Symbol"><strong>{quote.symbol}</strong></td>
+      <td data-label="Symbol"><strong>{quote.symbol}</strong><small>{symbolDisplayName(quote.symbol)}</small></td>
       {children}
       {showPrice ? <td className="price-cell" data-label="Last">{formatPrice(quote.price)}</td> : null}
       {action}
     </tr>
   );
+}
+
+function symbolDisplayName(symbol) {
+  const names = {
+    AAOI: "Applied Opt.",
+    APP: "AppLovin",
+    ASTS: "AST Space...",
+    BE: "Bloom Energy",
+    COHR: "Coherent",
+    CRDO: "Credo Tech...",
+    CRWV: "CoreWeave",
+    GLW: "Corning",
+    IREN: "Iris Energy",
+    MRVL: "Marvell Tech",
+    MU: "Micron",
+    NBIS: "Nebius Group",
+    RKLB: "Rocket Lab",
+    SNDK: "Sandisk",
+  };
+  return names[String(symbol || "").toUpperCase()] || "";
 }
 
 function RemoveCell({ onRemove, symbol }) {
@@ -488,13 +623,25 @@ function RemoveCell({ onRemove, symbol }) {
 }
 
 function mtfTriggerTime(matches) {
-  const match = (matches || []).find((item) => item.candle_time);
+  const match = latestMtfMatch(matches);
   if (!match) return "-";
   const parsed = new Date(match.candle_time);
   if (Number.isNaN(parsed.getTime())) return String(match.candle_time);
   const date = parsed.toLocaleDateString([], { month: "short", day: "numeric" });
   const time = parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return `${date} ${time}`;
+}
+
+function latestMtfMatch(matches) {
+  let latestMatch = null;
+  let latestTime = -Infinity;
+  for (const match of matches || []) {
+    const parsed = Date.parse(match.candle_time || "");
+    if (!Number.isFinite(parsed) || parsed < latestTime) continue;
+    latestMatch = match;
+    latestTime = parsed;
+  }
+  return latestMatch;
 }
 
 function aPlusPlusRiskPlan(matches) {

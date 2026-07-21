@@ -1,3 +1,4 @@
+from datetime import datetime
 from types import SimpleNamespace
 
 import app.notifications as notifications
@@ -12,9 +13,11 @@ from app.notifications import (
     confirmed_mtf_quotes,
     describe_mtf_matches,
     filter_payload_by_strategies,
+    is_market_refresh_window,
     monitored_symbols,
     mtf_notification_payload,
     mtf_signature,
+    new_mtf_touch_quotes,
 )
 from app.watchlists import WatchlistStore
 
@@ -122,6 +125,23 @@ def test_mtf_notification_payload_uses_rejection_wording_and_entry_price():
     assert describe_mtf_matches(quotes) == "AAOI 10m rejection 34/50 @ 104.00"
 
 
+def test_mtf_notification_payload_includes_touch_time():
+    payload = mtf_notification_payload([
+        {
+            "symbol": "BE",
+            "mtf_matches": [
+                {
+                    "label": "Hourly 34/50",
+                    "candle_time": "2026-07-21T15:20:00",
+                }
+            ],
+        },
+    ])
+
+    assert payload["title"] == "BE: Hourly 34/50, Jul 21 3:20 PM"
+    assert payload["matches"][0]["details"][0]["candle_time"] == "2026-07-21T15:20:00"
+
+
 def test_confirmed_mtf_quotes_removes_waiting_matches():
     quotes = [
         {
@@ -142,6 +162,40 @@ def test_confirmed_mtf_quotes_removes_waiting_matches():
     assert confirmed[0]["mtf_matches"] == [
         {"label": "Daily 50/55", "status": "confirmed"},
     ]
+
+
+def test_new_mtf_touch_quotes_baselines_first_scan_without_alerts():
+    quotes = [{"symbol": "BE", "mtf_matches": [{"label": "Hourly 34/50", "candle_time": "2026-07-21T09:30:00"}]}]
+
+    new_quotes, keys = new_mtf_touch_quotes(None, quotes)
+
+    assert new_quotes == []
+    assert keys == {"BE:Hourly 34/50:2026-07-21T09:30:00"}
+
+
+def test_new_mtf_touch_quotes_returns_only_new_symbol_mtf_time():
+    previous = {"BE:Hourly 34/50:2026-07-21T09:30:00"}
+    quotes = [
+        {
+            "symbol": "BE",
+            "mtf_matches": [
+                {"label": "Hourly 34/50", "candle_time": "2026-07-21T09:30:00"},
+                {"label": "Daily 50/55", "candle_time": "2026-07-21T09:40:00"},
+            ],
+        },
+        {"symbol": "AAOI", "mtf_matches": [{"label": "10m bounce 34/50", "candle_time": "2026-07-21T09:50:00"}]},
+    ]
+
+    new_quotes, keys = new_mtf_touch_quotes(previous, quotes)
+
+    assert [quote["symbol"] for quote in new_quotes] == ["AAOI", "BE"]
+    assert new_quotes[0]["mtf_matches"] == [{"label": "10m bounce 34/50", "candle_time": "2026-07-21T09:50:00"}]
+    assert new_quotes[1]["mtf_matches"] == [{"label": "Daily 50/55", "candle_time": "2026-07-21T09:40:00"}]
+    assert keys == {
+        "BE:Hourly 34/50:2026-07-21T09:30:00",
+        "BE:Daily 50/55:2026-07-21T09:40:00",
+        "AAOI:10m bounce 34/50:2026-07-21T09:50:00",
+    }
 
 
 def test_monitored_symbols_use_saved_watchlists_not_static_og(tmp_path):
@@ -176,6 +230,11 @@ def test_build_monitored_quotes_omits_deleted_symbols(tmp_path, monkeypatch):
     assert requested_symbols == ["BE", "PLTR"]
     assert "AAOI" not in requested_symbols
     assert [quote["symbol"] for quote in quotes] == ["BE", "PLTR"]
+
+
+def test_market_refresh_window_runs_until_6pm_chicago():
+    assert is_market_refresh_window("America/Chicago", datetime.fromisoformat("2026-07-21T17:59:00-05:00"))
+    assert not is_market_refresh_window("America/Chicago", datetime.fromisoformat("2026-07-21T18:00:00-05:00"))
 
 
 def test_bos_state_changes_baselines_first_scan_without_alerts():
@@ -258,6 +317,47 @@ def test_push_monitor_sends_bos_change_when_mtf_signature_is_unchanged(tmp_path,
     history = AlertHistoryStore(settings.alert_history_file).all()
     assert history[0]["source"] == "server-push"
     assert history[0]["symbol"] == "NBIS"
+
+
+def test_push_monitor_sends_only_new_mtf_table_entries(tmp_path, monkeypatch):
+    settings = SimpleNamespace(
+        alert_history_file=tmp_path / "alerts.json",
+        push_subscription_file=tmp_path / "push.json",
+        vapid_private_key=None,
+        vapid_subject="mailto:test@example.com",
+    )
+    monitor = MtfPushMonitor(settings)
+    sent = []
+    quote_sets = iter([
+        [
+            {
+                "symbol": "BE",
+                "mtf_matches": [{"label": "Hourly 34/50", "candle_time": "2026-07-21T09:30:00"}],
+            }
+        ],
+        [
+            {
+                "symbol": "BE",
+                "mtf_matches": [{"label": "Hourly 34/50", "candle_time": "2026-07-21T09:30:00"}],
+            },
+            {
+                "symbol": "AAOI",
+                "mtf_matches": [{"label": "10m bounce 34/50", "candle_time": "2026-07-21T09:40:00"}],
+            },
+        ],
+    ])
+
+    monkeypatch.setattr(notifications, "build_monitored_quotes", lambda _settings: next(quote_sets))
+    monkeypatch.setattr(monitor, "send", lambda payload: sent.append(payload) or {"sent": 1, "removed": 0})
+
+    assert monitor.check_once() is None
+    payload = monitor.check_once()
+
+    assert payload["title"] == "AAOI: 10m bounce 34/50, Jul 21 9:40 AM"
+    assert payload["matches"][0]["symbol"] == "AAOI"
+    assert sent == [payload]
+    history = AlertHistoryStore(settings.alert_history_file).all()
+    assert history[0]["symbol"] == "AAOI"
 
 
 def test_mtf_push_monitor_pauses_after_failed_webull_check_until_manual_retry(tmp_path, monkeypatch):

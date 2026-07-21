@@ -148,9 +148,18 @@ export function mtfSignature(quotes) {
     .join(",");
 }
 
-export function isMarketRefreshWindow(date = new Date()) {
-  const day = date.getDay();
+export function isMarketRefreshWindow(date = new Date(), timeZone = "America/Chicago") {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      weekday: "short",
+      hour: "numeric",
+      minute: "numeric",
+      hour12: false,
+    }).formatToParts(date).map((part) => [part.type, part.value]),
+  );
+  const day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.weekday);
   if (day === 0 || day === 6) return false;
-  const minutes = date.getHours() * 60 + date.getMinutes();
-  return minutes >= 3 * 60 && minutes < 15 * 60;
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  return minutes >= 3 * 60 && minutes < 18 * 60;
 }
