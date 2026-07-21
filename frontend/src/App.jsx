@@ -1014,6 +1014,7 @@ export default function App() {
     trades: false,
   });
   const passiveMarketTimer = useRef(null);
+  const initialMarketLoadStarted = useRef(false);
   const lastMtfSignature = useRef(initialTabState(loadWatchlists(), null));
   const lastMtfRows = useRef(initialTabState(loadWatchlists(), {}));
   const lastScannerRows = useRef(null);
@@ -2089,6 +2090,12 @@ export default function App() {
       if (passiveMarketTimer.current) clearInterval(passiveMarketTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!accountsConfirmedAt || initialMarketLoadStarted.current) return;
+    initialMarketLoadStarted.current = true;
+    refreshAppMarketData({ showLoading: true });
+  }, [accountsConfirmedAt]);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return undefined;
