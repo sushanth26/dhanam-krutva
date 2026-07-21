@@ -6,10 +6,10 @@ import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PreMarketScannerTable, PriceBucket, SpyComparisonTable } from "./components/PriceTables";
 import { deleteJson, getJson, postJson } from "./lib/api";
 import { ALERT_STRATEGIES, filterQuotesByStrategy, loadStrategyState, saveStrategyState, strategyIdForMatch } from "./lib/alertStrategies";
-import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, flattenAccounts, formatPrice, isMarketRefreshWindow, marginTradingAccountId, matchEntryPrice, notificationMatchText, mtfSignature, preferredAccountId } from "./lib/market";
+import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, flattenAccounts, formatPrice, marginTradingAccountId, matchEntryPrice, notificationMatchText, mtfSignature, preferredAccountId } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
-const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 60 * 1000;
 const MAX_NOTIFICATIONS = 20;
 const MAX_ALERT_LOG = 500;
 const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
@@ -1225,7 +1225,7 @@ export default function App() {
     }
   }
 
-  async function refreshAllPrices({ showLoading = true } = {}) {
+  async function refreshAllPrices({ showLoading = true, force = false } = {}) {
     if (!accountsConfirmedRef.current) {
       setLiveAlert("Confirm Webull accounts before starting market data refresh.");
       return;
@@ -1233,8 +1233,8 @@ export default function App() {
     setLiveAlert("");
     if (showLoading) setLoadingKey("prices", true);
     try {
-      await refreshWatchlistBatch(watchlistsRef.current, { force: showLoading });
-      await refreshSpyQuote({ force: showLoading });
+      await refreshWatchlistBatch(watchlistsRef.current, { force: force || showLoading });
+      await refreshSpyQuote({ force: force || showLoading });
     } catch (error) {
       setLiveAlert(error.message);
     } finally {
@@ -1917,10 +1917,10 @@ export default function App() {
     setWatchlistTab((current) => (next.some((item) => item.id === current) ? current : OG_WATCHLIST_ID));
   }
 
-  async function refreshAppMarketData({ showLoading = true } = {}) {
+  async function refreshAppMarketData({ showLoading = true, force = false } = {}) {
     if (!accountsConfirmedRef.current) return;
     await refreshWatchlists({ showLoading });
-    await refreshAllPrices({ showLoading });
+    await refreshAllPrices({ showLoading, force });
   }
 
   function selectHomeView(view) {
@@ -2057,7 +2057,7 @@ export default function App() {
       if (!accountsConfirmedRef.current) return;
       if (!passiveMarketTimer.current) {
         passiveMarketTimer.current = setInterval(() => {
-          if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false });
+          refreshAppMarketData({ showLoading: false, force: true });
         }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
       }
     };
@@ -2067,7 +2067,7 @@ export default function App() {
     if (!accountsConfirmedRef.current) return;
     if (!passiveMarketTimer.current) {
       passiveMarketTimer.current = setInterval(() => {
-        if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false });
+        refreshAppMarketData({ showLoading: false, force: true });
       }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
     }
   }
@@ -2094,7 +2094,7 @@ export default function App() {
   useEffect(() => {
     if (!accountsConfirmedAt || initialMarketLoadStarted.current) return;
     initialMarketLoadStarted.current = true;
-    refreshAppMarketData({ showLoading: true });
+    refreshAppMarketData({ showLoading: true, force: true });
   }, [accountsConfirmedAt]);
 
   useEffect(() => {

@@ -130,11 +130,7 @@ class MtfPushMonitor:
     async def _run(self) -> None:
         while True:
             try:
-                if (
-                    not self.paused_for_manual_retry
-                    and self.store.all()
-                    and is_market_refresh_window(self.settings.mtf_push_timezone)
-                ):
+                if not self.paused_for_manual_retry and self.store.all():
                     await asyncio.to_thread(self.check_once)
             except Exception:
                 pass
