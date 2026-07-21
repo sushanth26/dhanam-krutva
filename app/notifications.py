@@ -108,6 +108,7 @@ class MtfPushMonitor:
         self.store = PushSubscriptionStore(settings.push_subscription_file)
         self.task: asyncio.Task | None = None
         self.last_signature: str | None = None
+        self.last_mtf_touch_keys: set[str] | None = None
         self.last_bos_state: dict[str, dict[str, Any]] | None = None
         self.paused_for_manual_retry = False
         self.last_error: str | None = None
@@ -150,14 +151,15 @@ class MtfPushMonitor:
             quotes = build_monitored_quotes(self.settings)
             mtf_quotes = confirmed_mtf_quotes(quotes)
             signature = mtf_signature(mtf_quotes)
-            changed = self.last_signature is not None and signature != self.last_signature
+            new_mtf_quotes, next_mtf_touch_keys = new_mtf_touch_quotes(self.last_mtf_touch_keys, mtf_quotes)
             self.last_signature = signature
+            self.last_mtf_touch_keys = next_mtf_touch_keys
             next_bos_state, bos_changes = bos_state_changes(self.last_bos_state, quotes)
             self.last_bos_state = next_bos_state
             self.last_error = None
             notifications = []
-            if changed:
-                notifications.append(mtf_notification_payload(mtf_quotes))
+            if new_mtf_quotes:
+                notifications.append(mtf_notification_payload(new_mtf_quotes))
             if bos_changes:
                 notifications.append(bos_notification_payload(bos_changes))
             if not notifications:
@@ -360,11 +362,7 @@ def mtf_notification_payload(quotes: list[dict[str, Any]]) -> dict[str, Any]:
                 "symbol": quote.get("symbol"),
                 "labels": [match.get("label") for match in quote.get("mtf_matches", [])],
                 "details": [
-                    {
-                        "label": match.get("label"),
-                        "display_label": display_label(match),
-                        "entry_price": match_entry_price(match),
-                    }
+                    mtf_match_detail(match)
                     for match in quote.get("mtf_matches", [])
                     if match.get("label")
                 ],
@@ -385,6 +383,59 @@ def confirmed_mtf_quotes(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if matches:
             output.append({**quote, "mtf_matches": matches})
     return output
+
+
+def new_mtf_touch_quotes(
+    previous_keys: set[str] | None,
+    quotes: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], set[str]]:
+    next_keys = mtf_touch_keys(quotes)
+    if previous_keys is None:
+        return [], next_keys
+
+    output = []
+    for quote in quotes:
+        new_matches = [
+            match
+            for match in quote.get("mtf_matches", [])
+            if mtf_touch_key(quote, match) not in previous_keys
+        ]
+        if new_matches:
+            output.append({**quote, "mtf_matches": new_matches})
+    return sort_mtf_quotes_by_latest_time(output), next_keys
+
+
+def mtf_touch_keys(quotes: list[dict[str, Any]]) -> set[str]:
+    return {
+        mtf_touch_key(quote, match)
+        for quote in quotes
+        for match in quote.get("mtf_matches", [])
+        if match.get("label")
+    }
+
+
+def mtf_touch_key(quote: dict[str, Any], match: dict[str, Any]) -> str:
+    symbol = str(quote.get("symbol") or "").upper()
+    label = str(match.get("label") or "")
+    candle_time = str(match.get("candle_time") or "")
+    return f"{symbol}:{label}:{candle_time}"
+
+
+def sort_mtf_quotes_by_latest_time(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(quotes, key=latest_mtf_quote_time, reverse=True)
+
+
+def latest_mtf_quote_time(quote: dict[str, Any]) -> float:
+    times = [parsed for parsed in (parse_mtf_time(match.get("candle_time")) for match in quote.get("mtf_matches", [])) if parsed is not None]
+    return max(times) if times else 0
+
+
+def parse_mtf_time(value: Any) -> float | None:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.timestamp()
 
 
 def mtf_notification_details(quotes: list[dict[str, Any]]) -> dict[str, Any]:
@@ -459,6 +510,17 @@ def display_label(match: dict[str, Any]) -> str:
     return label
 
 
+def mtf_match_detail(match: dict[str, Any]) -> dict[str, Any]:
+    detail = {
+        "label": match.get("label"),
+        "display_label": display_label(match),
+        "entry_price": match_entry_price(match),
+    }
+    if match.get("candle_time"):
+        detail["candle_time"] = match.get("candle_time")
+    return detail
+
+
 def match_entry_price(match: dict[str, Any]) -> Any:
     risk_plan = match.get("risk_plan") if isinstance(match.get("risk_plan"), dict) else {}
     return match.get("entry_price") or risk_plan.get("entry")
@@ -467,9 +529,11 @@ def match_entry_price(match: dict[str, Any]) -> Any:
 def notification_match_text(match: dict[str, Any]) -> str:
     label = display_label(match)
     entry = match_entry_price(match)
-    if entry is None:
-        return label
-    return f"{label} @ {format_price(entry)}"
+    entry_text = f" @ {format_price(entry)}" if entry is not None else ""
+    time_text = format_mtf_time(match.get("candle_time"))
+    if time_text:
+        return f"{label}{entry_text}, {time_text}"
+    return f"{label}{entry_text}"
 
 
 def format_price(value: Any) -> str:
@@ -477,6 +541,17 @@ def format_price(value: Any) -> str:
         return f"{float(value):.2f}"
     except (TypeError, ValueError):
         return str(value)
+
+
+def format_mtf_time(value: Any) -> str:
+    if not value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return str(value)
+    hour = parsed.strftime("%I").lstrip("0") or "0"
+    return f"{parsed.strftime('%b')} {parsed.day} {hour}:{parsed.strftime('%M %p')}"
 
 
 def alert_history_entries_from_push(payload: dict[str, Any]) -> list[dict[str, Any]]:
