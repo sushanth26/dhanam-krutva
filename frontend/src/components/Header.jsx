@@ -95,6 +95,16 @@ export function Header({
             </button>
             <button
               type="button"
+              className={`account-menu-button secondary-button ${activePage === "watchlist" ? "active" : ""}`}
+              disabled={pageLoading}
+              onClick={() => onNavigate("watchlist")}
+              aria-label="Open watchlist tables"
+              title="Watchlist"
+            >
+              <span>Watchlist</span>
+            </button>
+            <button
+              type="button"
               className={`account-menu-button secondary-button ${activePage === "trades" ? "active" : ""}`}
               disabled={pageLoading}
               onClick={() => onNavigate("trades")}

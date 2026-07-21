@@ -992,6 +992,7 @@ export default function App() {
     if (window.location.hash === "#alerts") return "alerts";
     if (window.location.hash === "#mtfs") return "mtfs";
     if (window.location.hash === "#trades") return "trades";
+    if (window.location.hash === "#watchlist") return "watchlist";
     return "mtfs";
   });
   const [autoTradeOrders, setAutoTradeOrders] = useState(() => emptyAutoTradeOrders());
@@ -1619,7 +1620,15 @@ export default function App() {
   function navigatePage(page) {
     const nextPage = page === "home" || page === "spy" ? "mtfs" : page;
     setActivePage(nextPage);
-    const hash = nextPage === "alerts" ? "#alerts" : nextPage === "mtfs" ? "#mtfs" : nextPage === "trades" ? "#trades" : "";
+    const hash = nextPage === "alerts"
+      ? "#alerts"
+      : nextPage === "mtfs"
+        ? "#mtfs"
+        : nextPage === "trades"
+          ? "#trades"
+          : nextPage === "watchlist"
+            ? "#watchlist"
+            : "";
     window.history.replaceState(null, "", hash || window.location.pathname);
   }
 
@@ -2300,6 +2309,23 @@ export default function App() {
             orders={autoTradeOrders}
             onRefresh={refreshAutoTrades}
             structureBySymbol={structureBySymbol}
+          />
+        ) : activePage === "watchlist" ? (
+          <WatchlistWorkspace
+            activeTab={watchlistTab}
+            contextWatchlist={contextWatchlist}
+            loading={loading.prices || loading.watchlists}
+            onAddSymbols={addSymbolsToActiveWatchlist}
+            onAddTab={addWatchlist}
+            onDeleteTab={deleteWatchlist}
+            onRemoveSymbol={removeSymbolFromWatchlist}
+            onSwitchTab={switchWatchlistTab}
+            onSymbolInput={(tab, value) => setSymbolInputs((current) => ({ ...current, [tab]: value }))}
+            onToggleAutoTrade={toggleWatchlistAutoTrade}
+            symbolInput={symbolInputs[watchlistTab] || ""}
+            trendBuckets={trendBuckets}
+            updatedText={updatedText}
+            watchlists={watchlists}
           />
         ) : (
           <MtfPage
