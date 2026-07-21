@@ -17,6 +17,7 @@ export function MtfTable({
   const columns = [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     ...(showWatchlist ? [{ key: "watchlist", label: "Watchlist", value: (quote) => quote.watchlist_name || "" }] : []),
+    { key: "mtf", label: "MTF", value: (quote) => mtfLabels(quote.mtf_matches).join(" ") },
     { key: "structure", label: "BOS", value: (quote) => quote.structure_10m?.status || "Unknown" },
     { key: "bias", label: "Bias", value: (quote) => tradeActionForMatches(quote.mtf_matches) || directionalBiasForQuote(quote) },
     { key: "plan", label: "Trade plan", value: (quote) => mtfPlanSortValue(quote) },
@@ -368,6 +369,11 @@ function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }
           {quote.is_new ? <NewTag onDismiss={dismissNew} symbol={quote.symbol} /> : null}
         </td>
       ) : null}
+      <td className="mtf-label-cell" data-label="MTF">
+        {mtfLabels(quote.mtf_matches).map((label) => (
+          <span key={label} className="cloud-tag touch">{label}</span>
+        ))}
+      </td>
       <td data-label="BOS"><span className={`structure-pill ${structureClass(quote.structure_10m?.status)}`}>{structureLabel(quote.structure_10m?.status)}</span></td>
       <td data-label="Bias"><DirectionPill value={tradeAction || directionalBiasForQuote(quote)} /></td>
       <td className="mtf-plan-cell" data-label="Trade plan">
@@ -376,6 +382,18 @@ function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }
       <td className="trigger-time" data-label="Time">{triggerTime}</td>
     </BaseRow>
   );
+}
+
+function mtfLabels(matches = []) {
+  const labels = [];
+  const seen = new Set();
+  for (const match of matches) {
+    const label = String(match.display_label || match.label || "").trim();
+    if (!label || seen.has(label)) continue;
+    labels.push(label);
+    seen.add(label);
+  }
+  return labels;
 }
 
 function latestMtfTime(quote) {

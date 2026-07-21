@@ -17,6 +17,7 @@ from app.market_data import (
     nine_ema_touch_matches,
     parse_symbols,
     previous_daily_range,
+    session_mtf_touch_matches,
     symbol_chunks,
 )
 
@@ -631,6 +632,37 @@ def test_mtf_signal_matches_does_not_alert_when_price_was_already_above_clouds()
     )
 
     assert matches == []
+
+
+def test_session_mtf_touch_matches_keeps_today_premarket_cloud_touch_after_price_moves_away():
+    matches = session_mtf_touch_matches(
+        [
+            {
+                "low": 99,
+                "high": 106,
+                "close": 104,
+                "source_count": 2,
+                "time": "2026-07-02T07:10:00",
+                "session_date": "2026-07-02",
+            },
+            {
+                "low": 126,
+                "high": 132,
+                "close": 130,
+                "source_count": 2,
+                "time": "2026-07-02T12:00:00",
+                "session_date": "2026-07-02",
+            },
+        ],
+        {"34": 100, "50": 110},
+        {"34": 101, "50": 105},
+        {"20": 80, "21": 90, "50": 140, "55": 145},
+    )
+
+    labels = [match["label"] for match in matches]
+    assert "10m 34/50 touch" in labels
+    assert "Hourly 34/50" in labels
+    assert {match["label"]: match["candle_time"] for match in matches}["Hourly 34/50"] == "2026-07-02T07:10:00"
 
 
 def test_mtf_signal_matches_does_not_wait_when_incomplete_candle_is_far_from_cloud():

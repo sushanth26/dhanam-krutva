@@ -991,9 +991,8 @@ export default function App() {
   const [activePage, setActivePage] = useState(() => {
     if (window.location.hash === "#alerts") return "alerts";
     if (window.location.hash === "#mtfs") return "mtfs";
-    if (window.location.hash === "#spy") return "spy";
     if (window.location.hash === "#trades") return "trades";
-    return "home";
+    return "mtfs";
   });
   const [autoTradeOrders, setAutoTradeOrders] = useState(() => emptyAutoTradeOrders());
   const [autoTradeAlert, setAutoTradeAlert] = useState("");
@@ -1094,7 +1093,22 @@ export default function App() {
     ));
     return filterQuotesByStrategy(matches, strategyState);
   }, [newMtfRows, quotesByTab, strategyState, watchlists]);
+  const allMtfTouchQuotes = useMemo(() => {
+    const touched = watchlists.flatMap((watchlist) => (
+      (quotesByTab[watchlist.id] || [])
+        .filter((quote) => quote.mtf_touches_today?.length)
+        .map((quote) => ({
+          ...quote,
+          mtf_matches: quote.mtf_touches_today,
+          watchlist_id: watchlist.id,
+          watchlist_name: watchlist.name,
+          is_new: Boolean(newMtfRows[mtfRowId(watchlist.id, quote.symbol)]),
+        }))
+    ));
+    return filterQuotesByStrategy(touched, strategyState);
+  }, [newMtfRows, quotesByTab, strategyState, watchlists]);
   const allMtfs = useMemo(() => quotesWithMatchStatus(allMtfQuotes, "confirmed"), [allMtfQuotes]);
+  const allTouchedMtfs = useMemo(() => quotesWithMatchStatus(allMtfTouchQuotes, "confirmed"), [allMtfTouchQuotes]);
   const longMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Long"), [allMtfs]);
   const shortMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Short"), [allMtfs]);
   const enabledStrategyCount = useMemo(
@@ -1604,8 +1618,9 @@ export default function App() {
   }
 
   function navigatePage(page) {
-    setActivePage(page);
-    const hash = page === "alerts" ? "#alerts" : page === "mtfs" ? "#mtfs" : page === "spy" ? "#spy" : page === "trades" ? "#trades" : "";
+    const nextPage = page === "home" || page === "spy" ? "mtfs" : page;
+    setActivePage(nextPage);
+    const hash = nextPage === "alerts" ? "#alerts" : nextPage === "mtfs" ? "#mtfs" : nextPage === "trades" ? "#trades" : "";
     window.history.replaceState(null, "", hash || window.location.pathname);
   }
 
@@ -2138,11 +2153,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!focusedMtfSymbol || !allMtfs.some((quote) => quote.symbol === focusedMtfSymbol)) return;
+    if (!focusedMtfSymbol || !allTouchedMtfs.some((quote) => quote.symbol === focusedMtfSymbol)) return;
     window.requestAnimationFrame(() => {
       document.querySelector(`[data-mtf-symbol="${focusedMtfSymbol}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
-  }, [allMtfs, focusedMtfSymbol]);
+  }, [allTouchedMtfs, focusedMtfSymbol]);
 
   useEffect(() => {
     notifyScannerUpdate(preMarketScannerRows);
@@ -2274,18 +2289,9 @@ export default function App() {
           <MtfPage
             buyState={buyState}
             focusedSymbol={focusedMtfSymbol}
-            longMtfs={longMtfs}
+            mtfQuotes={allTouchedMtfs}
             onBuy={buyMtfQuote}
             onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
-            shortMtfs={shortMtfs}
-          />
-        ) : activePage === "spy" ? (
-          <SpyComparisonPage
-            loading={loading.prices}
-            onRefresh={refreshAllPrices}
-            rows={spyComparisonRows}
-            spyQuote={spyQuote}
-            updatedText={spyUpdatedText}
           />
         ) : activePage === "trades" ? (
           <AutoTradesPage
@@ -2297,86 +2303,13 @@ export default function App() {
             structureBySymbol={structureBySymbol}
           />
         ) : (
-          <div className="market-command-center">
-            <section className="premarket-focus-panel">
-              <div className="scanner-hero">
-                <div>
-                  <h2>{homeView === "watchlist" ? "Watchlist" : "v/s SPY"}</h2>
-                </div>
-                <div className="live-price-actions">
-                  <button type="button" onClick={() => refreshAllPrices()} disabled={loading.prices}>
-                    {loading.prices ? "Updating" : "Update"}
-                  </button>
-                </div>
-              </div>
-
-              <div className="workspace-view-tabs" role="tablist" aria-label="Scanner views">
-                <button
-                  type="button"
-                  className={homeView === "spy" ? "active" : ""}
-                  onClick={() => selectHomeView("spy")}
-                  role="tab"
-                  aria-selected={homeView === "spy"}
-                >
-                  v/s SPY <span>{spyFocusCount}</span>
-                </button>
-                <button
-                  type="button"
-                  className={homeView === "watchlist" ? "active" : ""}
-                  onClick={() => selectHomeView("watchlist")}
-                  role="tab"
-                  aria-selected={homeView === "watchlist"}
-                >
-                  Watchlist <span>{contextWatchlist?.symbols?.length || 0}</span>
-                </button>
-              </div>
-
-              {liveAlert ? <div className="alert">{liveAlert}</div> : null}
-
-              {homeView === "spy" ? (
-                <SpyComparisonInline
-                  rows={spyComparisonRows}
-                  spyQuote={spyQuote}
-                  updatedText={spyUpdatedText}
-                />
-              ) : homeView === "watchlist" ? (
-                <WatchlistWorkspace
-                  activeTab={watchlistTab}
-                  contextWatchlist={contextWatchlist}
-                  loading={loading.watchlists || loading.prices}
-                  onAddSymbols={addSymbolsToActiveWatchlist}
-                  onAddTab={addWatchlist}
-                  onDeleteTab={deleteWatchlist}
-                  onRemoveSymbol={removeSymbolFromWatchlist}
-                  onSwitchTab={switchWatchlistTab}
-                  onSymbolInput={(value) => setSymbolInputs((current) => ({ ...current, [watchlistTab]: value }))}
-                  onToggleAutoTrade={toggleWatchlistAutoTrade}
-                  symbolInput={symbolInputs[watchlistTab] || ""}
-                  trendBuckets={trendBuckets}
-                  updatedText={updatedText}
-                  watchlists={watchlists}
-                />
-              ) : (
-                <>
-                  <ScannerWatchlistPicker
-                    loading={loading.prices}
-                    onSelectAll={selectAllScannerWatchlists}
-                    onToggle={toggleScannerWatchlist}
-                    selectedIds={scannerWatchlistIds}
-                    watchlists={watchlists}
-                  />
-
-                  <div className="scanner-metric-grid" aria-label="Gap scanner summary">
-                    <ScannerMetric label="Total" value={preMarketScannerRows.length} tone="neutral" />
-                    <ScannerMetric label="Gap Up" value={scannerLongCount} tone="long" />
-                    <ScannerMetric label="Gap Down" value={scannerShortCount} tone="short" />
-                  </div>
-
-                  <PreMarketScannerTable rows={preMarketScannerRows} />
-                </>
-              )}
-            </section>
-          </div>
+          <MtfPage
+            buyState={buyState}
+            focusedSymbol={focusedMtfSymbol}
+            mtfQuotes={allTouchedMtfs}
+            onBuy={buyMtfQuote}
+            onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
+          />
         )}
         <HiddenLegacyPanels />
       </main>
@@ -2387,62 +2320,28 @@ export default function App() {
 function MtfPage({
   buyState,
   focusedSymbol,
-  longMtfs,
+  mtfQuotes,
   onBuy,
   onDismissNew,
-  shortMtfs,
 }) {
-  const [tableView, setTableView] = useState("long");
-  const tableViews = [
-    { id: "long", label: "Long signals", direction: "Long", count: longMtfs.length },
-    { id: "short", label: "Short signals", direction: "Short", count: shortMtfs.length },
-  ];
-  const selectedQuotes = tableView === "short" ? shortMtfs : longMtfs;
-  const selectedView = tableViews.find((item) => item.id === tableView) || tableViews[0];
-  const totalCount = longMtfs.length + shortMtfs.length;
-
-  useEffect(() => {
-    if (!focusedSymbol) return;
-    const symbol = focusedSymbol.toUpperCase();
-    if (shortMtfs.some((quote) => quote.symbol === symbol)) {
-      setTableView("short");
-    } else if (longMtfs.some((quote) => quote.symbol === symbol)) {
-      setTableView("long");
-    }
-  }, [focusedSymbol, longMtfs, shortMtfs]);
+  const totalCount = mtfQuotes.length;
 
   return (
     <section className="mtf-page global-mtf-panel">
       <div className="mtf-page-header">
         <div>
-          <h2>MTF Signals</h2>
-          <p className="muted">Long and short signals from every watchlist.</p>
+          <h2>MTF Touches Today</h2>
+          <p className="muted">Watchlist stocks that touched an MTF from premarket through live trading.</p>
         </div>
         <strong>{totalCount}</strong>
       </div>
 
-      <div className="table-view-tabs mtf-view-tabs" role="tablist" aria-label="MTF table view">
-        {tableViews.map((view) => (
-          <button
-            key={view.id}
-            type="button"
-            className={tableView === view.id ? "active" : ""}
-            onClick={() => setTableView(view.id)}
-            role="tab"
-            aria-selected={tableView === view.id}
-          >
-            {view.label} <span>{view.count}</span>
-          </button>
-        ))}
-      </div>
       <MtfSignalGroup
         buyState={buyState}
         focusedSymbol={focusedSymbol}
-        direction={selectedView.direction}
-        label={selectedView.label}
         onBuy={onBuy}
         onDismissNew={onDismissNew}
-        quotes={selectedQuotes}
+        quotes={mtfQuotes}
       />
     </section>
   );
@@ -2573,9 +2472,7 @@ function WatchlistWorkspace({
 
 function MtfSignalGroup({
   buyState,
-  direction,
   focusedSymbol,
-  label,
   onBuy,
   onDismissNew,
   quotes,
@@ -2585,7 +2482,7 @@ function MtfSignalGroup({
   return (
     <section className="mtf-signal-group">
       <div className="mtf-signal-heading">
-        <h3>{label}</h3>
+        <h3>Touched MTFs</h3>
         <span>{quotes.length}</span>
       </div>
       <div className="mtf-strategy-sections">
@@ -2594,7 +2491,7 @@ function MtfSignalGroup({
             key={section.id}
             quotes={section.quotes}
             title={section.name}
-            subtitle={`${direction} setup`}
+            subtitle="Touched today"
             showWatchlist
             buyState={buyState}
             emptyText="None"
@@ -2603,7 +2500,7 @@ function MtfSignalGroup({
             onDismissNew={onDismissNew}
           />
         )) : (
-          <div className="mtf-empty-state">No {label.toLowerCase()} MTFs right now.</div>
+          <div className="mtf-empty-state">No watchlist stocks have touched an MTF today.</div>
         )}
       </div>
     </section>

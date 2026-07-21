@@ -41,7 +41,7 @@ export function Header({
   const connectionLabel = accountsLoading ? "Checking Webull" : accountsConfirmed ? "Webull ready" : "Webull not ready";
   const confirmedTime = accountsConfirmedAt ? new Date(accountsConfirmedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
   const connectionDetail = accountsConfirmed
-    ? `${totalAccountCount} account${totalAccountCount === 1 ? "" : "s"} · checked ${confirmedTime || "now"} · 5 min prices/alerts`
+    ? `${totalAccountCount} account${totalAccountCount === 1 ? "" : "s"} · checked ${confirmedTime || "now"} · 1 min prices/alerts`
     : "Confirm accounts before prices or alerts run";
 
   useEffect(() => {
@@ -85,17 +85,7 @@ export function Header({
           <nav className="primary-nav" aria-label="Main views">
             <button
               type="button"
-              className={`account-menu-button secondary-button ${activePage === "home" ? "active" : ""}`}
-              disabled={pageLoading}
-              onClick={() => onNavigate("home")}
-              aria-label="Open scanner"
-              title="Scanner"
-            >
-              <span>Scanner</span>
-            </button>
-            <button
-              type="button"
-              className={`account-menu-button secondary-button ${activePage === "mtfs" ? "active" : ""}`}
+              className={`account-menu-button secondary-button ${activePage === "mtfs" || activePage === "home" ? "active" : ""}`}
               disabled={pageLoading}
               onClick={() => onNavigate("mtfs")}
               aria-label="Open MTF signals"
