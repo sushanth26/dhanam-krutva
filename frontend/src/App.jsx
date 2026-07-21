@@ -1248,7 +1248,6 @@ export default function App() {
     if (showLoading) setLoadingKey("prices", true);
     try {
       await refreshWatchlistBatch(watchlistsRef.current, { force: force || showLoading });
-      await refreshSpyQuote({ force: force || showLoading });
     } catch (error) {
       setLiveAlert(error.message);
     } finally {
