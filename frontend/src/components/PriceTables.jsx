@@ -82,15 +82,15 @@ export function PriceBucket({ title, quotes, kind, compact = false, onRemoveSymb
   const columns = compact ? [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     { key: "structure", label: "Structure", value: (quote) => quote.structure_10m?.status || "Unknown" },
-    { key: "bias", label: "Bias", value: (quote) => directionalBiasForQuote(quote) },
+    { key: "bias", label: "Bias", value: (quote) => watchlistBiasSortValue(quote) },
   ] : [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     { key: "trend", label: "Trend", value: (quote) => cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]) },
     { key: "structure", label: "BOS", value: (quote) => quote.structure_10m?.status || "Unknown" },
-    { key: "bias", label: "Bias", value: (quote) => directionalBiasForQuote(quote) },
+    { key: "bias", label: "Bias", value: (quote) => watchlistBiasSortValue(quote) },
     { key: "price", label: "Last", className: "price-col", value: (quote) => Number(quote.price) },
   ];
-  const { sortedRows, sort, toggleSort } = useSortableRows(quotes, columns, { key: "symbol", direction: "asc" });
+  const { sortedRows, sort, toggleSort } = useSortableRows(quotes, columns, { key: "bias", direction: "asc" });
   const showActions = Boolean(onRemoveSymbol) && !compact;
 
   return (
@@ -263,6 +263,12 @@ function directionalBiasForQuote(quote) {
     trend: cloudStatus(quote?.ema_10m, ["5", "12"], ["34", "50"]),
     structure: quote?.structure_10m?.status,
   });
+}
+
+function watchlistBiasSortValue(quote) {
+  const bias = directionalBiasForQuote(quote);
+  const rank = { Long: 0, Wait: 1, Short: 2 }[bias] ?? 3;
+  return `${rank}-${quote.symbol || ""}`;
 }
 
 function directionalBiasForRow(row) {
