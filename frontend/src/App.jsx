@@ -2328,19 +2328,18 @@ function MtfPage({
   return (
     <section className="mtf-page global-mtf-panel">
       <div className="mtf-page-header">
-        <div>
-          <h2>MTF Touches Today</h2>
-          <p className="muted">Watchlist stocks that touched an MTF from premarket through live trading.</p>
-        </div>
-        <strong>{totalCount}</strong>
+        <h2>MTF Touches Today · {totalCount} · PM to live</h2>
       </div>
 
-      <MtfSignalGroup
+      <MtfTable
         buyState={buyState}
+        compact
+        hideHeading
+        emptyText="No watchlist stocks have touched an MTF today."
         focusedSymbol={focusedSymbol}
-        onBuy={onBuy}
         onDismissNew={onDismissNew}
         quotes={mtfQuotes}
+        showWatchlist
       />
     </section>
   );
@@ -2467,55 +2466,6 @@ function WatchlistWorkspace({
       </div>
     </div>
   );
-}
-
-function MtfSignalGroup({
-  buyState,
-  focusedSymbol,
-  onBuy,
-  onDismissNew,
-  quotes,
-}) {
-  const strategySections = mtfStrategySections(quotes);
-
-  return (
-    <section className="mtf-signal-group">
-      <div className="mtf-signal-heading">
-        <h3>Touched MTFs</h3>
-        <span>{quotes.length}</span>
-      </div>
-      <div className="mtf-strategy-sections">
-        {strategySections.length ? strategySections.map((section) => (
-          <MtfTable
-            key={section.id}
-            quotes={section.quotes}
-            title={section.name}
-            subtitle="Touched today"
-            showWatchlist
-            buyState={buyState}
-            emptyText="None"
-            focusedSymbol={focusedSymbol}
-            onBuy={onBuy}
-            onDismissNew={onDismissNew}
-          />
-        )) : (
-          <div className="mtf-empty-state">No watchlist stocks have touched an MTF today.</div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function mtfStrategySections(quotes) {
-  return ALERT_STRATEGIES.map((strategy) => {
-    const strategyQuotes = quotes
-      .map((quote) => ({
-        ...quote,
-        mtf_matches: (quote.mtf_matches || []).filter((match) => strategy.match(match)),
-      }))
-      .filter((quote) => quote.mtf_matches.length);
-    return { id: strategy.id, name: strategy.name, quotes: strategyQuotes };
-  }).filter((section) => section.quotes.length);
 }
 
 function AutoTradesPage({ accountId, alert, loading, orders, onRefresh, structureBySymbol }) {

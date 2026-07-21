@@ -11,10 +11,18 @@ export function MtfTable({
   buyState = {},
   emptyText = "No stocks are on hourly or daily EMA clouds right now.",
   focusedSymbol = "",
+  compact = false,
+  hideHeading = false,
   onBuy,
   onDismissNew,
 }) {
-  const columns = [
+  const columns = compact ? [
+    { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
+    { key: "mtf", label: "MTF", value: (quote) => mtfLabels(quote.mtf_matches).join(" ") },
+    { key: "watchlist", label: "Watchlist", value: (quote) => quote.watchlist_name || "" },
+    { key: "time", label: "Time", value: (quote) => latestMtfTime(quote) },
+    { key: "bias", label: "Bias", value: (quote) => tradeActionForMatches(quote.mtf_matches) || directionalBiasForQuote(quote) },
+  ] : [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     ...(showWatchlist ? [{ key: "watchlist", label: "Watchlist", value: (quote) => quote.watchlist_name || "" }] : []),
     { key: "mtf", label: "MTF", value: (quote) => mtfLabels(quote.mtf_matches).join(" ") },
@@ -24,24 +32,27 @@ export function MtfTable({
     { key: "time", label: "Time", value: (quote) => latestMtfTime(quote) },
   ];
   const { sortedRows: sortedQuotes, sort, toggleSort } = useSortableRows(quotes, columns, { key: "time", direction: "desc" });
+  const showActions = Boolean(onBuy) && !compact;
 
   return (
     <section className="price-bucket mtf-bucket">
-      <div className="bucket-heading">
-        <div className="bucket-title">
-          <h3>{title}</h3>
-          {subtitle ? <p>{subtitle}</p> : null}
+      {hideHeading ? null : (
+        <div className="bucket-heading">
+          <div className="bucket-title">
+            <h3>{title}</h3>
+            {subtitle ? <p>{subtitle}</p> : null}
+          </div>
+          <span>{quotes.length}</span>
         </div>
-        <span>{quotes.length}</span>
-      </div>
+      )}
       <div className="live-price-table-wrap">
-        <table className={`live-price-table ${showWatchlist ? "global-mtf-table" : ""}`}>
+        <table className={`live-price-table ${showWatchlist ? "global-mtf-table" : ""} ${compact ? "compact-mtf-table" : ""}`}>
           <thead>
             <tr>
               {columns.map((column) => (
                 <SortHeader key={column.key} column={column} sort={sort} onSort={toggleSort} />
               ))}
-              <th className="action-col" aria-label="Actions"></th>
+              {showActions ? <th className="action-col" aria-label="Actions"></th> : null}
             </tr>
           </thead>
           <tbody>
@@ -52,11 +63,12 @@ export function MtfTable({
                 focused={quote.symbol === focusedSymbol}
                 quote={quote}
                 showWatchlist={showWatchlist}
+                compact={compact}
                 onBuy={onBuy}
                 onDismissNew={onDismissNew}
               />
             )) : (
-              <tr><td colSpan={columns.length + 1}>{emptyText}</td></tr>
+              <tr><td colSpan={columns.length + (showActions ? 1 : 0)}>{emptyText}</td></tr>
             )}
           </tbody>
         </table>
@@ -339,12 +351,44 @@ function mtfPlanSortValue(quote) {
   return tradeActionForMatches(quote.mtf_matches) || "";
 }
 
-function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }) {
+function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDismissNew }) {
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
   const riskPlan = aPlusPlusRiskPlan(quote.mtf_matches);
   const tradeAction = tradeActionForMatches(quote.mtf_matches);
   const dismissNew = quote.is_new ? () => onDismissNew?.(quote) : undefined;
   const rowId = ["mtf-row", quote.watchlist_id || "tab", quote.symbol].join("-");
+  const mtfTags = (
+    <td className="mtf-label-cell" data-label="MTF">
+      {mtfLabels(quote.mtf_matches).map((label) => (
+        <span key={label} className="cloud-tag touch">{label}</span>
+      ))}
+    </td>
+  );
+  const watchlistCell = showWatchlist ? (
+    <td className="watchlist-cell" data-label="Watchlist">
+      {quote.watchlist_name || "-"}
+      {quote.is_new ? <NewTag onDismiss={dismissNew} symbol={quote.symbol} /> : null}
+    </td>
+  ) : null;
+
+  if (compact) {
+    return (
+      <BaseRow
+        className={focused ? "focused-mtf-row" : ""}
+        dataMtfSymbol={quote.symbol}
+        id={rowId}
+        quote={quote}
+        showPrice={false}
+        onClick={dismissNew}
+      >
+        {mtfTags}
+        {watchlistCell}
+        <td className="trigger-time" data-label="Time">{triggerTime}</td>
+        <td data-label="Bias"><DirectionPill value={tradeAction || directionalBiasForQuote(quote)} /></td>
+      </BaseRow>
+    );
+  }
+
   return (
     <BaseRow
       className={focused ? "focused-mtf-row" : ""}
@@ -363,17 +407,8 @@ function MtfRow({ buyState, focused, quote, showWatchlist, onBuy, onDismissNew }
         />
       )}
     >
-      {showWatchlist ? (
-        <td className="watchlist-cell" data-label="Watchlist">
-          {quote.watchlist_name || "-"}
-          {quote.is_new ? <NewTag onDismiss={dismissNew} symbol={quote.symbol} /> : null}
-        </td>
-      ) : null}
-      <td className="mtf-label-cell" data-label="MTF">
-        {mtfLabels(quote.mtf_matches).map((label) => (
-          <span key={label} className="cloud-tag touch">{label}</span>
-        ))}
-      </td>
+      {watchlistCell}
+      {mtfTags}
       <td data-label="BOS"><span className={`structure-pill ${structureClass(quote.structure_10m?.status)}`}>{structureLabel(quote.structure_10m?.status)}</span></td>
       <td data-label="Bias"><DirectionPill value={tradeAction || directionalBiasForQuote(quote)} /></td>
       <td className="mtf-plan-cell" data-label="Trade plan">
