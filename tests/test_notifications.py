@@ -1,3 +1,4 @@
+from datetime import datetime
 from types import SimpleNamespace
 
 import app.notifications as notifications
@@ -12,6 +13,7 @@ from app.notifications import (
     confirmed_mtf_quotes,
     describe_mtf_matches,
     filter_payload_by_strategies,
+    is_market_refresh_window,
     monitored_symbols,
     mtf_notification_payload,
     mtf_signature,
@@ -176,6 +178,11 @@ def test_build_monitored_quotes_omits_deleted_symbols(tmp_path, monkeypatch):
     assert requested_symbols == ["BE", "PLTR"]
     assert "AAOI" not in requested_symbols
     assert [quote["symbol"] for quote in quotes] == ["BE", "PLTR"]
+
+
+def test_market_refresh_window_runs_until_6pm_chicago():
+    assert is_market_refresh_window("America/Chicago", datetime.fromisoformat("2026-07-21T17:59:00-05:00"))
+    assert not is_market_refresh_window("America/Chicago", datetime.fromisoformat("2026-07-21T18:00:00-05:00"))
 
 
 def test_bos_state_changes_baselines_first_scan_without_alerts():

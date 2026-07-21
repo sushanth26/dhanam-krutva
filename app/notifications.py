@@ -130,7 +130,11 @@ class MtfPushMonitor:
     async def _run(self) -> None:
         while True:
             try:
-                if not self.paused_for_manual_retry and self.store.all():
+                if (
+                    not self.paused_for_manual_retry
+                    and self.store.all()
+                    and is_market_refresh_window(self.settings.mtf_push_timezone)
+                ):
                     await asyncio.to_thread(self.check_once)
             except Exception:
                 pass
@@ -200,15 +204,15 @@ class MtfPushMonitor:
         return {"sent": sent, "removed": removed}
 
 
-def is_market_refresh_window(timezone_name: str) -> bool:
+def is_market_refresh_window(timezone_name: str, now: datetime | None = None) -> bool:
     try:
-        now = datetime.now(ZoneInfo(timezone_name))
+        current = now.astimezone(ZoneInfo(timezone_name)) if now else datetime.now(ZoneInfo(timezone_name))
     except ZoneInfoNotFoundError:
-        now = datetime.now()
-    if now.weekday() >= 5:
+        current = now or datetime.now()
+    if current.weekday() >= 5:
         return False
-    minutes = now.hour * 60 + now.minute
-    return 3 * 60 <= minutes < 15 * 60
+    minutes = current.hour * 60 + current.minute
+    return 3 * 60 <= minutes < 18 * 60
 
 
 def webpush_subscription_info(subscription: dict[str, Any]) -> dict[str, Any]:

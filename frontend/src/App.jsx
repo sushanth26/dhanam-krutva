@@ -6,7 +6,7 @@ import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PreMarketScannerTable, PriceBucket, SpyComparisonTable } from "./components/PriceTables";
 import { deleteJson, getJson, postJson } from "./lib/api";
 import { ALERT_STRATEGIES, filterQuotesByStrategy, loadStrategyState, saveStrategyState, strategyIdForMatch } from "./lib/alertStrategies";
-import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, flattenAccounts, formatPrice, marginTradingAccountId, matchEntryPrice, notificationMatchText, mtfSignature, preferredAccountId } from "./lib/market";
+import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, flattenAccounts, formatPrice, isMarketRefreshWindow, marginTradingAccountId, matchEntryPrice, notificationMatchText, mtfSignature, preferredAccountId } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
 const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 60 * 1000;
@@ -2057,7 +2057,7 @@ export default function App() {
       if (!accountsConfirmedRef.current) return;
       if (!passiveMarketTimer.current) {
         passiveMarketTimer.current = setInterval(() => {
-          refreshAppMarketData({ showLoading: false, force: true });
+          if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false, force: true });
         }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
       }
     };
@@ -2067,7 +2067,7 @@ export default function App() {
     if (!accountsConfirmedRef.current) return;
     if (!passiveMarketTimer.current) {
       passiveMarketTimer.current = setInterval(() => {
-        refreshAppMarketData({ showLoading: false, force: true });
+        if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false, force: true });
       }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
     }
   }
