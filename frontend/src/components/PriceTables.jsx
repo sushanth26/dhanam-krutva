@@ -19,7 +19,7 @@ export function MtfTable({
   const columns = compact ? [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     { key: "mtf", label: "MTF", value: (quote) => mtfLabels(quote.mtf_matches).join(" ") },
-    { key: "sourceTime", label: "Source · Time", value: (quote) => `${quote.watchlist_name || ""} ${latestMtfTime(quote)}` },
+    { key: "sourceTime", label: "Source · Time", value: (quote) => latestMtfTime(quote) },
     { key: "signal", label: "Signal", value: (quote) => tradeActionForMatches(quote.mtf_matches) || "Wait" },
     { key: "bias", label: "Bias", value: (quote) => biasSummaryForQuote(quote).label },
   ] : [
@@ -31,7 +31,8 @@ export function MtfTable({
     { key: "plan", label: "Trade plan", value: (quote) => mtfPlanSortValue(quote) },
     { key: "time", label: "Time", value: (quote) => latestMtfTime(quote) },
   ];
-  const { sortedRows: sortedQuotes, sort, toggleSort } = useSortableRows(quotes, columns, { key: "time", direction: "desc" });
+  const defaultSort = compact ? { key: "sourceTime", direction: "desc" } : { key: "time", direction: "desc" };
+  const { sortedRows: sortedQuotes, sort, toggleSort } = useSortableRows(quotes, columns, defaultSort);
   const showActions = Boolean(onBuy) && !compact;
 
   return (
@@ -616,13 +617,25 @@ function RemoveCell({ onRemove, symbol }) {
 }
 
 function mtfTriggerTime(matches) {
-  const match = (matches || []).find((item) => item.candle_time);
+  const match = latestMtfMatch(matches);
   if (!match) return "-";
   const parsed = new Date(match.candle_time);
   if (Number.isNaN(parsed.getTime())) return String(match.candle_time);
   const date = parsed.toLocaleDateString([], { month: "short", day: "numeric" });
   const time = parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return `${date} ${time}`;
+}
+
+function latestMtfMatch(matches) {
+  let latestMatch = null;
+  let latestTime = -Infinity;
+  for (const match of matches || []) {
+    const parsed = Date.parse(match.candle_time || "");
+    if (!Number.isFinite(parsed) || parsed < latestTime) continue;
+    latestMatch = match;
+    latestTime = parsed;
+  }
+  return latestMatch;
 }
 
 function aPlusPlusRiskPlan(matches) {
