@@ -133,3 +133,20 @@
     word-break: normal;
   }
 }
+
+@media (max-width: 760px) {
+  .watchlist-design-page .trend-price-grid .live-price-table-wrap {
+    overflow: hidden;
+  }
+
+  .watchlist-design-page .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) {
+    min-width: 0;
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  .watchlist-design-page .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) th,
+  .watchlist-design-page .trend-price-grid .live-price-table:not(.premarket-scanner-table):not(.spy-comparison-table) td {
+    display: table-cell;
+  }
+}
