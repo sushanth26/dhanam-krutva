@@ -2350,11 +2350,48 @@ function MtfPage({
   onDismissNew,
 }) {
   const totalCount = mtfQuotes.length;
+  const [signalFilter, setSignalFilter] = useState("all");
+  const [timeMode, setTimeMode] = useState("pm-live");
+  const [query, setQuery] = useState("");
+  const visibleQuotes = useMemo(() => {
+    const normalizedQuery = query.trim().toUpperCase();
+    return mtfQuotes.filter((quote) => {
+      const signal = mtfPageSignal(quote);
+      const matchesSignal = signalFilter === "all"
+        || (signalFilter === "long" && signal === "Long")
+        || (signalFilter === "wait" && signal !== "Long" && signal !== "Short");
+      const matchesQuery = !normalizedQuery
+        || String(quote.symbol || "").toUpperCase().includes(normalizedQuery)
+        || String(quote.watchlist_name || "").toUpperCase().includes(normalizedQuery)
+        || (quote.mtf_matches || []).some((match) => String(match.display_label || match.label || "").toUpperCase().includes(normalizedQuery));
+      return matchesSignal && matchesQuery;
+    });
+  }, [mtfQuotes, query, signalFilter]);
+  const longCount = mtfQuotes.filter((quote) => mtfPageSignal(quote) === "Long").length;
+  const waitCount = mtfQuotes.filter((quote) => !["Long", "Short"].includes(mtfPageSignal(quote))).length;
 
   return (
     <section className="mtf-page global-mtf-panel">
       <div className="mtf-page-header">
-        <h2>MTF Touches Today · {totalCount} · PM to live</h2>
+        <div>
+          <h2>MTF Touches Today</h2>
+          <span>{visibleQuotes.length} of {totalCount}</span>
+        </div>
+        <div className="mtf-toolbar" aria-label="MTF touch filters">
+          <div className="mtf-segmented" aria-label="Signal filter">
+            <button type="button" className={signalFilter === "all" ? "active" : ""} onClick={() => setSignalFilter("all")}>All</button>
+            <button type="button" className={signalFilter === "long" ? "active" : ""} onClick={() => setSignalFilter("long")}>Long <b>{longCount}</b></button>
+            <button type="button" className={signalFilter === "wait" ? "active" : ""} onClick={() => setSignalFilter("wait")}>Wait <b>{waitCount}</b></button>
+          </div>
+          <div className="mtf-segmented" aria-label="Time window">
+            <button type="button" className={timeMode === "pm-live" ? "active" : ""} onClick={() => setTimeMode("pm-live")}>PM -&gt; live</button>
+            <button type="button" className={timeMode === "all-day" ? "active" : ""} onClick={() => setTimeMode("all-day")}>All day</button>
+          </div>
+          <label className="mtf-filter-field">
+            <span>⌕</span>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter symbol..." />
+          </label>
+        </div>
       </div>
 
       <MtfTable
@@ -2364,11 +2401,18 @@ function MtfPage({
         emptyText="No watchlist stocks have touched an MTF today."
         focusedSymbol={focusedSymbol}
         onDismissNew={onDismissNew}
-        quotes={mtfQuotes}
+        quotes={visibleQuotes}
         showWatchlist
       />
     </section>
   );
+}
+
+function mtfPageSignal(quote) {
+  const actions = new Set((quote.mtf_matches || []).map((match) => match.trade_action).filter(Boolean));
+  if (actions.has("Long") && !actions.has("Short")) return "Long";
+  if (actions.has("Short") && !actions.has("Long")) return "Short";
+  return "Wait";
 }
 
 function SpyComparisonPage({ loading, onRefresh, rows, spyQuote, updatedText }) {

@@ -19,9 +19,9 @@ export function MtfTable({
   const columns = compact ? [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     { key: "mtf", label: "MTF", value: (quote) => mtfLabels(quote.mtf_matches).join(" ") },
-    { key: "watchlist", label: "Watchlist", value: (quote) => quote.watchlist_name || "" },
-    { key: "time", label: "Time", value: (quote) => latestMtfTime(quote) },
-    { key: "bias", label: "Bias", value: (quote) => tradeActionForMatches(quote.mtf_matches) || directionalBiasForQuote(quote) },
+    { key: "sourceTime", label: "Source · Time", value: (quote) => `${quote.watchlist_name || ""} ${latestMtfTime(quote)}` },
+    { key: "signal", label: "Signal", value: (quote) => tradeActionForMatches(quote.mtf_matches) || "Wait" },
+    { key: "bias", label: "Bias", value: (quote) => biasSummaryForQuote(quote).label },
   ] : [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     ...(showWatchlist ? [{ key: "watchlist", label: "Watchlist", value: (quote) => quote.watchlist_name || "" }] : []),
@@ -361,7 +361,7 @@ function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDis
     <td className="mtf-label-cell" data-label="MTF">
       <span className="mtf-tag-stack">
         {mtfLabels(quote.mtf_matches).map((label) => (
-          <span key={label} className="cloud-tag touch">{label}</span>
+          <MtfTouchPill key={label} label={label} />
         ))}
       </span>
     </td>
@@ -384,9 +384,13 @@ function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDis
         onClick={dismissNew}
       >
         {mtfTags}
-        {watchlistCell}
-        <td className="trigger-time" data-label="Time">{triggerTime}</td>
-        <td data-label="Bias"><DirectionPill value={tradeAction || directionalBiasForQuote(quote)} /></td>
+        <td className="source-time-cell" data-label="Source · Time">
+          <span className="source-pill">{quote.watchlist_name || "-"}</span>
+          {quote.is_new ? <NewTag onDismiss={dismissNew} symbol={quote.symbol} /> : null}
+          <time>{triggerTime}</time>
+        </td>
+        <td className="signal-cell" data-label="Signal"><DirectionPill value={tradeAction || "Wait"} /></td>
+        <td className="bias-cell" data-label="Bias"><BiasMeter bias={biasSummaryForQuote(quote)} /></td>
       </BaseRow>
     );
   }
@@ -421,6 +425,26 @@ function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDis
   );
 }
 
+function MtfTouchPill({ label }) {
+  const normalized = String(label || "").trim();
+  const timeframe = mtfTimeframeLabel(normalized);
+  const level = normalized.replace(/^(Daily|Hourly|Hour|1D|1H|10m)\s*/i, "").replace(/\s*touch$/i, "").trim();
+  return (
+    <span className={`mtf-touch-pill tf-${timeframe.toLowerCase()}`}>
+      <b>{timeframe}</b>
+      <span>{level || normalized}</span>
+    </span>
+  );
+}
+
+function mtfTimeframeLabel(label) {
+  const text = String(label || "").toLowerCase();
+  if (text.startsWith("daily") || text.startsWith("1d")) return "1D";
+  if (text.startsWith("hour") || text.startsWith("1h")) return "1H";
+  if (text.startsWith("10m")) return "10m";
+  return "MTF";
+}
+
 function mtfLabels(matches = []) {
   const labels = [];
   const seen = new Set();
@@ -438,6 +462,22 @@ function latestMtfTime(quote) {
     .map((match) => Date.parse(match.candle_time || ""))
     .filter(Number.isFinite);
   return times.length ? Math.max(...times) : 0;
+}
+
+function biasSummaryForQuote(quote) {
+  const direction = directionalBiasForQuote(quote);
+  if (direction === "Long") return { label: "Bullish", tone: "bullish", icon: "▲" };
+  if (direction === "Short") return { label: "Bearish", tone: "bearish", icon: "▼" };
+  return { label: "Neutral", tone: "neutral", icon: "−" };
+}
+
+function BiasMeter({ bias }) {
+  return (
+    <span className={`bias-meter ${bias.tone}`}>
+      <span>{bias.icon}</span>
+      <b>{bias.label}</b>
+    </span>
+  );
 }
 
 function RiskPlan({ plan }) {
