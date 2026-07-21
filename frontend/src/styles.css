@@ -5977,60 +5977,93 @@ select {
 
 .mtf-page .compact-mtf-table th,
 .mtf-page .compact-mtf-table td {
-  border-bottom: 1px solid #dbe2d8;
+  border-bottom: 1px solid #253241;
+  color: #dce5ee;
   display: table-cell;
-  line-height: 1.15;
+  font-size: 13px;
+  line-height: 1.25;
   overflow: hidden;
-  padding: 5px 7px;
+  padding: 8px 10px;
   text-overflow: ellipsis;
   vertical-align: middle;
   white-space: nowrap;
 }
 
+.mtf-page .compact-mtf-table .stock-row > td,
+.mtf-page .compact-mtf-table .watchlist-cell,
+.mtf-page .compact-mtf-table .trigger-time {
+  display: table-cell;
+}
+
 .mtf-page .compact-mtf-table th {
-  background: #eef2f5;
-  font-size: 10px;
+  background: #111a24;
+  color: #9fb0c1;
+  font-size: 11px;
   letter-spacing: 0;
-  position: sticky;
-  top: 50px;
+  position: static;
   z-index: 2;
 }
 
 .mtf-page .compact-mtf-table th:nth-child(1),
 .mtf-page .compact-mtf-table td:nth-child(1) {
-  width: 72px;
+  width: 86px;
+}
+
+.mtf-page .compact-mtf-table th:nth-child(2),
+.mtf-page .compact-mtf-table td:nth-child(2) {
+  width: auto;
 }
 
 .mtf-page .compact-mtf-table th:nth-child(3),
 .mtf-page .compact-mtf-table td:nth-child(3) {
-  width: 130px;
+  width: 132px;
 }
 
 .mtf-page .compact-mtf-table th:nth-child(4),
 .mtf-page .compact-mtf-table td:nth-child(4) {
-  width: 118px;
+  width: 138px;
 }
 
 .mtf-page .compact-mtf-table th:nth-child(5),
 .mtf-page .compact-mtf-table td:nth-child(5) {
-  width: 72px;
+  width: 78px;
 }
 
 .mtf-page .compact-mtf-table .mtf-label-cell {
+  white-space: normal;
+}
+
+.mtf-page .compact-mtf-table .mtf-tag-stack {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
-  white-space: normal;
+  gap: 4px;
 }
 
 .mtf-page .compact-mtf-table .cloud-tag {
   border-radius: 4px;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1;
   margin: 0;
-  padding: 2px 5px;
+  padding: 4px 6px;
   white-space: nowrap;
+}
+
+.mtf-page .compact-mtf-table .watchlist-cell,
+.mtf-page .compact-mtf-table .trigger-time {
+  color: #c6d0da;
+  font-weight: 800;
+}
+
+.mtf-page .compact-mtf-table .direction-pill {
+  min-width: 54px;
+}
+
+.mtf-page .compact-mtf-table tbody tr:not(.stock-row) td {
+  color: #9fb0c1;
+  font-size: 14px;
+  padding: 14px 10px;
+  text-align: center;
 }
 
 @media (max-width: 760px) {

@@ -359,9 +359,11 @@ function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDis
   const rowId = ["mtf-row", quote.watchlist_id || "tab", quote.symbol].join("-");
   const mtfTags = (
     <td className="mtf-label-cell" data-label="MTF">
-      {mtfLabels(quote.mtf_matches).map((label) => (
-        <span key={label} className="cloud-tag touch">{label}</span>
-      ))}
+      <span className="mtf-tag-stack">
+        {mtfLabels(quote.mtf_matches).map((label) => (
+          <span key={label} className="cloud-tag touch">{label}</span>
+        ))}
+      </span>
     </td>
   );
   const watchlistCell = showWatchlist ? (
