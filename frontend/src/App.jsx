@@ -2509,7 +2509,7 @@ function WatchlistWorkspace({
   watchlists,
 }) {
   return (
-    <div className="watchlist-workspace">
+    <div className="watchlist-workspace watchlist-design-page">
       <WatchlistTabs
         activeTab={activeTab}
         onAddSymbols={onAddSymbols}
@@ -2530,9 +2530,9 @@ function WatchlistWorkspace({
         </div>
       </div>
       <div className="trend-price-grid">
-        <PriceBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
-        <PriceBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
-        <PriceBucket title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
+        <PriceBucket compact title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
+        <PriceBucket compact title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
+        <PriceBucket compact title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
       </div>
     </div>
   );
@@ -3113,14 +3113,14 @@ function WatchlistTabs({
             disabled={!selectedWatchlist || loading}
             onChange={(event) => onToggleAutoTrade(selectedWatchlist.id, event.target.checked)}
           />
-          <span>{selectedWatchlist?.autoTradeEnabled === false ? "Auto trade this list off" : "Auto trade this list on"}</span>
+          <span>{selectedWatchlist?.autoTradeEnabled === false ? "Auto-trade OFF" : "Auto-trade ON"}</span>
         </label>
         <form onSubmit={onAddSymbols}>
           <input
             aria-label={`Add symbols to ${selectedWatchlist?.name || "watchlist"}`}
             placeholder="Add ticker"
             value={symbolInput}
-            onChange={(event) => onSymbolInput(event.target.value)}
+            onChange={(event) => onSymbolInput(activeTab, event.target.value)}
           />
           <button type="submit" disabled={loading}>Add</button>
         </form>

@@ -6385,3 +6385,356 @@ select {
     flex-flow: row nowrap !important;
   }
 }
+
+/* PDF design reference: Watchlist page */
+.watchlist-design-page {
+  background: #0b1117;
+  border: 1px solid #1c2733;
+  border-radius: 8px;
+  gap: 14px;
+  padding: 14px 18px 18px;
+}
+
+.watchlist-design-page .watchlist-panel {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0;
+}
+
+.watchlist-design-page .watchlist-tabs {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.watchlist-design-page .watchlist-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.watchlist-design-page .watchlist-tab {
+  background: #121820;
+  border: 1px solid #263241;
+  border-radius: 8px;
+  display: inline-flex;
+  min-width: auto;
+  overflow: hidden;
+}
+
+.watchlist-design-page .watchlist-tab.active {
+  background: #0d3b34;
+  border-color: #0f816b;
+}
+
+.watchlist-design-page .watchlist-tab > button:first-child {
+  background: transparent;
+  color: #aab6c4;
+  font-size: 14px;
+  min-height: 40px;
+  padding: 0 14px;
+}
+
+.watchlist-design-page .watchlist-tab.active > button:first-child {
+  color: #eef4fb;
+}
+
+.watchlist-design-page .watchlist-tab b {
+  background: #26313d;
+  color: #cdd7e3;
+  margin-left: 8px;
+}
+
+.watchlist-design-page .watchlist-tab.active b {
+  background: #11745f;
+  color: #6ff1cb;
+}
+
+.watchlist-design-page .watchlist-delete {
+  background: transparent;
+  color: #ff8b8b;
+  min-height: 40px;
+  min-width: 34px;
+  padding: 0;
+}
+
+.watchlist-design-page .watchlist-add-tab {
+  background: transparent;
+  border: 1px dashed #344255;
+  color: #9aa7b5;
+  min-height: 40px;
+  min-width: 44px;
+}
+
+.watchlist-design-page .daily-list-editor {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: auto minmax(320px, 1fr);
+  padding: 0;
+}
+
+.watchlist-design-page .watchlist-auto-trade-toggle {
+  align-items: center;
+  background: #261f0e;
+  border: 1px solid #8b6720;
+  border-radius: 8px;
+  color: #f6d36b;
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 900;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 16px;
+  white-space: nowrap;
+}
+
+.watchlist-design-page .watchlist-auto-trade-toggle input {
+  background: #d4a72a;
+  height: 28px;
+  min-height: 28px;
+  width: 48px;
+}
+
+.watchlist-design-page .watchlist-auto-trade-toggle input::after {
+  height: 22px;
+  width: 22px;
+}
+
+.watchlist-design-page .watchlist-auto-trade-toggle input:checked::after {
+  transform: translate(20px);
+}
+
+.watchlist-design-page .daily-list-editor form {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1fr) auto;
+}
+
+.watchlist-design-page .daily-list-editor input {
+  background: #121820;
+  border: 1px solid #263241;
+  border-radius: 8px;
+  color: #dce5ee;
+  min-height: 44px;
+}
+
+.watchlist-design-page .daily-list-editor button[type="submit"] {
+  background: #063f35;
+  border: 1px solid #0f816b;
+  border-radius: 8px;
+  color: #eef4fb;
+  min-height: 44px;
+  min-width: 78px;
+}
+
+.watchlist-design-page .section-heading {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+}
+
+.watchlist-design-page .section-heading h2 {
+  color: #eef4fb;
+  font-size: 22px;
+}
+
+.watchlist-design-page .section-heading p {
+  color: #7f8fa2;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.watchlist-design-page .trend-price-grid {
+  align-items: start;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(280px, 356px) minmax(280px, 356px) minmax(280px, 356px);
+}
+
+.watchlist-design-page .compact-watchlist-bucket {
+  background: #101720;
+  border: 1px solid #23303d;
+  border-radius: 14px;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .bucket-heading {
+  align-items: center;
+  border-bottom: 1px solid #23303d;
+  display: flex;
+  justify-content: space-between;
+  min-height: 60px;
+  padding: 0 18px;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .bucket-heading h3 {
+  align-items: center;
+  color: #eef4fb;
+  display: inline-flex;
+  font-size: 16px;
+  gap: 9px;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .bucket-heading h3::before {
+  border-radius: 999px;
+  content: "";
+  height: 10px;
+  width: 10px;
+}
+
+.watchlist-design-page .watchlist-bullish .bucket-heading {
+  background: #0d2a29;
+  border-top: 2px solid #38f0bd;
+}
+
+.watchlist-design-page .watchlist-bullish .bucket-heading h3 {
+  color: #56eec2;
+}
+
+.watchlist-design-page .watchlist-bullish .bucket-heading h3::before {
+  background: #56eec2;
+}
+
+.watchlist-design-page .watchlist-bearish .bucket-heading {
+  background: #261820;
+  border-top: 2px solid #ff6f7a;
+}
+
+.watchlist-design-page .watchlist-bearish .bucket-heading h3 {
+  color: #ff858d;
+}
+
+.watchlist-design-page .watchlist-bearish .bucket-heading h3::before {
+  background: #ff858d;
+}
+
+.watchlist-design-page .watchlist-chop .bucket-heading {
+  background: #22221b;
+  border-top: 2px solid #e9c76a;
+}
+
+.watchlist-design-page .watchlist-chop .bucket-heading h3 {
+  color: #e9c76a;
+}
+
+.watchlist-design-page .watchlist-chop .bucket-heading h3::before {
+  background: #e9c76a;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .bucket-heading span {
+  background: #2a3137;
+  border: 0;
+  color: #c9d3df;
+  min-width: 32px;
+  text-align: center;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .live-price-table-wrap {
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .live-price-table {
+  border-collapse: collapse;
+  display: table;
+  min-width: 0;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .live-price-table th,
+.watchlist-design-page .compact-watchlist-bucket .live-price-table td {
+  border-bottom: 1px solid #202a35;
+  color: #dce5ee;
+  display: table-cell;
+  padding: 12px 16px;
+  vertical-align: middle;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .live-price-table th {
+  background: #111820;
+  color: #76889d;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .sort-header-button {
+  gap: 0;
+  min-height: 24px;
+  padding: 0;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .sort-header-button span {
+  display: none;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .live-price-table th:first-child,
+.watchlist-design-page .compact-watchlist-bucket .live-price-table td:first-child {
+  width: 42%;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .live-price-table th:nth-child(2),
+.watchlist-design-page .compact-watchlist-bucket .live-price-table td:nth-child(2) {
+  width: 34%;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .live-price-table th:nth-child(3),
+.watchlist-design-page .compact-watchlist-bucket .live-price-table td:nth-child(3) {
+  width: 24%;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .stock-row > td:first-child strong {
+  color: #eef4fb;
+  display: block;
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .stock-row > td:first-child small {
+  color: #7f8fa2;
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 3px;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .structure-pill,
+.watchlist-design-page .compact-watchlist-bucket .direction-pill {
+  font-size: 12px;
+  min-width: 64px;
+  padding: 6px 12px;
+}
+
+.watchlist-design-page .compact-watchlist-bucket tbody tr:not(.stock-row) td {
+  color: #7f8fa2;
+  font-size: 14px;
+  height: 132px;
+  text-align: center;
+}
+
+@media (max-width: 1120px) {
+  .watchlist-design-page .watchlist-panel,
+  .watchlist-design-page .daily-list-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .watchlist-design-page .trend-price-grid {
+    grid-template-columns: 1fr;
+  }
+}

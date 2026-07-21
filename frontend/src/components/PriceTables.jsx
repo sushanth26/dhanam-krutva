@@ -77,8 +77,12 @@ export function MtfTable({
   );
 }
 
-export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
-  const columns = [
+export function PriceBucket({ title, quotes, kind, compact = false, onRemoveSymbol }) {
+  const columns = compact ? [
+    { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
+    { key: "structure", label: "Structure", value: (quote) => quote.structure_10m?.status || "Unknown" },
+    { key: "bias", label: "Bias", value: (quote) => directionalBiasForQuote(quote) },
+  ] : [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     { key: "trend", label: "Trend", value: (quote) => cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]) },
     { key: "structure", label: "BOS", value: (quote) => quote.structure_10m?.status || "Unknown" },
@@ -86,9 +90,10 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
     { key: "price", label: "Last", className: "price-col", value: (quote) => Number(quote.price) },
   ];
   const { sortedRows, sort, toggleSort } = useSortableRows(quotes, columns, { key: "symbol", direction: "asc" });
+  const showActions = Boolean(onRemoveSymbol) && !compact;
 
   return (
-    <section className="price-bucket">
+    <section className={`price-bucket ${compact ? "compact-watchlist-bucket" : ""} ${kind ? `watchlist-${kind}` : ""}`}>
       <div className="bucket-heading">
         <h3>{title}</h3>
         <span>{quotes.length}</span>
@@ -100,14 +105,14 @@ export function PriceBucket({ title, quotes, kind, onRemoveSymbol }) {
               {columns.map((column) => (
                 <SortHeader key={column.key} column={column} sort={sort} onSort={toggleSort} />
               ))}
-              {onRemoveSymbol ? <th className="action-col" aria-label="Actions"></th> : null}
+              {showActions ? <th className="action-col" aria-label="Actions"></th> : null}
             </tr>
           </thead>
           <tbody>
             {sortedRows.length ? sortedRows.map((quote) => (
-              <PriceRow key={quote.symbol} quote={quote} onRemoveSymbol={onRemoveSymbol} />
+              <PriceRow key={quote.symbol} compact={compact} quote={quote} onRemoveSymbol={showActions ? onRemoveSymbol : null} />
             )) : (
-              <tr><td colSpan={columns.length + (onRemoveSymbol ? 1 : 0)}>No {kind} stocks right now.</td></tr>
+              <tr><td colSpan={columns.length + (showActions ? 1 : 0)}>No {kind} stocks right now.</td></tr>
             )}
           </tbody>
         </table>
@@ -549,8 +554,16 @@ function NewTag({ onDismiss, symbol }) {
   );
 }
 
-function PriceRow({ quote, onRemoveSymbol }) {
+function PriceRow({ compact, quote, onRemoveSymbol }) {
   const tenMinuteStatus = cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
+  if (compact) {
+    return (
+      <BaseRow quote={quote} trend={tenMinuteStatus} showPrice={false}>
+        <td data-label="Structure"><span className={`structure-pill ${structureClass(quote.structure_10m?.status)}`}>{structureLabel(quote.structure_10m?.status)}</span></td>
+        <td data-label="Bias"><DirectionPill value={directionalBiasForQuote(quote)} /></td>
+      </BaseRow>
+    );
+  }
   return (
     <BaseRow quote={quote} trend={tenMinuteStatus} action={onRemoveSymbol ? <RemoveCell onRemove={() => onRemoveSymbol(quote.symbol)} symbol={quote.symbol} /> : null}>
       <td data-label="Trend"><CloudTag status={tenMinuteStatus} /></td>
@@ -564,12 +577,32 @@ function BaseRow({ quote, children, trend = "", action = null, className = "", d
   const rowClass = [trend ? `trend-${String(trend).toLowerCase()}` : "", className].filter(Boolean).join(" ");
   return (
     <tr className={`stock-row ${rowClass}`} data-mtf-symbol={dataMtfSymbol} id={id} onClick={onClick}>
-      <td data-label="Symbol"><strong>{quote.symbol}</strong></td>
+      <td data-label="Symbol"><strong>{quote.symbol}</strong><small>{symbolDisplayName(quote.symbol)}</small></td>
       {children}
       {showPrice ? <td className="price-cell" data-label="Last">{formatPrice(quote.price)}</td> : null}
       {action}
     </tr>
   );
+}
+
+function symbolDisplayName(symbol) {
+  const names = {
+    AAOI: "Applied Opt.",
+    APP: "AppLovin",
+    ASTS: "AST Space...",
+    BE: "Bloom Energy",
+    COHR: "Coherent",
+    CRDO: "Credo Tech...",
+    CRWV: "CoreWeave",
+    GLW: "Corning",
+    IREN: "Iris Energy",
+    MRVL: "Marvell Tech",
+    MU: "Micron",
+    NBIS: "Nebius Group",
+    RKLB: "Rocket Lab",
+    SNDK: "Sandisk",
+  };
+  return names[String(symbol || "").toUpperCase()] || "";
 }
 
 function RemoveCell({ onRemove, symbol }) {
