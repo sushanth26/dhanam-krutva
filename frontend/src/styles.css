@@ -1364,12 +1364,18 @@ select {
 .daily-list-editor form {
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
 }
 
 .daily-list-editor form button {
   min-height: 42px;
   padding: 0 14px;
+}
+
+.daily-list-editor .watchlist-clear {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
 }
 
 .risk-settings-panel {
@@ -6515,7 +6521,7 @@ select {
 .watchlist-design-page .daily-list-editor form {
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
 }
 
 .watchlist-design-page .daily-list-editor input {
@@ -6533,6 +6539,16 @@ select {
   color: #eef4fb;
   min-height: 44px;
   min-width: 78px;
+}
+
+.watchlist-design-page .daily-list-editor .watchlist-clear {
+  background: #271419;
+  border: 1px solid #8f2d3a;
+  border-radius: 8px;
+  color: #fecdd3;
+  min-height: 44px;
+  min-width: 96px;
+  white-space: nowrap;
 }
 
 .watchlist-design-page .section-heading {
@@ -6728,14 +6744,90 @@ select {
   text-align: center;
 }
 
+.watchlist-design-page .symbol-tag-bucket {
+  min-height: 180px;
+}
+
+.watchlist-design-page .symbol-tag-grid {
+  align-content: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px;
+}
+
+.watchlist-design-page .symbol-tag {
+  align-items: center;
+  background: #18212b;
+  border: 1px solid #2d3a48;
+  border-radius: 6px;
+  color: #eef4fb;
+  display: inline-flex;
+  font-size: 15px;
+  font-weight: 900;
+  justify-content: center;
+  line-height: 1;
+  min-height: 34px;
+  min-width: 64px;
+  padding: 0 12px;
+}
+
+.watchlist-design-page .watchlist-bullish .symbol-tag {
+  background: #092c27;
+  border-color: #11745f;
+  color: #7df3cf;
+}
+
+.watchlist-design-page .watchlist-bearish .symbol-tag {
+  background: #2a1118;
+  border-color: #8f2d3a;
+  color: #ffb5bd;
+}
+
+.watchlist-design-page .watchlist-chop .symbol-tag {
+  background: #262414;
+  border-color: #7f6721;
+  color: #f1d575;
+}
+
+.watchlist-design-page .symbol-tag-empty {
+  color: #7f8fa2;
+  font-size: 14px;
+  font-weight: 800;
+  padding: 24px 14px;
+  text-align: center;
+}
+
 @media (max-width: 1120px) {
   .watchlist-design-page .watchlist-panel,
   .watchlist-design-page .daily-list-editor {
     grid-template-columns: 1fr;
   }
 
+  .watchlist-design-page .daily-list-editor form {
+    grid-template-columns: minmax(180px, 1fr) auto auto;
+  }
+
   .watchlist-design-page .trend-price-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .daily-list-editor form,
+  .watchlist-design-page .daily-list-editor form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .daily-list-editor form input,
+  .watchlist-design-page .daily-list-editor form input {
+    grid-column: 1 / -1;
+  }
+
+  .daily-list-editor form button,
+  .watchlist-design-page .daily-list-editor form button {
+    min-width: 0;
+    width: 100%;
   }
 }
 

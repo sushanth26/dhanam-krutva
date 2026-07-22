@@ -23,6 +23,7 @@ const AUTO_TRADE_EXECUTIONS_KEY = "dhanam-auto-trade-executions";
 const BOS_STATE_KEY = "dhanam-bos-state";
 const MAX_AUTO_TRADE_EXECUTIONS = 500;
 const WATCHLIST_REFRESH_CONCURRENCY = 1;
+const ALL_WATCHLISTS_TAB_ID = "__all-watchlists";
 const OG_WATCHLIST_ID = "og";
 const SCANNER_ALERT_STRATEGY_ID = "pre-market-scanner";
 const SPY_SYMBOL = "SPY";
@@ -110,6 +111,40 @@ function normalizeSymbols(value) {
       seen.add(symbol);
       return true;
     });
+}
+
+function uniqueSortedSymbolsFromWatchlists(watchlists) {
+  const symbols = new Set();
+  watchlists.forEach((watchlist) => {
+    (watchlist.symbols || []).forEach((symbol) => {
+      const normalized = String(symbol || "").trim().toUpperCase();
+      if (normalized) symbols.add(normalized);
+    });
+  });
+  return [...symbols].sort(compareSymbols);
+}
+
+function uniqueSortedQuotesFromWatchlists(watchlists, quotesByTab) {
+  const quotesBySymbol = new Map();
+  watchlists.forEach((watchlist) => {
+    (quotesByTab[watchlist.id] || []).forEach((quote) => {
+      const symbol = String(quote.symbol || "").trim().toUpperCase();
+      if (symbol && !quotesBySymbol.has(symbol)) {
+        quotesBySymbol.set(symbol, { ...quote, symbol });
+      }
+    });
+  });
+  return [...quotesBySymbol.values()].sort((left, right) => compareSymbols(left.symbol, right.symbol));
+}
+
+function compareSymbols(left, right) {
+  return String(left || "").localeCompare(String(right || ""), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function fiveTwelveTrendBucket(quote) {
+  const position = emaCloudPosition(quote);
+  if (position.status !== "Inside") return "-";
+  return cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
 }
 
 function slugify(value) {
@@ -1031,17 +1066,25 @@ export default function App() {
   const watchlistTabRef = useRef(watchlistTab);
   const watchlistsRef = useRef(watchlists);
   const retainedMtfQuotesRef = useRef(retainedMtfQuotesByTab);
-  const activeWatchlist = watchlists.find((item) => item.id === watchlistTab) || watchlists[0];
-  const contextWatchlist = activeWatchlist || watchlists[0];
-  const quotes = quotesByTab[contextWatchlist?.id] || [];
-  const updatedText = updatedTextByTab[contextWatchlist?.id] || "";
+  const allWatchlistQuotes = useMemo(() => uniqueSortedQuotesFromWatchlists(watchlists, quotesByTab), [quotesByTab, watchlists]);
+  const allWatchlistSymbols = useMemo(() => uniqueSortedSymbolsFromWatchlists(watchlists), [watchlists]);
+  const allWatchlistSummary = `${allWatchlistQuotes.length} of ${allWatchlistSymbols.length} symbols loaded across ${watchlists.length} watchlists`;
+  const isAllWatchlistsTab = watchlistTab === ALL_WATCHLISTS_TAB_ID;
+  const activeWatchlist = isAllWatchlistsTab ? null : watchlists.find((item) => item.id === watchlistTab) || watchlists[0];
+  const contextWatchlist = isAllWatchlistsTab
+    ? { id: ALL_WATCHLISTS_TAB_ID, name: "All", symbols: allWatchlistSymbols, locked: true, derived: true }
+    : activeWatchlist || watchlists[0];
+  const quotes = isAllWatchlistsTab ? allWatchlistQuotes : (quotesByTab[contextWatchlist?.id] || []);
+  const updatedText = isAllWatchlistsTab ? allWatchlistSummary : (updatedTextByTab[contextWatchlist?.id] || "");
   const pageLoading = loading.shell || loading.watchlists || loading.prices || loading.notifications || loading.trades;
   const tradingAccountId = useMemo(() => marginTradingAccountId(accounts, selectedAccountId), [accounts, selectedAccountId]);
 
   const trendBuckets = useMemo(() => {
     return quotes.reduce(
       (buckets, quote) => {
-        const trend = cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
+        const trend = isAllWatchlistsTab
+          ? fiveTwelveTrendBucket(quote)
+          : cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
         if (trend === "Bullish") buckets.bullish.push(quote);
         else if (trend === "Bearish") buckets.bearish.push(quote);
         else if (trend === "Chop") buckets.chop.push(quote);
@@ -1049,7 +1092,7 @@ export default function App() {
       },
       { bullish: [], bearish: [], chop: [] },
     );
-  }, [quotes]);
+  }, [isAllWatchlistsTab, quotes]);
   const scannerWatchlists = useMemo(() => {
     const selectedIds = new Set(scannerWatchlistIds);
     return watchlists.filter((watchlist) => selectedIds.has(watchlist.id));
@@ -1821,6 +1864,32 @@ export default function App() {
     dismissNewMtfRow(tab, symbol);
   }
 
+  function clearWatchlist(id = watchlistTab) {
+    const watchlist = watchlistsRef.current.find((item) => item.id === id);
+    if (!watchlist?.symbols?.length) return;
+    const confirmed = window.confirm(`Clear all ${watchlist.symbols.length} symbols from ${watchlist.name}?`);
+    if (!confirmed) return;
+    updateWatchlists((current) => current.map((item) => (
+      item.id === id ? { ...item, symbols: [] } : item
+    )));
+    setQuotesByTab((current) => ({ ...current, [id]: [] }));
+    setUpdatedTextByTab((current) => ({ ...current, [id]: "Watchlist cleared" }));
+    setSymbolInputs((current) => ({ ...current, [id]: "" }));
+    lastMtfSignature.current = { ...lastMtfSignature.current, [id]: null };
+    lastMtfRows.current = { ...lastMtfRows.current, [id]: {} };
+    const removedSymbols = new Set((watchlist.symbols || []).map((symbol) => String(symbol || "").toUpperCase()));
+    const nextBosRows = Object.fromEntries(
+      Object.entries(lastBosRows.current || {}).filter(([symbol, row]) => (
+        !removedSymbols.has(symbol) || row.watchlistId !== id
+      )),
+    );
+    lastBosRows.current = nextBosRows;
+    saveBosState(nextBosRows);
+    setNewMtfRows((current) => Object.fromEntries(
+      Object.entries(current).filter(([rowId]) => !rowId.startsWith(`${id}:`)),
+    ));
+  }
+
   function addWatchlist() {
     const name = window.prompt("Name this tab")?.trim();
     if (!name) return;
@@ -1937,7 +2006,9 @@ export default function App() {
       }
       return updated;
     });
-    setWatchlistTab((current) => (next.some((item) => item.id === current) ? current : OG_WATCHLIST_ID));
+    setWatchlistTab((current) => (
+      current === ALL_WATCHLISTS_TAB_ID || next.some((item) => item.id === current) ? current : OG_WATCHLIST_ID
+    ));
   }
 
   async function refreshAppMarketData({ showLoading = true, force = false } = {}) {
@@ -2313,10 +2384,13 @@ export default function App() {
         ) : activePage === "watchlist" ? (
           <WatchlistWorkspace
             activeTab={watchlistTab}
+            allWatchlistCount={allWatchlistSymbols.length}
             contextWatchlist={contextWatchlist}
+            isAllWatchlistsTab={isAllWatchlistsTab}
             loading={loading.prices || loading.watchlists}
             onAddSymbols={addSymbolsToActiveWatchlist}
             onAddTab={addWatchlist}
+            onClearWatchlist={clearWatchlist}
             onDeleteTab={deleteWatchlist}
             onRemoveSymbol={removeSymbolFromWatchlist}
             onSwitchTab={switchWatchlistTab}
@@ -2494,10 +2568,13 @@ function SpyComparisonInline({ rows, spyQuote, updatedText }) {
 
 function WatchlistWorkspace({
   activeTab,
+  allWatchlistCount,
   contextWatchlist,
+  isAllWatchlistsTab,
   loading,
   onAddSymbols,
   onAddTab,
+  onClearWatchlist,
   onDeleteTab,
   onRemoveSymbol,
   onSwitchTab,
@@ -2512,8 +2589,11 @@ function WatchlistWorkspace({
     <div className="watchlist-workspace watchlist-design-page">
       <WatchlistTabs
         activeTab={activeTab}
+        allCount={allWatchlistCount}
+        isAllWatchlistsTab={isAllWatchlistsTab}
         onAddSymbols={onAddSymbols}
         onAddTab={onAddTab}
+        onClearWatchlist={onClearWatchlist}
         onDeleteTab={onDeleteTab}
         loading={loading}
         onSymbolInput={onSymbolInput}
@@ -2530,11 +2610,45 @@ function WatchlistWorkspace({
         </div>
       </div>
       <div className="trend-price-grid">
-        <PriceBucket compact title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
-        <PriceBucket compact title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
-        <PriceBucket compact title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
+        {isAllWatchlistsTab ? (
+          <>
+            <SymbolTagBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" />
+            <SymbolTagBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" />
+            <SymbolTagBucket title="Chop" quotes={trendBuckets.chop} kind="chop" />
+          </>
+        ) : (
+          <>
+            <PriceBucket compact title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
+            <PriceBucket compact title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
+            <PriceBucket compact title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
+          </>
+        )}
       </div>
     </div>
+  );
+}
+
+function SymbolTagBucket({ title, quotes, kind }) {
+  const sortedQuotes = useMemo(
+    () => [...quotes].sort((left, right) => String(left.symbol || "").localeCompare(String(right.symbol || ""), undefined, { numeric: true, sensitivity: "base" })),
+    [quotes],
+  );
+  return (
+    <section className={`price-bucket compact-watchlist-bucket symbol-tag-bucket watchlist-${kind}`}>
+      <div className="bucket-heading">
+        <h3>{title}</h3>
+        <span>{sortedQuotes.length}</span>
+      </div>
+      {sortedQuotes.length ? (
+        <div className="symbol-tag-grid" aria-label={`${title} symbols`}>
+          {sortedQuotes.map((quote) => (
+            <span key={quote.symbol} className="symbol-tag">{quote.symbol}</span>
+          ))}
+        </div>
+      ) : (
+        <div className="symbol-tag-empty">No {kind} stocks right now.</div>
+      )}
+    </section>
   );
 }
 
@@ -3058,8 +3172,11 @@ function ScannerMetric({ label, value, tone }) {
 
 function WatchlistTabs({
   activeTab,
+  allCount,
+  isAllWatchlistsTab,
   onAddSymbols,
   onAddTab,
+  onClearWatchlist,
   onDeleteTab,
   loading,
   onSwitchTab,
@@ -3072,6 +3189,17 @@ function WatchlistTabs({
   return (
     <section className="watchlist-panel" aria-label="Watchlists">
       <div className="watchlist-tabs" role="tablist" aria-label="Watchlist tabs">
+        <span className={`watchlist-tab ${isAllWatchlistsTab ? "active" : ""}`}>
+          <button
+            type="button"
+            onClick={() => onSwitchTab(ALL_WATCHLISTS_TAB_ID)}
+            role="tab"
+            aria-selected={isAllWatchlistsTab}
+          >
+            All
+            <b>{allCount}</b>
+          </button>
+        </span>
         {watchlists.map((watchlist) => (
           <span key={watchlist.id} className={`watchlist-tab ${activeTab === watchlist.id ? "active" : ""}`}>
             <button
@@ -3105,6 +3233,7 @@ function WatchlistTabs({
           +
         </button>
       </div>
+      {isAllWatchlistsTab ? null : (
       <div className="daily-list-editor">
         <label className="watchlist-auto-trade-toggle">
           <input
@@ -3123,8 +3252,17 @@ function WatchlistTabs({
             onChange={(event) => onSymbolInput(activeTab, event.target.value)}
           />
           <button type="submit" disabled={loading}>Add</button>
+          <button
+            type="button"
+            className="watchlist-clear"
+            onClick={() => onClearWatchlist(selectedWatchlist?.id)}
+            disabled={loading || !selectedWatchlist?.symbols?.length}
+          >
+            Clear all
+          </button>
         </form>
       </div>
+      )}
     </section>
   );
 }
