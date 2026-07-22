@@ -6313,11 +6313,6 @@ select {
 
 .mtf-page .compact-mtf-table th:nth-child(4),
 .mtf-page .compact-mtf-table td:nth-child(4) {
-  width: 138px;
-}
-
-.mtf-page .compact-mtf-table th:nth-child(5),
-.mtf-page .compact-mtf-table td:nth-child(5) {
   width: 78px;
 }
 
@@ -6430,7 +6425,7 @@ select {
   .mtf-shell .compact-mtf-table thead tr,
   .mtf-shell .compact-mtf-table tbody .stock-row {
     display: grid !important;
-    grid-template-columns: 128px minmax(420px, 1fr) 152px 76px 82px !important;
+    grid-template-columns: 104px minmax(520px, 1fr) 76px 82px !important;
   }
 
   .mtf-shell .compact-mtf-table tbody {
@@ -6450,7 +6445,6 @@ select {
   }
 
   .mtf-shell .compact-mtf-table .mtf-label-cell,
-  .mtf-shell .compact-mtf-table .source-time-cell,
   .mtf-shell .compact-mtf-table .signal-cell,
   .mtf-shell .compact-mtf-table .bias-cell {
     display: flex !important;
@@ -6779,27 +6773,21 @@ select {
   }
 
   .mtf-shell .compact-mtf-table .stock-row > td:first-child small {
-    font-size: 9px;
-    max-width: 70px;
+    display: none;
   }
 
   .mtf-shell .compact-mtf-table th:nth-child(1),
   .mtf-shell .compact-mtf-table td:nth-child(1) {
-    width: 150px;
+    width: 104px;
   }
 
   .mtf-shell .compact-mtf-table th:nth-child(3),
   .mtf-shell .compact-mtf-table td:nth-child(3) {
-    width: 190px;
+    width: 95px;
   }
 
   .mtf-shell .compact-mtf-table th:nth-child(4),
   .mtf-shell .compact-mtf-table td:nth-child(4) {
-    width: 95px;
-  }
-
-  .mtf-shell .compact-mtf-table th:nth-child(5),
-  .mtf-shell .compact-mtf-table td:nth-child(5) {
     width: 92px;
   }
 
@@ -6825,16 +6813,11 @@ select {
     font-size: 10px;
   }
 
-  .mtf-shell .source-time-cell .source-pill,
   .mtf-shell .new-mtf-tag,
   .mtf-shell .direction-pill {
     font-size: 10px;
     min-height: 22px;
     padding: 4px 8px;
-  }
-
-  .mtf-shell .source-time-cell time {
-    display: none;
   }
 
   .mtf-shell .bias-meter {
@@ -6986,7 +6969,7 @@ select {
 
 .mtf-page .compact-mtf-table th:nth-child(1),
 .mtf-page .compact-mtf-table td:nth-child(1) {
-  width: 190px;
+  width: 128px;
 }
 
 .mtf-page .compact-mtf-table th:nth-child(2),
@@ -6996,16 +6979,11 @@ select {
 
 .mtf-page .compact-mtf-table th:nth-child(3),
 .mtf-page .compact-mtf-table td:nth-child(3) {
-  width: 250px;
+  width: 140px;
 }
 
 .mtf-page .compact-mtf-table th:nth-child(4),
 .mtf-page .compact-mtf-table td:nth-child(4) {
-  width: 140px;
-}
-
-.mtf-page .compact-mtf-table th:nth-child(5),
-.mtf-page .compact-mtf-table td:nth-child(5) {
   width: 130px;
 }
 

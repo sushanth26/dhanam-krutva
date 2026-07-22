@@ -18,8 +18,7 @@ export function MtfTable({
 }) {
   const columns = compact ? [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
-    { key: "mtf", label: "4A-7P", value: (quote) => mtfDisplayMatches(quote.mtf_matches).map(({ label }) => label).join(" ") },
-    { key: "sourceTime", label: "Source", value: (quote) => latestMtfTime(quote) },
+    { key: "mtf", label: "4A-7P", value: (quote) => latestMtfTime(quote) },
     { key: "signal", label: "Signal", value: (quote) => tradeActionForMatches(quote.mtf_matches) || "Wait" },
     { key: "bias", label: "Bias", value: (quote) => biasSummaryForQuote(quote).label },
   ] : [
@@ -31,7 +30,7 @@ export function MtfTable({
     { key: "plan", label: "Trade plan", value: (quote) => mtfPlanSortValue(quote) },
     { key: "time", label: "Time", value: (quote) => latestMtfTime(quote) },
   ];
-  const defaultSort = compact ? { key: "sourceTime", direction: "desc" } : { key: "time", direction: "desc" };
+  const defaultSort = compact ? { key: "mtf", direction: "desc" } : { key: "time", direction: "desc" };
   const { sortedRows: sortedQuotes, sort, toggleSort } = useSortableRows(quotes, columns, defaultSort);
   const showActions = Boolean(onBuy) && !compact;
   const nowPosition = useTimelineNowPosition();
@@ -396,16 +395,12 @@ function MtfRow({ buyState, compact, focused, nowPosition, quote, showWatchlist,
         dataMtfSymbol={quote.symbol}
         id={rowId}
         quote={quote}
+        showCompanyName={false}
         showPrice={false}
         trend={tenMinuteStatus}
         onClick={dismissNew}
       >
         {mtfTags}
-        <td className="source-time-cell" data-label="Source · Time">
-          <span className="source-pill">{quote.watchlist_name || "-"}</span>
-          {quote.is_new ? <NewTag onDismiss={dismissNew} symbol={quote.symbol} /> : null}
-          <time>{triggerTime}</time>
-        </td>
         <td className="signal-cell" data-label="Signal"><DirectionPill value={tradeAction || "Wait"} /></td>
         <td className="bias-cell" data-label="Bias"><BiasMeter bias={biasSummaryForQuote(quote)} /></td>
       </BaseRow>
@@ -734,11 +729,14 @@ function PriceRow({ compact, quote, onRemoveSymbol }) {
   );
 }
 
-function BaseRow({ quote, children, trend = "", action = null, className = "", dataMtfSymbol, id, showPrice = true, onClick }) {
+function BaseRow({ quote, children, trend = "", action = null, className = "", dataMtfSymbol, id, showCompanyName = true, showPrice = true, onClick }) {
   const rowClass = [trend ? `trend-${String(trend).toLowerCase()}` : "", className].filter(Boolean).join(" ");
   return (
     <tr className={`stock-row ${rowClass}`} data-mtf-symbol={dataMtfSymbol} id={id} onClick={onClick}>
-      <td data-label="Symbol"><strong>{quote.symbol}</strong><small>{symbolDisplayName(quote.symbol)}</small></td>
+      <td data-label="Symbol">
+        <strong>{quote.symbol}</strong>
+        {showCompanyName ? <small>{symbolDisplayName(quote.symbol)}</small> : null}
+      </td>
       {children}
       {showPrice ? <td className="price-cell" data-label="Last">{formatPrice(quote.price)}</td> : null}
       {action}
