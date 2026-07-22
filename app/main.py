@@ -80,6 +80,11 @@ def index() -> FileResponse:
     return FileResponse(INDEX_FILE, headers=NO_STORE_HEADERS)
 
 
+@app.get("/sw.js", include_in_schema=False)
+def root_service_worker() -> FileResponse:
+    return FileResponse(STATIC_DIR / "sw.js", headers=NO_STORE_HEADERS)
+
+
 @app.get("/{path:path}", include_in_schema=False)
 def spa_fallback(path: str) -> FileResponse:
     return FileResponse(INDEX_FILE, headers=NO_STORE_HEADERS)

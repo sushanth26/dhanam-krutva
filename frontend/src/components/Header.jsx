@@ -308,45 +308,65 @@ function NotificationDrawer({
   onRetryNotificationCheck,
   pushEnabled,
 }) {
-  const permissionText = notificationState.permission === "granted"
-    ? "Allowed"
-    : notificationState.permission === "denied" ? "Blocked" : "Not allowed yet";
-  const closedAppText = notificationState.webPushConfigured
-    ? (notificationState.subscribed ? "Ready" : "Not subscribed")
-    : "Not configured";
+  const monitor = notificationState.monitor || {};
+  const savedDevices = Number.isFinite(Number(monitor.subscriptions))
+    ? String(monitor.subscriptions)
+    : notificationState.subscribed ? "1+" : "0";
+  const pushReady = pushEnabled && notificationState.webPushConfigured && notificationState.subscribed;
+  const pushTitle = pushReady ? "Push ready" : pushStatusTitle(notificationState, pushEnabled);
+  const pushDetail = pushReady
+    ? `Closed-app alerts are on for this device. ${savedDevices} saved device${savedDevices === "1" ? "" : "s"}.`
+    : pushStatusDetail(notificationState, pushEnabled);
+  const monitorText = monitor.paused_for_manual_retry
+    ? "Paused"
+    : monitor.running ? "Server running" : "Server waiting";
   const actionLabel = pushEnabled ? "Disable this device" : notificationLabel;
   return (
     <section className="notification-drawer" aria-label="Notifications">
       <div className="notification-drawer-header">
-        <h2>Notifications</h2>
+        <div>
+          <h2>Notifications</h2>
+          <p>Latest alerts that fired on this device or from server push.</p>
+        </div>
         <button type="button" onClick={onMarkNotificationsRead}>Mark all read</button>
       </div>
-      <div className="push-row">
-        <span aria-hidden="true">🔔</span>
-        <div className="notification-state-grid">
-          <StatusLine label="Browser permission" value={permissionText} active={notificationState.permission === "granted"} />
-          <StatusLine label="This device alerts" value={pushEnabled ? "On" : "Off"} active={pushEnabled} />
-          <StatusLine label="Closed-app push" value={closedAppText} active={notificationState.webPushConfigured && notificationState.subscribed} />
+      <div className={`push-row ${pushReady ? "ready" : "needs-action"}`}>
+        <div className="notification-status-card">
+          <span className="notification-status-icon" aria-hidden="true">🔔</span>
+          <div>
+            <strong>{pushTitle}</strong>
+            <p>{pushDetail}</p>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={pushEnabled ? onDisableNotifications : onEnableNotifications}
-          disabled={!pushEnabled && !canEnableNotifications}
-        >
-          {actionLabel}
-        </button>
-        <button type="button" className="notification-retry-button" onClick={onRetryNotificationCheck}>
-          Retry MTF check
-        </button>
+        <div className="notification-status-chips" aria-label="Notification status details">
+          <StatusChip label="Monitor" value={monitorText} active={monitor.running && !monitor.paused_for_manual_retry} />
+          <StatusChip label="Saved" value={savedDevices} active={Number(savedDevices) > 0} />
+          {monitor.last_error ? <StatusChip label="Error" value="Needs retry" active={false} /> : null}
+        </div>
+        <div className="notification-actions">
+          <button
+            type="button"
+            onClick={pushEnabled ? onDisableNotifications : onEnableNotifications}
+            disabled={!pushEnabled && !canEnableNotifications}
+          >
+            {actionLabel}
+          </button>
+          <button type="button" className="notification-retry-button" onClick={onRetryNotificationCheck}>
+            Retry check
+          </button>
+        </div>
+        {monitor.last_error ? <p className="notification-error">{monitor.last_error}</p> : null}
       </div>
       <div className="notification-list">
         {notifications.length ? notifications.map((item) => (
           <article key={item.id} className={`notification-item ${item.read ? "read" : "unread"}`}>
-            <div className="notification-icon" aria-hidden="true">!</div>
             <div>
-              <h3>{item.title}</h3>
+              <div className="notification-item-topline">
+                <span className={`notification-kind ${notificationKindClass(item.kind)}`}>{notificationKindLabel(item.kind)}</span>
+                <time dateTime={item.createdAt}>{relativeTime(item.createdAt)}</time>
+              </div>
+              <h3>{cleanNotificationTitle(item.title)}</h3>
               <p>{item.message}</p>
-              <time dateTime={item.createdAt}>{relativeTime(item.createdAt)}</time>
             </div>
           </article>
         )) : (
@@ -360,13 +380,48 @@ function NotificationDrawer({
   );
 }
 
-function StatusLine({ active, label, value }) {
+function StatusChip({ active, label, value }) {
   return (
-    <p className={`notification-status-line ${active ? "active" : ""}`}>
+    <span className={`notification-status-chip ${active ? "active" : ""}`}>
       <span>{label}</span>
       <strong>{value}</strong>
-    </p>
+    </span>
   );
+}
+
+function pushStatusTitle(state, pushEnabled) {
+  if (state.permission === "denied") return "Notifications blocked";
+  if (!state.webPushConfigured) return "Push setup missing";
+  if (!pushEnabled) return "This device is off";
+  if (!state.subscribed) return "Push not synced";
+  return "Push needs attention";
+}
+
+function pushStatusDetail(state, pushEnabled) {
+  if (state.permission === "denied") return "Allow notifications in browser or phone settings, then reopen the app.";
+  if (!state.webPushConfigured) return "Server VAPID keys are missing, so closed-app alerts cannot send yet.";
+  if (!pushEnabled) return "Enable this device to receive alerts when the app is closed.";
+  if (!state.subscribed) return "Tap enable again to save this phone for closed-app push.";
+  return "Retry the MTF check if alerts are not arriving.";
+}
+
+function notificationKindLabel(kind) {
+  const value = String(kind || "").toLowerCase();
+  if (value.includes("scanner")) return "Scanner";
+  if (value.includes("bos")) return "BOS";
+  if (value.includes("push")) return "Push";
+  if (value.includes("system")) return "System";
+  if (value.includes("trade")) return "Trade";
+  if (value.includes("spy")) return "SPY";
+  return "MTF";
+}
+
+function notificationKindClass(kind) {
+  return notificationKindLabel(kind).toLowerCase();
+}
+
+function cleanNotificationTitle(title) {
+  return String(title || "Alert").replace(/\s+/g, " ").trim();
 }
 
 function relativeTime(value) {

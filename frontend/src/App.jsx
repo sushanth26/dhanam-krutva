@@ -5,7 +5,7 @@ import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { MtfTable, PreMarketScannerTable, PriceBucket, SpyComparisonTable } from "./components/PriceTables";
 import { deleteJson, getJson, postJson } from "./lib/api";
-import { ALERT_STRATEGIES, filterQuotesByStrategy, loadStrategyState, saveStrategyState, strategyIdForMatch } from "./lib/alertStrategies";
+import { ALERT_STRATEGIES, MTF_ALERT_STRATEGIES, filterMtfTableQuotes, loadStrategyState, saveStrategyState, strategyIdForMatch } from "./lib/alertStrategies";
 import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, flattenAccounts, formatPrice, isMarketRefreshWindow, marginTradingAccountId, matchEntryPrice, notificationMatchText, mtfSignature, preferredAccountId } from "./lib/market";
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
@@ -25,7 +25,6 @@ const MAX_AUTO_TRADE_EXECUTIONS = 500;
 const WATCHLIST_REFRESH_CONCURRENCY = 1;
 const ALL_WATCHLISTS_TAB_ID = "__all-watchlists";
 const OG_WATCHLIST_ID = "og";
-const SCANNER_ALERT_STRATEGY_ID = "pre-market-scanner";
 const SPY_SYMBOL = "SPY";
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
@@ -610,12 +609,19 @@ function alertHistoryTimestamp(item) {
 }
 
 function alertHistoryDedupeKey(item) {
-  return item.id || `${item.symbol}:${item.title}:${item.body}:${item.alertedAt}`;
+  return notificationContentKey(item);
+}
+
+function notificationContentKey(item) {
+  const title = String(item?.title || item?.reason || "").trim().toUpperCase().replace(/\s+/g, " ");
+  const body = String(item?.body || item?.message || item?.reason || "").trim().toUpperCase().replace(/\s+/g, " ");
+  const symbol = String(item?.symbol || item?.targetSymbol || item?.target_symbol || "").trim().toUpperCase();
+  return `${symbol}:${title}:${body}`;
 }
 
 function alertHistoryNotification(item) {
   return {
-    id: `history-${item.id}`,
+    id: `history-${notificationContentKey(item)}`,
     title: item.title || item.reason || "Alert triggered",
     message: item.body || item.reason || item.label || "",
     kind: item.kind || "history",
@@ -646,6 +652,25 @@ function notificationHistoryEntry({ title, message, kind = "notification", symbo
     reason: message || title,
     payload,
   };
+}
+
+function normalizeBellNotifications(items) {
+  const byContent = new Map();
+  for (const item of items || []) {
+    const key = notificationContentKey(item);
+    const current = byContent.get(key);
+    if (!current || notificationTimestamp(item) > notificationTimestamp(current) || (!item.read && current.read)) {
+      byContent.set(key, item);
+    }
+  }
+  return [...byContent.values()]
+    .sort((left, right) => notificationTimestamp(right) - notificationTimestamp(left))
+    .slice(0, MAX_NOTIFICATIONS);
+}
+
+function notificationTimestamp(item) {
+  const parsed = new Date(item?.createdAt || item?.alertedAt || 0).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function autoTradeKey(tab, symbol, match) {
@@ -1019,6 +1044,7 @@ export default function App() {
     webPushConfigured: false,
     subscribed: false,
     appEnabled: true,
+    monitor: null,
   });
   const [notifications, setNotifications] = useState([]);
   const [alertLog, setAlertLog] = useState(loadAlertLog);
@@ -1135,8 +1161,8 @@ export default function App() {
           is_new: Boolean(newMtfRows[mtfRowId(watchlist.id, quote.symbol)]),
         }))
     ));
-    return filterQuotesByStrategy(matches, strategyState);
-  }, [newMtfRows, quotesByTab, strategyState, watchlists]);
+    return filterMtfTableQuotes(matches);
+  }, [newMtfRows, quotesByTab, watchlists]);
   const allMtfTouchQuotes = useMemo(() => {
     const touched = watchlists.flatMap((watchlist) => (
       (quotesByTab[watchlist.id] || [])
@@ -1149,30 +1175,26 @@ export default function App() {
           is_new: Boolean(newMtfRows[mtfRowId(watchlist.id, quote.symbol)]),
         }))
     ));
-    return filterQuotesByStrategy(touched, strategyState);
-  }, [newMtfRows, quotesByTab, strategyState, watchlists]);
+    return filterMtfTableQuotes(touched);
+  }, [newMtfRows, quotesByTab, watchlists]);
   const allMtfs = useMemo(() => quotesWithMatchStatus(allMtfQuotes, "confirmed"), [allMtfQuotes]);
   const allTouchedMtfs = useMemo(() => quotesWithMatchStatus(allMtfTouchQuotes, "confirmed"), [allMtfTouchQuotes]);
   const longMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Long"), [allMtfs]);
   const shortMtfs = useMemo(() => quotesWithTradeAction(allMtfs, "Short"), [allMtfs]);
   const enabledStrategyCount = useMemo(
-    () => Object.values(strategyState || {}).filter((enabled) => enabled !== false).length,
-    [strategyState],
+    () => MTF_ALERT_STRATEGIES.length,
+    [],
   );
   const autoLongEnabledCount = useMemo(
     () => ALERT_STRATEGIES.filter((strategy) => !strategy.scannerOnly && autoTrade.strategies?.[strategy.id]).length,
     [autoTrade.strategies],
   );
-  const unreadNotificationCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
   const bellNotifications = useMemo(() => {
     const localItems = notifications.slice(0, MAX_NOTIFICATIONS);
     const historyItems = alertLog.slice(0, MAX_NOTIFICATIONS).map(alertHistoryNotification);
-    const seen = new Set(localItems.map((item) => item.id));
-    return [
-      ...localItems,
-      ...historyItems.filter((item) => !seen.has(item.id)),
-    ].slice(0, MAX_NOTIFICATIONS);
+    return normalizeBellNotifications([...localItems, ...historyItems]);
   }, [alertLog, notifications]);
+  const unreadNotificationCount = useMemo(() => bellNotifications.filter((item) => !item.read).length, [bellNotifications]);
 
   async function refreshShell() {
     setLoadingKey("shell", true);
@@ -1261,7 +1283,6 @@ export default function App() {
   }
 
   async function loadAlertHistory({ showLoading = false } = {}) {
-    if (!accountsConfirmedRef.current) return;
     if (showLoading) setLoadingKey("notifications", true);
     try {
       const payload = await getJson("/api/notifications/history?limit=500");
@@ -1413,14 +1434,13 @@ export default function App() {
       return;
     }
     const nextQuotes = payload.quotes || [];
-    const currentMtfs = filterQuotesByStrategy(alertableMtfQuotes(nextQuotes), strategyStateRef.current);
+    const currentMtfs = filterMtfTableQuotes(alertableMtfQuotes(nextQuotes));
     const updatedAt = new Date().toLocaleTimeString();
     retainedMtfQuotesRef.current = {};
     setRetainedMtfQuotesByTab({});
     clearRetainedMtfQuotes();
     setQuotesForTab(watchlist.id, nextQuotes);
     setUpdatedTextForTab(watchlist.id, `Updated ${updatedAt} from ${payload.source || "webull"}`);
-    notifyBosUpdate(watchlist.id, watchlist.name, nextQuotes);
     notifyMtfUpdate(watchlist.id, currentMtfs);
 
     if (payload.errors?.length) {
@@ -1448,7 +1468,6 @@ export default function App() {
     const [nextSpyQuote] = payload.quotes || [];
     setSpyQuote(nextSpyQuote || null);
     setSpyUpdatedText(`SPY updated ${new Date().toLocaleTimeString()} from ${payload.source || "webull"}`);
-    notifySpyCurlUpdate(nextSpyQuote);
   }
 
   function livePriceErrorText(payload) {
@@ -1601,22 +1620,8 @@ export default function App() {
 
   function notifyScannerUpdate(nextRows) {
     const nextByKey = Object.fromEntries(nextRows.map((row) => [scannerRowKey(row), row]));
-    if (strategyStateRef.current?.[SCANNER_ALERT_STRATEGY_ID] === false) {
-      lastScannerRows.current = nextByKey;
-      return;
-    }
-    const previousByKey = lastScannerRows.current;
     lastScannerRows.current = nextByKey;
-    if (previousByKey === null) {
-      return;
-    }
-
-    const enteredRows = nextRows.filter((row) => !previousByKey[scannerRowKey(row)]);
-    const exitedRows = Object.values(previousByKey).filter((row) => !nextByKey[scannerRowKey(row)]);
-    if (!enteredRows.length && !exitedRows.length) return;
-
-    const notification = scannerNotificationDetails(enteredRows, exitedRows);
-    publishScannerNotification(notification);
+    return;
   }
 
   function publishScannerNotification(notification) {
@@ -1676,17 +1681,21 @@ export default function App() {
   }
 
   function addNotification({ title, message, kind = "update" }) {
-    setNotifications((current) => [
-      {
+    setNotifications((current) => {
+      const nextItem = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         title,
         message,
         kind,
         read: false,
         createdAt: new Date().toISOString(),
-      },
-      ...current,
-    ].slice(0, MAX_NOTIFICATIONS));
+      };
+      const nextKey = notificationContentKey(nextItem);
+      return [
+        nextItem,
+        ...current.filter((item) => notificationContentKey(item) !== nextKey),
+      ].slice(0, MAX_NOTIFICATIONS);
+    });
   }
 
   function markNotificationsRead() {
@@ -2078,7 +2087,7 @@ export default function App() {
   async function enableAppNotifications() {
     setLoadingKey("notifications", true);
     try {
-      const nextState = await enableNotifications(strategyState);
+      const nextState = await enableNotifications();
       setNotificationState(nextState);
       if (nextState.permission === "granted") {
         addNotification({
@@ -2167,10 +2176,11 @@ export default function App() {
   }
 
   async function confirmAccountsAndStart() {
+    loadAlertHistory();
     const confirmed = await refreshShell();
     if (!confirmed) return;
     loadAlertHistory();
-    loadNotificationState(strategyStateRef.current)
+    loadNotificationState()
       .then(setNotificationState)
       .catch(() => {
         setNotificationState((current) => ({ ...current, supported: false }));
@@ -2195,7 +2205,7 @@ export default function App() {
     if (!("serviceWorker" in navigator)) return undefined;
     function handleServiceWorkerMessage(event) {
       if (event.data?.type !== "MTF_PUSH_UPDATE") return;
-      const targetSymbol = event.data.payload?.targetSymbol;
+      const targetSymbol = event.data.payload?.targetSymbol || event.data.payload?.target_symbol;
       if (targetSymbol) focusMtfSymbol(targetSymbol);
       addNotification({
         title: event.data.payload?.title || "Push alert received",
@@ -2297,8 +2307,8 @@ export default function App() {
 
   useEffect(() => {
     if (!accountsConfirmedRef.current || !notificationState.appEnabled) return;
-    syncNotificationPreferences(strategyState).catch(() => {});
-  }, [notificationState.appEnabled, strategyState]);
+    syncNotificationPreferences().catch(() => {});
+  }, [notificationState.appEnabled]);
 
   useEffect(() => {
     if (accountsConfirmedRef.current && activePage === "trades") refreshAutoTrades();
@@ -3063,7 +3073,7 @@ function SettingsMenu({
         <div>
           <h2>Settings</h2>
           <p className="muted">
-            {enabledStrategyCount} alert strategies active · {autoTrade.enabled ? "Auto Long on" : "Auto Long off"} · {autoLongEnabledCount} auto strategies
+            MTF table alerts automatic · {autoTrade.enabled ? "Auto Long on" : "Auto Long off"} · {autoLongEnabledCount} auto strategies
           </p>
         </div>
       </div>
@@ -3079,7 +3089,7 @@ function SettingsMenu({
         disabled={disabled}
         onChange={onAutoTradeChange}
       />
-      <AlertStrategies strategyState={strategyState} onToggleStrategy={onToggleStrategy} />
+      <AlertStrategies />
     </div>
   );
 }

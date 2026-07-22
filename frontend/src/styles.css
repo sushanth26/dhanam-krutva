@@ -883,6 +883,28 @@ h3 {
   gap: 8px;
 }
 
+.mtf-alert-rule {
+  background: #101c2b;
+  border: 1px solid #263548;
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+}
+
+.mtf-alert-rule strong {
+  color: #f8fafc;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.mtf-alert-rule span {
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
 .strategy-toggle {
   align-items: center;
   border: 1px solid #dbe2d8;
@@ -4879,6 +4901,270 @@ select {
   }
 }
 
+/* Clean notification drawer */
+.notification-drawer {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  max-height: min(680px, calc(100vh - 92px));
+  overflow: hidden;
+}
+
+.notification-drawer-header {
+  align-items: start;
+  border-bottom: 1px solid #1f2a37;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 14px 16px;
+}
+
+.notification-drawer-header h2 {
+  color: #f8fafc;
+  font-size: 18px;
+  letter-spacing: 0;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.notification-drawer-header p {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin: 4px 0 0;
+}
+
+.notification-drawer-header button {
+  background: transparent;
+  color: #9bd8b9;
+  flex: 0 0 auto;
+  font-size: 12px;
+  min-height: 28px;
+  padding: 0;
+}
+
+.push-row {
+  align-items: stretch;
+  background: #0f1722;
+  border-bottom: 1px solid #1f2a37;
+  border-top: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+  padding: 12px 16px;
+}
+
+.push-row.ready {
+  border-left: 3px solid #22c55e;
+}
+
+.push-row.needs-action {
+  border-left: 3px solid #f59e0b;
+}
+
+.notification-status-card {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 34px 1fr;
+}
+
+.notification-status-icon {
+  align-items: center;
+  background: #111d2b;
+  border: 1px solid #263548;
+  border-radius: 999px;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.notification-status-card strong {
+  color: #f8fafc;
+  display: block;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.notification-status-card p,
+.notification-error {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin: 4px 0 0;
+}
+
+.notification-status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.notification-status-chip {
+  align-items: center;
+  background: #0b121a;
+  border: 1px solid #263548;
+  border-radius: 999px;
+  color: #94a3b8;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 5px;
+  min-height: 24px;
+  padding: 0 9px;
+}
+
+.notification-status-chip strong {
+  color: #e2e8f0;
+  font-size: 11px;
+}
+
+.notification-status-chip.active {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.45);
+  color: #86efac;
+}
+
+.notification-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.notification-actions button {
+  background: #142033;
+  border: 1px solid #2b3a50;
+  color: #e6edf3;
+  font-size: 12px;
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.notification-actions button:hover {
+  background: #1a2a42;
+}
+
+.notification-error {
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  border-radius: 6px;
+  color: #fecaca;
+  padding: 8px 10px;
+}
+
+.notification-list {
+  max-height: none;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.notification-item {
+  border-bottom: 1px solid #162334;
+  display: block;
+  padding: 14px 16px;
+}
+
+.notification-item.unread {
+  background: #101c2b;
+  border-left: 3px solid #22c55e;
+}
+
+.notification-item.read {
+  border-left: 3px solid transparent;
+}
+
+.notification-item-topline {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+
+.notification-kind {
+  background: #1d2a3a;
+  border: 1px solid #334155;
+  border-radius: 999px;
+  color: #cbd5e1;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  padding: 5px 7px;
+  text-transform: uppercase;
+}
+
+.notification-kind.scanner {
+  background: rgba(59, 130, 246, 0.14);
+  border-color: rgba(59, 130, 246, 0.42);
+  color: #bfdbfe;
+}
+
+.notification-kind.mtf,
+.notification-kind.push {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.42);
+  color: #bbf7d0;
+}
+
+.notification-kind.bos {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.42);
+  color: #fde68a;
+}
+
+.notification-kind.system {
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.34);
+  color: #cbd5e1;
+}
+
+.notification-item h3 {
+  color: #f8fafc;
+  font-size: 15px;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.notification-item p {
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.38;
+  margin: 5px 0 0;
+}
+
+.notification-item time {
+  color: #64748b;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 900;
+  margin: 0;
+}
+
+.notification-empty {
+  padding: 22px 16px;
+}
+
+@media (max-width: 760px) {
+  .notification-drawer {
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .notification-drawer-header {
+    padding: 13px 14px;
+  }
+
+  .notification-drawer-header p {
+    display: none;
+  }
+
+  .push-row {
+    padding: 11px 14px;
+  }
+}
+
 /* Compact home workspace */
 .market-command-center {
   grid-template-columns: minmax(0, 1fr);
@@ -6315,6 +6601,42 @@ select {
   background: #0d4b3f;
   border-color: #117c68;
   color: #70f0ca;
+}
+
+.mtf-touch-pill.mtf-hourly {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.46);
+  color: #fed7aa;
+}
+
+.mtf-touch-pill.mtf-hourly b {
+  background: rgba(245, 158, 11, 0.24);
+  border-color: rgba(245, 158, 11, 0.62);
+  color: #fdba74;
+}
+
+.mtf-touch-pill.mtf-daily-fast {
+  background: rgba(234, 179, 8, 0.14);
+  border-color: rgba(234, 179, 8, 0.48);
+  color: #fef08a;
+}
+
+.mtf-touch-pill.mtf-daily-fast b {
+  background: rgba(234, 179, 8, 0.23);
+  border-color: rgba(234, 179, 8, 0.62);
+  color: #fde047;
+}
+
+.mtf-touch-pill.mtf-daily-slow {
+  background: rgba(59, 130, 246, 0.14);
+  border-color: rgba(59, 130, 246, 0.48);
+  color: #bfdbfe;
+}
+
+.mtf-touch-pill.mtf-daily-slow b {
+  background: rgba(59, 130, 246, 0.24);
+  border-color: rgba(59, 130, 246, 0.64);
+  color: #93c5fd;
 }
 
 .mtf-page .source-time-cell {

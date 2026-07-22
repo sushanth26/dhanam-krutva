@@ -25,6 +25,8 @@ DEFAULT_ALERT_STRATEGIES = {
     "ten-minute-bounce-daily-slow": True,
 }
 
+MTF_TABLE_ALERT_LABELS = {"Hourly 34/50", "Daily 20/21", "Daily 50/55"}
+
 
 class PushSubscriptionStore:
     def __init__(self, path: Path):
@@ -112,6 +114,11 @@ class MtfPushMonitor:
         self.last_bos_state: dict[str, dict[str, Any]] | None = None
         self.paused_for_manual_retry = False
         self.last_error: str | None = None
+        self.last_checked_at: str | None = None
+        self.last_success_at: str | None = None
+        self.last_error_at: str | None = None
+        self.last_notification_at: str | None = None
+        self.last_send_result: dict[str, int] = {"sent": 0, "removed": 0, "skipped": 0, "failed": 0}
 
     def start(self) -> None:
         if self.task or not self.settings.mtf_push_enabled or not self.settings.push_configured:
@@ -147,49 +154,68 @@ class MtfPushMonitor:
         if manual:
             self.paused_for_manual_retry = False
             self.last_error = None
+            self.last_error_at = None
+        self.last_checked_at = utc_now()
         try:
             quotes = build_monitored_quotes(self.settings)
-            mtf_quotes = confirmed_mtf_quotes(quotes)
+            mtf_quotes = mtf_table_quotes(confirmed_mtf_quotes(quotes))
             signature = mtf_signature(mtf_quotes)
             new_mtf_quotes, next_mtf_touch_keys = new_mtf_touch_quotes(self.last_mtf_touch_keys, mtf_quotes)
             self.last_signature = signature
             self.last_mtf_touch_keys = next_mtf_touch_keys
-            next_bos_state, bos_changes = bos_state_changes(self.last_bos_state, quotes)
+            next_bos_state, _bos_changes = bos_state_changes(self.last_bos_state, quotes)
             self.last_bos_state = next_bos_state
             self.last_error = None
+            self.last_error_at = None
+            self.last_success_at = utc_now()
             notifications = []
             if new_mtf_quotes:
                 notifications.append(mtf_notification_payload(new_mtf_quotes))
-            if bos_changes:
-                notifications.append(bos_notification_payload(bos_changes))
             if not notifications:
                 return None
 
             history = AlertHistoryStore(self.settings.alert_history_file)
             for notification in notifications:
                 history.append(alert_history_entries_from_push(notification))
-                self.send(notification)
+                self.last_send_result = self.send(notification)
+            self.last_notification_at = utc_now()
             return notifications[0] if len(notifications) == 1 else {"ok": True, "notifications": notifications}
         except Exception as exc:
             self.paused_for_manual_retry = True
             self.last_error = str(exc)
+            self.last_error_at = utc_now()
             raise
 
     def status(self) -> dict[str, Any]:
+        subscriptions = self.store.all()
         return {
+            "running": bool(self.task and not self.task.done()),
+            "web_push_configured": bool(getattr(self.settings, "push_configured", False)),
+            "push_polling_enabled": bool(getattr(self.settings, "mtf_push_enabled", True)),
+            "subscriptions": len(subscriptions),
+            "market_window_open": is_market_refresh_window(getattr(self.settings, "mtf_push_timezone", "America/Chicago")),
+            "poll_seconds": getattr(self.settings, "mtf_push_poll_seconds", 60),
             "paused_for_manual_retry": self.paused_for_manual_retry,
             "last_error": self.last_error,
+            "last_checked_at": self.last_checked_at,
+            "last_success_at": self.last_success_at,
+            "last_error_at": self.last_error_at,
+            "last_notification_at": self.last_notification_at,
+            "last_send_result": self.last_send_result,
         }
 
     def send(self, payload: dict[str, Any]) -> dict[str, int]:
         if not self.settings.push_configured:
-            return {"sent": 0, "removed": 0}
+            return {"sent": 0, "removed": 0, "skipped": 0, "failed": 0}
 
         sent = 0
         removed = 0
+        skipped = 0
+        failed = 0
         for subscription in self.store.all():
             subscription_payload = filter_payload_by_strategies(payload, subscription.get("alert_strategies", {}))
             if not subscription_payload:
+                skipped += 1
                 continue
             try:
                 webpush(
@@ -203,7 +229,13 @@ class MtfPushMonitor:
                 if exc.response is not None and exc.response.status_code in {404, 410}:
                     self.store.remove(subscription.get("endpoint", ""))
                     removed += 1
-        return {"sent": sent, "removed": removed}
+                else:
+                    failed += 1
+        return {"sent": sent, "removed": removed, "skipped": skipped, "failed": failed}
+
+
+def utc_now() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def is_market_refresh_window(timezone_name: str, now: datetime | None = None) -> bool:
@@ -379,6 +411,19 @@ def confirmed_mtf_quotes(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
             match
             for match in quote.get("mtf_matches", [])
             if match.get("status", "confirmed") == "confirmed"
+        ]
+        if matches:
+            output.append({**quote, "mtf_matches": matches})
+    return output
+
+
+def mtf_table_quotes(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    output = []
+    for quote in quotes:
+        matches = [
+            match
+            for match in quote.get("mtf_matches", [])
+            if str(match.get("label") or "") in MTF_TABLE_ALERT_LABELS
         ]
         if matches:
             output.append({**quote, "mtf_matches": matches})
@@ -660,51 +705,4 @@ def normalize_strategy_state(strategy_state: dict[str, Any] | None) -> dict[str,
 
 
 def filter_payload_by_strategies(payload: dict[str, Any], strategy_state: dict[str, Any] | None) -> dict[str, Any] | None:
-    if "matches" not in payload:
-        return payload
-
-    strategies = strategy_state if isinstance(strategy_state, dict) else {}
-    filtered_matches = []
-    for item in payload.get("matches", []):
-        labels = []
-        details = []
-        detail_by_label = {
-            str(detail.get("label") or ""): detail
-            for detail in item.get("details", [])
-            if isinstance(detail, dict)
-        }
-        for label in item.get("labels", []):
-            label_text = str(label or "")
-            if label_text and strategies.get(strategy_id_for_label(label_text)) is True:
-                labels.append(label_text)
-                if label_text in detail_by_label:
-                    details.append(detail_by_label[label_text])
-        if labels:
-            filtered_matches.append({"symbol": item.get("symbol"), "labels": labels, "details": details})
-
-    if not filtered_matches:
-        return None
-
-    notification = mtf_notification_details([
-        {
-            "symbol": item.get("symbol"),
-            "mtf_matches": [
-                item.get("details", [])[index]
-                if index < len(item.get("details", []))
-                else {"label": label}
-                for index, label in enumerate(item.get("labels", []))
-            ],
-        }
-        for item in filtered_matches
-    ])
-    return {
-        **payload,
-        "title": notification["title"],
-        "body": notification["body"],
-        "badgeCount": len(filtered_matches),
-        "badge_count": len(filtered_matches),
-        "tag": notification["tag"],
-        "targetSymbol": notification["target_symbol"],
-        "url": notification["url"],
-        "matches": filtered_matches,
-    }
+    return payload

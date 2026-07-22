@@ -25,13 +25,21 @@ class NotificationHistoryPayload(BaseModel):
 
 
 @router.get("/config")
-def notification_config():
+def notification_config(request: Request):
     settings = get_settings()
+    monitor = getattr(request.app.state, "mtf_push_monitor", None)
+    status = monitor.status() if monitor else {
+        "running": False,
+        "subscriptions": len(PushSubscriptionStore(settings.push_subscription_file).all()),
+        "paused_for_manual_retry": False,
+        "last_error": None,
+    }
     return {
         "web_push_configured": settings.push_configured,
         "push_polling_enabled": settings.mtf_push_enabled,
         "vapid_public_key": settings.vapid_public_key,
         "poll_seconds": settings.mtf_push_poll_seconds,
+        "monitor": status,
     }
 
 
@@ -49,7 +57,7 @@ def check_notifications(request: Request):
 
 
 @router.post("/subscribe")
-def subscribe(payload: PushSubscriptionPayload):
+def subscribe(payload: PushSubscriptionPayload, request: Request):
     endpoint = payload.subscription.get("endpoint")
     keys = payload.subscription.get("keys")
     if not endpoint or not isinstance(keys, dict):
@@ -61,6 +69,10 @@ def subscribe(payload: PushSubscriptionPayload):
         "alert_strategies": payload.alert_strategies or {},
     }
     total = PushSubscriptionStore(settings.push_subscription_file).upsert(subscription)
+    monitor = getattr(request.app.state, "mtf_push_monitor", None)
+    if monitor is not None:
+        monitor.store = PushSubscriptionStore(settings.push_subscription_file)
+        monitor.start()
     return {"ok": True, "subscriptions": total}
 
 

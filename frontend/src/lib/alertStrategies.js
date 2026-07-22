@@ -64,36 +64,38 @@ export const ALERT_STRATEGIES = [
   },
 ];
 
+const MTF_TABLE_ALERT_LABELS = new Set(["Hourly 34/50", "Daily 20/21", "Daily 50/55"]);
+
+export const MTF_ALERT_STRATEGIES = ALERT_STRATEGIES.filter((strategy) => (
+  !strategy.scannerOnly && MTF_TABLE_ALERT_LABELS.has(strategy.name)
+));
+
 export function defaultStrategyState() {
-  return Object.fromEntries(ALERT_STRATEGIES.map((strategy) => [strategy.id, true]));
+  return Object.fromEntries(ALERT_STRATEGIES.map((strategy) => [strategy.id, !strategy.scannerOnly]));
+}
+
+function automaticMtfStrategyState() {
+  return { ...defaultStrategyState(), ...Object.fromEntries(MTF_ALERT_STRATEGIES.map((strategy) => [strategy.id, true])) };
 }
 
 export function loadStrategyState() {
-  const defaults = defaultStrategyState();
   try {
     const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "{}");
     const legacyBounce = saved["ten-minute-bounce"] ?? saved["ten-minute-touch"];
     if (legacyBounce !== undefined) {
-      for (const key of [
-        "ten-minute-bounce-10m",
-        "ten-minute-bounce-hourly",
-        "ten-minute-bounce-daily-fast",
-        "ten-minute-bounce-daily-slow",
-      ]) {
-        if (saved[key] === undefined) saved[key] = legacyBounce;
-      }
       delete saved["ten-minute-bounce"];
       delete saved["ten-minute-touch"];
-      saveStrategyState({ ...defaults, ...saved });
     }
-    return { ...defaults, ...saved };
+    const next = { ...saved, ...automaticMtfStrategyState(), "pre-market-scanner": false };
+    saveStrategyState(next);
+    return next;
   } catch {
-    return defaults;
+    return automaticMtfStrategyState();
   }
 }
 
 export function saveStrategyState(state) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, ...automaticMtfStrategyState(), "pre-market-scanner": false }));
 }
 
 export function strategyIdForMatch(match) {
@@ -107,5 +109,14 @@ export function filterMatchesByStrategy(matches = [], strategyState = defaultStr
 export function filterQuotesByStrategy(quotes = [], strategyState = defaultStrategyState()) {
   return quotes
     .map((quote) => ({ ...quote, mtf_matches: filterMatchesByStrategy(quote.mtf_matches, strategyState) }))
+    .filter((quote) => quote.mtf_matches.length);
+}
+
+export function filterMtfTableQuotes(quotes = []) {
+  return quotes
+    .map((quote) => ({
+      ...quote,
+      mtf_matches: (quote.mtf_matches || []).filter((match) => MTF_TABLE_ALERT_LABELS.has(String(match?.label || ""))),
+    }))
     .filter((quote) => quote.mtf_matches.length);
 }

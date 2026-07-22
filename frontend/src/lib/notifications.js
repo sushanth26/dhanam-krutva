@@ -1,7 +1,8 @@
 import { getJson, postJson } from "./api";
 
-const SERVICE_WORKER_URL = "/static/sw.js";
+const SERVICE_WORKER_URL = "/sw.js";
 const NOTIFICATIONS_ENABLED_KEY = "dhanam-web-notifications-enabled";
+let registrationPromise = null;
 
 export function webNotificationsEnabled() {
   return window.localStorage.getItem(NOTIFICATIONS_ENABLED_KEY) === "true";
@@ -34,13 +35,15 @@ export async function loadNotificationState(alertStrategies = {}) {
   const subscription = appEnabled && support.push
     ? await syncExistingSubscription(registration, config, Notification.permission, alertStrategies)
     : null;
+  const latestConfig = subscription ? await refreshNotificationConfig(config) : config;
   return {
     supported: true,
     permission: Notification.permission,
     appEnabled,
-    webPushConfigured: Boolean(config.web_push_configured && config.vapid_public_key),
-    vapidPublicKey: config.vapid_public_key,
+    webPushConfigured: Boolean(latestConfig.web_push_configured && latestConfig.vapid_public_key),
+    vapidPublicKey: latestConfig.vapid_public_key,
     subscribed: Boolean(subscription),
+    monitor: latestConfig.monitor || null,
   };
 }
 
@@ -60,13 +63,15 @@ export async function enableNotifications(alertStrategies = {}) {
   const config = await getJson("/api/notifications/config");
   const registration = await registerNotificationWorker();
   const subscription = support.push ? await ensureServerSubscription(registration, config, null, alertStrategies) : null;
+  const latestConfig = subscription ? await refreshNotificationConfig(config) : config;
 
   return {
     supported: true,
     permission,
     appEnabled: true,
-    webPushConfigured: Boolean(config.web_push_configured && config.vapid_public_key),
+    webPushConfigured: Boolean(latestConfig.web_push_configured && latestConfig.vapid_public_key),
     subscribed: Boolean(subscription),
+    monitor: latestConfig.monitor || null,
   };
 }
 
@@ -139,12 +144,40 @@ export async function syncNotificationPreferences(alertStrategies = {}) {
 }
 
 async function registerNotificationWorker() {
-  const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, {
-    scope: "/static/",
-    updateViaCache: "none",
-  });
-  registration.update().catch(() => {});
-  return registration;
+  if (!registrationPromise) {
+    registrationPromise = (async () => {
+      await cleanupLegacyStaticWorker();
+      const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, {
+        scope: "/",
+        updateViaCache: "none",
+      });
+      registration.update().catch(() => {});
+      return registration;
+    })();
+  }
+  return registrationPromise;
+}
+
+async function refreshNotificationConfig(fallback) {
+  try {
+    return await getJson("/api/notifications/config");
+  } catch {
+    return fallback;
+  }
+}
+
+async function cleanupLegacyStaticWorker() {
+  if (!navigator.serviceWorker.getRegistrations) return;
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(registrations.map(async (registration) => {
+    if (!registration.scope.endsWith("/static/")) return;
+    const subscription = await registration.pushManager?.getSubscription?.();
+    if (subscription) {
+      await postJson("/api/notifications/unsubscribe", { endpoint: subscription.endpoint }).catch(() => {});
+      await subscription.unsubscribe().catch(() => {});
+    }
+    await registration.unregister().catch(() => {});
+  }));
 }
 
 async function syncExistingSubscription(registration, config, permission, alertStrategies = {}) {
