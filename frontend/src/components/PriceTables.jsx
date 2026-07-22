@@ -18,8 +18,8 @@ export function MtfTable({
 }) {
   const columns = compact ? [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
-    { key: "mtf", label: "MTF", value: (quote) => mtfDisplayMatches(quote.mtf_matches).map(({ label }) => label).join(" ") },
-    { key: "sourceTime", label: "Source · Time", value: (quote) => latestMtfTime(quote) },
+    { key: "mtf", label: "4A-7P", value: (quote) => mtfDisplayMatches(quote.mtf_matches).map(({ label }) => label).join(" ") },
+    { key: "sourceTime", label: "Source", value: (quote) => latestMtfTime(quote) },
     { key: "signal", label: "Signal", value: (quote) => tradeActionForMatches(quote.mtf_matches) || "Wait" },
     { key: "bias", label: "Bias", value: (quote) => biasSummaryForQuote(quote).label },
   ] : [
@@ -459,14 +459,19 @@ function MtfTouchPill({ label, match }) {
 }
 
 function MtfTimeline({ matches, nowPosition }) {
+  const [activeEvent, setActiveEvent] = useState("");
   const events = mtfDisplayMatches(matches)
-    .map(({ label, match }) => ({
-      label,
-      match,
-      position: mtfTimelinePosition(match?.candle_time),
-      time: mtfTouchTime(match),
-      tone: mtfPillTone(label),
-    }))
+    .map(({ label, match }) => {
+      const time = mtfTouchTime(match);
+      return {
+        id: `${label}-${match?.candle_time || time}`,
+        label,
+        match,
+        position: mtfTimelinePosition(match?.candle_time),
+        time,
+        tone: mtfPillTone(label),
+      };
+    })
     .filter((event) => event.position != null);
   const timelineStyle = nowPosition == null ? undefined : { "--now-left": `${nowPosition}%` };
   return (
@@ -474,19 +479,27 @@ function MtfTimeline({ matches, nowPosition }) {
       <span className="mtf-session-band premarket" aria-hidden="true"></span>
       <span className="mtf-session-band regular" aria-hidden="true"></span>
       <span className="mtf-session-band postmarket" aria-hidden="true"></span>
+      <span className="mtf-session-divider open" aria-hidden="true"></span>
+      <span className="mtf-session-divider close" aria-hidden="true"></span>
       {events.map((event) => (
         <button
-          key={`${event.label}-${event.match?.candle_time || event.position}`}
+          key={event.id}
           type="button"
-          className={`mtf-event-bar ${event.tone}`}
+          className={`mtf-event-bar ${event.tone} ${activeEvent === event.id ? "active" : ""}`}
           style={{ "--event-left": `${event.position}%` }}
           title={`${event.label} ${event.time}`}
           aria-label={`${event.label} touched at ${event.time}`}
-          onClick={(clickEvent) => clickEvent.stopPropagation()}
+          onClick={(clickEvent) => {
+            clickEvent.stopPropagation();
+            setActiveEvent((current) => current === event.id ? "" : event.id);
+          }}
+          onBlur={() => setActiveEvent("")}
           onPointerDown={(pointerEvent) => pointerEvent.stopPropagation()}
         >
-          <span>{event.label}</span>
-          <time>{event.time}</time>
+          <span className="mtf-event-tooltip">
+            <b>{event.label}</b>
+            <time>{event.time}</time>
+          </span>
         </button>
       ))}
       <span className="mtf-live-marker" aria-hidden="true"></span>
