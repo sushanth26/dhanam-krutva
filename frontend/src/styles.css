@@ -6572,6 +6572,63 @@ select {
   gap: 8px;
 }
 
+.mtf-page .compact-mtf-table tr.trend-bullish td,
+.global-mtf-panel .global-mtf-table tr.trend-bullish td {
+  background: #07352b;
+}
+
+.mtf-page .compact-mtf-table tr.trend-bearish td,
+.global-mtf-panel .global-mtf-table tr.trend-bearish td {
+  background: #3a1119;
+}
+
+.mtf-page .compact-mtf-table tr.trend-chop td,
+.global-mtf-panel .global-mtf-table tr.trend-chop td {
+  background: #ffe60091;
+  color: #161800;
+}
+
+.global-mtf-panel .global-mtf-table tr.trend-bullish,
+.global-mtf-panel .global-mtf-table tr.trend-bearish,
+.global-mtf-panel .global-mtf-table tr.trend-chop {
+  border-radius: 8px;
+  padding-left: 8px;
+}
+
+.global-mtf-panel .global-mtf-table tr.trend-bullish {
+  background: #07352b;
+  box-shadow: inset 5px 0 0 #16c784;
+}
+
+.global-mtf-panel .global-mtf-table tr.trend-bearish {
+  background: #3a1119;
+  box-shadow: inset 5px 0 0 #ff5c72;
+}
+
+.global-mtf-panel .global-mtf-table tr.trend-chop {
+  background: #ffe60091;
+  box-shadow: inset 5px 0 0 #ff9f1c;
+}
+
+.mtf-page .compact-mtf-table tr.trend-bullish td:first-child {
+  box-shadow: inset 5px 0 0 #16c784;
+}
+
+.mtf-page .compact-mtf-table tr.trend-bearish td:first-child {
+  box-shadow: inset 5px 0 0 #ff5c72;
+}
+
+.mtf-page .compact-mtf-table tr.trend-chop td:first-child {
+  box-shadow: inset 5px 0 0 #ff9f1c;
+}
+
+.mtf-page .compact-mtf-table tr.trend-chop td:first-child strong,
+.global-mtf-panel .global-mtf-table tr.trend-chop td:first-child strong,
+.mtf-page .compact-mtf-table tr.trend-chop .watchlist-cell,
+.mtf-page .compact-mtf-table tr.trend-chop .trigger-time {
+  color: #161800;
+}
+
 .mtf-touch-pill {
   align-items: center;
   background: #1a2129;
@@ -6611,39 +6668,39 @@ select {
 }
 
 .mtf-touch-pill.mtf-hourly {
-  background: rgba(245, 158, 11, 0.14);
-  border-color: rgba(245, 158, 11, 0.46);
-  color: #fed7aa;
+  background: #ff9f1c;
+  border-color: #ffd166;
+  color: #1f1300;
 }
 
 .mtf-touch-pill.mtf-hourly b {
-  background: rgba(245, 158, 11, 0.24);
-  border-color: rgba(245, 158, 11, 0.62);
-  color: #fdba74;
+  background: #fff3c4;
+  border-color: rgba(31, 19, 0, 0.36);
+  color: #1f1300;
 }
 
 .mtf-touch-pill.mtf-daily-fast {
-  background: rgba(234, 179, 8, 0.14);
-  border-color: rgba(234, 179, 8, 0.48);
-  color: #fef08a;
+  background: #fff04a;
+  border-color: #fff9a6;
+  color: #171300;
 }
 
 .mtf-touch-pill.mtf-daily-fast b {
-  background: rgba(234, 179, 8, 0.23);
-  border-color: rgba(234, 179, 8, 0.62);
-  color: #fde047;
+  background: #171300;
+  border-color: rgba(255, 249, 166, 0.7);
+  color: #fff9a6;
 }
 
 .mtf-touch-pill.mtf-daily-slow {
-  background: rgba(59, 130, 246, 0.14);
-  border-color: rgba(59, 130, 246, 0.48);
-  color: #bfdbfe;
+  background: #38bdf8;
+  border-color: #bae6fd;
+  color: #001926;
 }
 
 .mtf-touch-pill.mtf-daily-slow b {
-  background: rgba(59, 130, 246, 0.24);
-  border-color: rgba(59, 130, 246, 0.64);
-  color: #93c5fd;
+  background: #001926;
+  border-color: rgba(186, 230, 253, 0.78);
+  color: #bae6fd;
 }
 
 .mtf-page .source-time-cell {
@@ -7299,4 +7356,61 @@ select {
   .mtf-page .compact-mtf-table td::before {
     display: none;
   }
+}
+
+.mtf-page .compact-mtf-table tr.trend-chop td,
+.global-mtf-panel .global-mtf-table tr.trend-chop td,
+.mtf-page .compact-mtf-table tr.trend-chop td:first-child strong,
+.mtf-page .compact-mtf-table tr.trend-chop td:first-child small,
+.global-mtf-panel .global-mtf-table tr.trend-chop td:first-child strong,
+.global-mtf-panel .global-mtf-table tr.trend-chop td:first-child small,
+.mtf-page .compact-mtf-table tr.trend-chop .watchlist-cell,
+.mtf-page .compact-mtf-table tr.trend-chop .trigger-time,
+.mtf-page .compact-mtf-table tr.trend-chop .source-time-cell,
+.mtf-page .compact-mtf-table tr.trend-chop .source-time-cell time,
+.mtf-page .compact-mtf-table tr.trend-chop .bias-meter,
+.mtf-page .compact-mtf-table tr.trend-chop .bias-meter b,
+.mtf-page .compact-mtf-table tr.trend-chop .bias-meter span {
+  color: #171300;
+}
+
+.mtf-page .compact-mtf-table tr.trend-chop .source-pill,
+.global-mtf-panel .global-mtf-table tr.trend-chop .source-pill,
+.mtf-page .compact-mtf-table tr.trend-chop .direction-pill,
+.global-mtf-panel .global-mtf-table tr.trend-chop .direction-pill {
+  background: rgba(23, 19, 0, 0.76);
+  border-color: rgba(23, 19, 0, 0.5);
+  color: #fff7b8;
+}
+
+.mtf-page .compact-mtf-table tr.trend-chop .mtf-touch-pill,
+.global-mtf-panel .global-mtf-table tr.trend-chop .mtf-touch-pill {
+  box-shadow: 0 0 0 2px rgba(23, 19, 0, 0.22);
+}
+
+.mtf-page .compact-mtf-table tr.trend-chop .mtf-touch-pill.mtf-hourly,
+.global-mtf-panel .global-mtf-table tr.trend-chop .mtf-touch-pill.mtf-hourly {
+  background: #ff8a00;
+  border-color: #4a2700;
+  color: #1f1300;
+}
+
+.mtf-page .compact-mtf-table tr.trend-chop .mtf-touch-pill.mtf-daily-fast,
+.global-mtf-panel .global-mtf-table tr.trend-chop .mtf-touch-pill.mtf-daily-fast {
+  background: #dfff00;
+  border-color: #495400;
+  color: #171300;
+}
+
+.mtf-page .compact-mtf-table tr.trend-chop .mtf-touch-pill.mtf-daily-slow,
+.global-mtf-panel .global-mtf-table tr.trend-chop .mtf-touch-pill.mtf-daily-slow {
+  background: #00c8ff;
+  border-color: #00374a;
+  color: #001926;
+}
+
+.mtf-page .compact-mtf-table tr.trend-chop .mtf-touch-pill time,
+.global-mtf-panel .global-mtf-table tr.trend-chop .mtf-touch-pill time {
+  color: currentColor;
+  opacity: 0.9;
 }

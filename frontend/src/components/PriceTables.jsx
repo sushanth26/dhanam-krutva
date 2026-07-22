@@ -367,6 +367,7 @@ function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDis
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
   const riskPlan = aPlusPlusRiskPlan(quote.mtf_matches);
   const tradeAction = tradeActionForMatches(quote.mtf_matches);
+  const fiveTwelveStatus = fiveTwelvePriceStatus(quote);
   const dismissNew = quote.is_new ? () => onDismissNew?.(quote) : undefined;
   const rowId = ["mtf-row", quote.watchlist_id || "tab", quote.symbol].join("-");
   const mtfTags = (
@@ -393,6 +394,7 @@ function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDis
         id={rowId}
         quote={quote}
         showPrice={false}
+        trend={fiveTwelveStatus}
         onClick={dismissNew}
       >
         {mtfTags}
@@ -414,6 +416,7 @@ function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDis
       id={rowId}
       quote={quote}
       showPrice={false}
+      trend={fiveTwelveStatus}
       onClick={dismissNew}
       action={(
         <BuyCell
@@ -504,6 +507,18 @@ function mtfTouchTime(match) {
   const parsed = new Date(match.candle_time);
   if (Number.isNaN(parsed.getTime())) return "";
   return parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function fiveTwelvePriceStatus(quote) {
+  const price = Number(quote?.price);
+  const ema5 = Number(quote?.ema_10m?.["5"]);
+  const ema12 = Number(quote?.ema_10m?.["12"]);
+  if (![price, ema5, ema12].every(Number.isFinite)) return "";
+  const low = Math.min(ema5, ema12);
+  const high = Math.max(ema5, ema12);
+  if (price > high) return "Bullish";
+  if (price < low) return "Bearish";
+  return "Chop";
 }
 
 function biasSummaryForQuote(quote) {
