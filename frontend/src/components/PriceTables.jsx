@@ -555,10 +555,7 @@ function mtfMatchTimeValue(match) {
 }
 
 function mtfTouchTime(match) {
-  if (!match?.candle_time) return "";
-  const parsed = new Date(match.candle_time);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  return mtfMarketClock(match?.candle_time)?.label || "";
 }
 
 const MTF_TIMELINE_START_MINUTES = 4 * 60;
@@ -575,12 +572,48 @@ function useTimelineNowPosition() {
 }
 
 function mtfTimelinePosition(value, clamp = true) {
-  const parsed = value instanceof Date ? value : new Date(value || "");
-  if (Number.isNaN(parsed.getTime())) return null;
-  const minutes = parsed.getHours() * 60 + parsed.getMinutes();
+  const clock = mtfMarketClock(value);
+  if (!clock) return null;
+  const minutes = clock.minutes;
   if (!clamp && (minutes < MTF_TIMELINE_START_MINUTES || minutes > MTF_TIMELINE_END_MINUTES)) return null;
   const boundedMinutes = clampNumber(minutes, MTF_TIMELINE_START_MINUTES, MTF_TIMELINE_END_MINUTES);
   return ((boundedMinutes - MTF_TIMELINE_START_MINUTES) / MTF_TIMELINE_RANGE_MINUTES) * 100;
+}
+
+function mtfMarketClock(value) {
+  if (!value) return null;
+  if (value instanceof Date) return marketClockFromDate(value);
+  const text = String(value);
+  const isoClock = text.match(/T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/);
+  if (isoClock) {
+    const hours = Number(isoClock[1]);
+    const minutes = Number(isoClock[2]);
+    if (Number.isFinite(hours) && Number.isFinite(minutes)) {
+      return {
+        label: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
+        minutes: hours * 60 + minutes,
+      };
+    }
+  }
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return marketClockFromDate(parsed);
+}
+
+function marketClockFromDate(value) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(value);
+  const hours = Number(parts.find((part) => part.type === "hour")?.value);
+  const minutes = Number(parts.find((part) => part.type === "minute")?.value);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return {
+    label: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
+    minutes: hours * 60 + minutes,
+  };
 }
 
 function clampNumber(value, min, max) {
