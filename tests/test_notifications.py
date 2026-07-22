@@ -292,7 +292,7 @@ def test_bos_notification_payload_uses_table_labels():
     assert payload["targetSymbol"] == "NBIS"
 
 
-def test_push_monitor_sends_bos_change_when_mtf_signature_is_unchanged(tmp_path, monkeypatch):
+def test_push_monitor_ignores_bos_changes_for_mtf_only_push(tmp_path, monkeypatch):
     settings = SimpleNamespace(
         alert_history_file=tmp_path / "alerts.json",
         push_subscription_file=tmp_path / "push.json",
@@ -312,11 +312,9 @@ def test_push_monitor_sends_bos_change_when_mtf_signature_is_unchanged(tmp_path,
     assert monitor.check_once() is None
     payload = monitor.check_once()
 
-    assert payload["title"] == "NBIS: Bear BOS"
-    assert sent == [payload]
-    history = AlertHistoryStore(settings.alert_history_file).all()
-    assert history[0]["source"] == "server-push"
-    assert history[0]["symbol"] == "NBIS"
+    assert payload is None
+    assert sent == []
+    assert AlertHistoryStore(settings.alert_history_file).all() == []
 
 
 def test_push_monitor_sends_only_new_mtf_table_entries(tmp_path, monkeypatch):
@@ -342,7 +340,7 @@ def test_push_monitor_sends_only_new_mtf_table_entries(tmp_path, monkeypatch):
             },
             {
                 "symbol": "AAOI",
-                "mtf_matches": [{"label": "10m bounce 34/50", "candle_time": "2026-07-21T09:40:00"}],
+                "mtf_matches": [{"label": "Daily 20/21", "candle_time": "2026-07-21T09:40:00"}],
             },
         ],
     ])
@@ -353,11 +351,37 @@ def test_push_monitor_sends_only_new_mtf_table_entries(tmp_path, monkeypatch):
     assert monitor.check_once() is None
     payload = monitor.check_once()
 
-    assert payload["title"] == "AAOI: 10m bounce 34/50, Jul 21 9:40 AM"
+    assert payload["title"] == "AAOI: Daily 20/21, Jul 21 9:40 AM"
     assert payload["matches"][0]["symbol"] == "AAOI"
     assert sent == [payload]
     history = AlertHistoryStore(settings.alert_history_file).all()
     assert history[0]["symbol"] == "AAOI"
+
+
+def test_push_monitor_ignores_new_10m_mtf_entries(tmp_path, monkeypatch):
+    settings = SimpleNamespace(
+        alert_history_file=tmp_path / "alerts.json",
+        push_subscription_file=tmp_path / "push.json",
+        vapid_private_key=None,
+        vapid_subject="mailto:test@example.com",
+    )
+    monitor = MtfPushMonitor(settings)
+    sent = []
+    quote_sets = iter([
+        [{"symbol": "BE", "mtf_matches": [{"label": "Hourly 34/50", "candle_time": "2026-07-21T09:30:00"}]}],
+        [
+            {"symbol": "BE", "mtf_matches": [{"label": "Hourly 34/50", "candle_time": "2026-07-21T09:30:00"}]},
+            {"symbol": "AAOI", "mtf_matches": [{"label": "10m bounce 34/50", "candle_time": "2026-07-21T09:40:00"}]},
+        ],
+    ])
+
+    monkeypatch.setattr(notifications, "build_monitored_quotes", lambda _settings: next(quote_sets))
+    monkeypatch.setattr(monitor, "send", lambda payload: sent.append(payload) or {"sent": 1, "removed": 0})
+
+    assert monitor.check_once() is None
+    assert monitor.check_once() is None
+    assert sent == []
+    assert AlertHistoryStore(settings.alert_history_file).all() == []
 
 
 def test_mtf_push_monitor_pauses_after_failed_webull_check_until_manual_retry(tmp_path, monkeypatch):
@@ -395,7 +419,7 @@ def test_mtf_push_monitor_pauses_after_failed_webull_check_until_manual_retry(tm
     assert monitor.status()["paused_for_manual_retry"] is False
 
 
-def test_filter_payload_by_strategies_removes_disabled_alerts():
+def test_filter_payload_by_strategies_keeps_all_mtf_table_alerts():
     payload = {
         "title": "MTFs changed",
         "body": "old body",
@@ -407,138 +431,20 @@ def test_filter_payload_by_strategies_removes_disabled_alerts():
 
     filtered = filter_payload_by_strategies(
         payload,
-        {"hourly-cloud": False, "daily-slow-cloud": True, "ten-minute-bounce-hourly": True},
+        {"hourly-cloud": False, "daily-slow-cloud": False, "ten-minute-bounce-hourly": False},
     )
 
-    assert filtered["title"] == "2 MTF alerts: BE, LLY"
-    assert filtered["body"] == "BE 10m bounce Hourly 34/50 • LLY Daily 50/55"
-    assert filtered["badgeCount"] == 2
-    assert filtered["targetSymbol"] == "BE"
-    assert filtered["url"] == "/?mtf=BE"
-    assert filtered["matches"][0]["labels"] == ["10m bounce Hourly 34/50"]
+    assert filtered == payload
 
 
-def test_filter_payload_by_strategies_migrates_old_10m_touch_setting():
+def test_filter_payload_by_strategies_ignores_legacy_disabled_settings():
     payload = {
         "matches": [
             {"symbol": "BE", "labels": ["10m bounce 34/50"]},
         ],
     }
 
-    assert filter_payload_by_strategies(payload, {"ten-minute-touch": False}) is None
-
-
-def test_filter_payload_by_strategies_can_disable_10m_hourly_bounces_only():
-    payload = {
-        "matches": [
-            {
-                "symbol": "BE",
-                "labels": [
-                    "10m bounce 34/50",
-                    "10m bounce Hourly 34/50",
-                    "10m bounce Daily 20/21",
-                    "10m bounce Daily 50/55",
-                ],
-            },
-        ],
-    }
-
-    filtered = filter_payload_by_strategies(
-        payload,
-        {
-            "ten-minute-bounce-10m": True,
-            "ten-minute-bounce-hourly": False,
-            "ten-minute-bounce-daily-fast": True,
-            "ten-minute-bounce-daily-slow": True,
-        },
-    )
-
-    assert filtered["matches"][0]["labels"] == [
-        "10m bounce 34/50",
-        "10m bounce Daily 20/21",
-        "10m bounce Daily 50/55",
-    ]
-
-
-def test_filter_payload_by_strategies_can_disable_9ema_touch_only():
-    payload = {
-        "matches": [
-            {"symbol": "BE", "labels": ["10m bounce 34/50", "10m 9 EMA touch"]},
-        ],
-    }
-
-    filtered = filter_payload_by_strategies(
-        payload,
-        {"ten-minute-bounce-10m": True, "ten-minute-9ema-touch": False},
-    )
-
-    assert filtered["matches"][0]["labels"] == ["10m bounce 34/50"]
-
-
-def test_filter_payload_by_strategies_can_disable_40ema_touch_only():
-    payload = {
-        "matches": [
-            {"symbol": "BE", "labels": ["10m bounce 34/50", "10m 40 EMA touch"]},
-        ],
-    }
-
-    filtered = filter_payload_by_strategies(
-        payload,
-        {"ten-minute-bounce-10m": True, "ten-minute-40ema-touch": False},
-    )
-
-    assert filtered["matches"][0]["labels"] == ["10m bounce 34/50"]
-
-
-def test_filter_payload_by_strategies_can_disable_daily_bounces_only():
-    payload = {
-        "matches": [
-            {
-                "symbol": "BE",
-                "labels": [
-                    "10m bounce 34/50",
-                    "10m bounce Hourly 34/50",
-                    "10m bounce Daily 20/21",
-                    "10m bounce Daily 50/55",
-                ],
-            },
-        ],
-    }
-
-    filtered = filter_payload_by_strategies(
-        payload,
-        {
-            "ten-minute-bounce-10m": True,
-            "ten-minute-bounce-hourly": True,
-            "ten-minute-bounce-daily-fast": False,
-            "ten-minute-bounce-daily-slow": False,
-        },
-    )
-
-    assert filtered["matches"][0]["labels"] == [
-        "10m bounce 34/50",
-        "10m bounce Hourly 34/50",
-    ]
-
-
-def test_filter_payload_by_strategies_skips_push_when_all_alerts_disabled():
-    payload = {
-        "matches": [
-            {"symbol": "BE", "labels": ["Hourly 34/50"]},
-        ],
-    }
-
-    assert filter_payload_by_strategies(payload, {"hourly-cloud": False}) is None
-
-
-def test_filter_payload_by_strategies_skips_unselected_missing_alerts():
-    payload = {
-        "matches": [
-            {"symbol": "BE", "labels": ["Hourly 34/50"]},
-        ],
-    }
-
-    assert filter_payload_by_strategies(payload, {}) is None
+    assert filter_payload_by_strategies(payload, {"ten-minute-touch": False}) == payload
 
 
 def test_filter_payload_by_strategies_keeps_generic_test_payloads():

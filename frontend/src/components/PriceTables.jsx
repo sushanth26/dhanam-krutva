@@ -440,9 +440,10 @@ function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDis
 function MtfTouchPill({ label }) {
   const normalized = String(label || "").trim();
   const timeframe = mtfTimeframeLabel(normalized);
+  const tone = mtfPillTone(normalized);
   const level = normalized.replace(/^(Daily|Hourly|Hour|1D|1H|10m)\s*/i, "").replace(/\s*touch$/i, "").trim();
   return (
-    <span className={`mtf-touch-pill tf-${timeframe.toLowerCase()}`}>
+    <span className={`mtf-touch-pill tf-${timeframe.toLowerCase()} ${tone}`}>
       <b>{timeframe}</b>
       <span>{level || normalized}</span>
     </span>
@@ -455,6 +456,14 @@ function mtfTimeframeLabel(label) {
   if (text.startsWith("hour") || text.startsWith("1h")) return "1H";
   if (text.startsWith("10m")) return "10m";
   return "MTF";
+}
+
+function mtfPillTone(label) {
+  const text = String(label || "").toLowerCase();
+  if (text.includes("hourly") || text.includes("1h")) return "mtf-hourly";
+  if (text.includes("20/21")) return "mtf-daily-fast";
+  if (text.includes("50/55")) return "mtf-daily-slow";
+  return "mtf-default";
 }
 
 function mtfLabels(matches = []) {

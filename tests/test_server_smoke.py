@@ -41,8 +41,10 @@ def wait_for_server(process: subprocess.Popen):
 def test_uvicorn_serves_react_shell_and_protected_api():
     watchlist_file = ROOT / ".test-watchlists-smoke.json"
     alert_history_file = ROOT / ".test-alert-history-smoke.json"
+    push_subscription_file = ROOT / ".test-push-subscriptions-smoke.json"
     watchlist_file.unlink(missing_ok=True)
     alert_history_file.unlink(missing_ok=True)
+    push_subscription_file.unlink(missing_ok=True)
     env = {
         **os.environ,
         "APP_USERNAME": "tester",
@@ -53,6 +55,7 @@ def test_uvicorn_serves_react_shell_and_protected_api():
         "WEBULL_TOKEN_DIR": "",
         "VAPID_PUBLIC_KEY": "",
         "VAPID_PRIVATE_KEY": "",
+        "PUSH_SUBSCRIPTION_FILE": str(push_subscription_file),
         "WATCHLIST_FILE": str(watchlist_file),
         "ALERT_HISTORY_FILE": str(alert_history_file),
         "PORT": str(PORT),
@@ -107,6 +110,10 @@ def test_uvicorn_serves_react_shell_and_protected_api():
             assert response.status == 200
             assert response.headers["cache-control"] == "no-store, no-cache, must-revalidate, max-age=0"
 
+        with request("/sw.js", auth_header()) as response:
+            assert response.status == 200
+            assert response.headers["cache-control"] == "no-store, no-cache, must-revalidate, max-age=0"
+
         asset_path = html.split('src="')[1].split('"')[0]
         with request(asset_path, auth_header()) as response:
             assert response.status == 200
@@ -124,6 +131,7 @@ def test_uvicorn_serves_react_shell_and_protected_api():
             assert response.status == 200
             assert payload["web_push_configured"] is False
             assert payload["vapid_public_key"] is None
+            assert payload["monitor"]["subscriptions"] == 0
 
         with request("/api/notifications/history", auth_header()) as response:
             payload = json.loads(response.read())
@@ -138,6 +146,7 @@ def test_uvicorn_serves_react_shell_and_protected_api():
     finally:
         watchlist_file.unlink(missing_ok=True)
         alert_history_file.unlink(missing_ok=True)
+        push_subscription_file.unlink(missing_ok=True)
         process.terminate()
         try:
             process.wait(timeout=5)
