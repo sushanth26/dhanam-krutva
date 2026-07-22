@@ -460,11 +460,11 @@ function MtfTouchPill({ label, match }) {
 
 function MtfTimeline({ matches, nowPosition }) {
   const [activeEvent, setActiveEvent] = useState("");
-  const events = mtfDisplayMatches(matches)
-    .map(({ label, match }) => {
+  const events = mtfTimelineMatches(matches)
+    .map(({ label, match }, index) => {
       const time = mtfTouchTime(match);
       return {
-        id: `${label}-${match?.candle_time || time}`,
+        id: `${label}-${match?.candle_time || time}-${index}`,
         label,
         match,
         position: mtfTimelinePosition(match?.candle_time),
@@ -505,6 +505,16 @@ function MtfTimeline({ matches, nowPosition }) {
       <span className="mtf-live-marker" aria-hidden="true"></span>
     </div>
   );
+}
+
+function mtfTimelineMatches(matches = []) {
+  return matches
+    .map((match) => ({
+      label: String(match.display_label || match.label || "").trim(),
+      match,
+    }))
+    .filter(({ label }) => label)
+    .sort((left, right) => mtfMatchTimeValue(left.match) - mtfMatchTimeValue(right.match));
 }
 
 function mtfTimeframeLabel(label) {

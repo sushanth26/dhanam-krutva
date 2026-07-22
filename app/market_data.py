@@ -1,4 +1,4 @@
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -580,7 +580,7 @@ def session_mtf_touch_matches(
         ("Daily 20/21", "daily", ema_daily.get("20"), ema_daily.get("21")),
         ("Daily 50/55", "daily", ema_daily.get("50"), ema_daily.get("55")),
     ]
-    latest_by_label: dict[str, dict[str, Any]] = {}
+    matches: list[dict[str, Any]] = []
     for candle in session_candles:
         low = candle.get("low")
         close = candle.get("close")
@@ -588,7 +588,7 @@ def session_mtf_touch_matches(
             continue
         high = candle.get("high")
         high = high if high is not None else max(value for value in (candle.get("open"), close, low) if value is not None)
-        candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
+        candle_time = mtf_touch_candle_start_time(candle.get("time") or candle.get("sort_time") or candle.get("timestamp"))
         for label, timeframe, first, second in checks:
             if first is None or second is None:
                 continue
@@ -596,7 +596,7 @@ def session_mtf_touch_matches(
             cloud_high = max(first, second)
             if not candle_touches_cloud(low, high, cloud_low, cloud_high):
                 continue
-            latest_by_label[label] = {
+            matches.append({
                 "label": label,
                 "display_label": label,
                 "timeframe": timeframe,
@@ -610,8 +610,15 @@ def session_mtf_touch_matches(
                 "type": "mtf_cloud_touch_today",
                 "status": "confirmed",
                 "direction": "touch",
-            }
-    return list(latest_by_label.values())
+            })
+    return matches
+
+
+def mtf_touch_candle_start_time(value: Any) -> Any:
+    parsed = parse_iso_time(value)
+    if not parsed:
+        return value
+    return (parsed - timedelta(minutes=10)).isoformat()
 
 
 def current_session_ten_minute_candles(candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
