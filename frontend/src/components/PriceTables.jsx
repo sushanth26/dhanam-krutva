@@ -365,12 +365,15 @@ function mtfPlanSortValue(quote) {
 }
 
 function MtfRow({ buyState, compact, focused, nowPosition, quote, showWatchlist, onBuy, onDismissNew }) {
+  const [expanded, setExpanded] = useState(false);
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
   const riskPlan = aPlusPlusRiskPlan(quote.mtf_matches);
   const tradeAction = tradeActionForMatches(quote.mtf_matches);
   const tenMinuteStatus = cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
   const dismissNew = quote.is_new ? () => onDismissNew?.(quote) : undefined;
+  const toggleExpanded = compact ? () => setExpanded((current) => !current) : undefined;
   const rowId = ["mtf-row", quote.watchlist_id || "tab", quote.symbol].join("-");
+  const mobileGroups = compact ? mtfTouchGroups(quote.mtf_matches) : [];
   const mtfTags = (
     <td className="mtf-label-cell" data-label="MTF">
       <MtfTimeline matches={quote.mtf_matches} nowPosition={nowPosition} />
@@ -379,6 +382,18 @@ function MtfRow({ buyState, compact, focused, nowPosition, quote, showWatchlist,
           <MtfTouchPill key={`${label}-${match?.candle_time || ""}`} label={label} match={match} />
         ))}
       </span>
+      {compact ? (
+        <div className="mobile-mtf-detail" aria-hidden={!expanded}>
+          {mobileGroups.map((group) => (
+            <div className="mobile-mtf-group" key={group.label}>
+              <span>{group.label}</span>
+              <div>
+                {group.times.map((time) => <time key={`${group.label}-${time}`}>{time}</time>)}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </td>
   );
   const watchlistCell = showWatchlist ? (
@@ -391,14 +406,15 @@ function MtfRow({ buyState, compact, focused, nowPosition, quote, showWatchlist,
   if (compact) {
     return (
       <BaseRow
-        className={focused ? "focused-mtf-row" : ""}
+        className={[focused ? "focused-mtf-row" : "", expanded ? "mobile-expanded" : ""].filter(Boolean).join(" ")}
         dataMtfSymbol={quote.symbol}
         id={rowId}
+        mobileSummary={<BiasMeter bias={biasSummaryForQuote(quote)} />}
+        onClick={toggleExpanded}
         quote={quote}
         showCompanyName={false}
         showPrice={false}
         trend={tenMinuteStatus}
-        onClick={dismissNew}
       >
         {mtfTags}
         <td className="signal-cell" data-label="Signal"><DirectionPill value={tradeAction || "Wait"} /></td>
@@ -510,6 +526,44 @@ function mtfTimelineMatches(matches = []) {
     }))
     .filter(({ label }) => label)
     .sort((left, right) => mtfMatchTimeValue(left.match) - mtfMatchTimeValue(right.match));
+}
+
+function mtfTouchGroups(matches = []) {
+  const groups = new Map();
+  for (const { label, match } of mtfTimelineMatches(matches)) {
+    const time = mtfTouchTime(match);
+    if (!time) continue;
+    const current = groups.get(label) || [];
+    if (!current.includes(time)) current.push(time);
+    groups.set(label, current);
+  }
+  return [...groups.entries()].map(([label, times]) => ({ label, times: compactTimeRanges(times) }));
+}
+
+function compactTimeRanges(times) {
+  const minutes = times
+    .map((time) => {
+      const [hour, minute] = time.split(":").map(Number);
+      return Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : null;
+    })
+    .filter((value) => value != null)
+    .sort((left, right) => left - right);
+  const ranges = [];
+  for (const minute of minutes) {
+    const current = ranges[ranges.length - 1];
+    if (current && minute === current.end + 10) {
+      current.end = minute;
+    } else {
+      ranges.push({ start: minute, end: minute });
+    }
+  }
+  return ranges.map(({ start, end }) => start === end ? formatMinutes(start) : `${formatMinutes(start)}-${formatMinutes(end)}`);
+}
+
+function formatMinutes(value) {
+  const hour = Math.floor(value / 60);
+  const minute = value % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
 function mtfTimeframeLabel(label) {
@@ -729,13 +783,14 @@ function PriceRow({ compact, quote, onRemoveSymbol }) {
   );
 }
 
-function BaseRow({ quote, children, trend = "", action = null, className = "", dataMtfSymbol, id, showCompanyName = true, showPrice = true, onClick }) {
+function BaseRow({ quote, children, trend = "", action = null, className = "", dataMtfSymbol, id, mobileSummary = null, showCompanyName = true, showPrice = true, onClick }) {
   const rowClass = [trend ? `trend-${String(trend).toLowerCase()}` : "", className].filter(Boolean).join(" ");
   return (
     <tr className={`stock-row ${rowClass}`} data-mtf-symbol={dataMtfSymbol} id={id} onClick={onClick}>
       <td data-label="Symbol">
         <strong>{quote.symbol}</strong>
         {showCompanyName ? <small>{symbolDisplayName(quote.symbol)}</small> : null}
+        {mobileSummary ? <span className="mobile-symbol-summary">{mobileSummary}</span> : null}
       </td>
       {children}
       {showPrice ? <td className="price-cell" data-label="Last">{formatPrice(quote.price)}</td> : null}
