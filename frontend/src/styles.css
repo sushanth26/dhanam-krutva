@@ -5,6 +5,133 @@
   color: #19211f;
 }
 
+@media (max-width: 760px) {
+  .mtf-page .live-price-table-wrap {
+    background: #101720;
+    border: 1px solid #23303d;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .mtf-page .compact-mtf-table {
+    border-collapse: separate;
+    display: grid;
+    grid-template-rows: 20px auto;
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  .mtf-page .compact-mtf-table thead {
+    display: grid;
+  }
+
+  .mtf-page .compact-mtf-table thead tr,
+  .mtf-page .compact-mtf-table tbody .stock-row {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr) 48px 44px;
+  }
+
+  .mtf-page .compact-mtf-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .mtf-page .compact-mtf-table .stock-row {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    gap: 0;
+    margin: 0;
+    min-height: 38px;
+    padding: 0;
+  }
+
+  .mtf-page .compact-mtf-table th,
+  .mtf-page .compact-mtf-table .stock-row > td {
+    align-items: center;
+    border-bottom: 1px solid #202a35;
+    display: flex !important;
+    min-width: 0;
+    overflow: visible;
+    padding: 3px 4px;
+    width: auto !important;
+  }
+
+  .mtf-page .compact-mtf-table th {
+    background: #111820;
+    color: #74869a;
+    font-size: 9px;
+    height: 20px;
+    text-transform: uppercase;
+  }
+
+  .mtf-page .compact-mtf-table th button {
+    font-size: 9px;
+    min-height: 16px;
+    padding: 0;
+  }
+
+  .mtf-page .compact-mtf-table .stock-row > td:first-child {
+    justify-content: flex-start;
+  }
+
+  .mtf-page .compact-mtf-table .stock-row > td:first-child strong {
+    font-size: 16px;
+  }
+
+  .mtf-page .compact-mtf-table .mtf-label-cell {
+    display: flex;
+    padding-left: 4px;
+    padding-right: 6px;
+  }
+
+  .mtf-page .compact-mtf-table .mtf-timeline {
+    height: 24px;
+  }
+
+  .mtf-page .compact-mtf-table .mtf-event-bar {
+    bottom: 2px;
+    top: 2px;
+    width: 5px;
+  }
+
+  .mtf-page .compact-mtf-table .stock-row > .signal-cell,
+  .mtf-page .compact-mtf-table .stock-row > .bias-cell {
+    display: flex;
+    justify-content: center;
+  }
+
+  .mtf-page .compact-mtf-table .direction-pill {
+    border-radius: 4px;
+    font-size: 9px;
+    min-height: 20px;
+    min-width: 38px;
+    padding: 0 4px;
+  }
+
+  .mtf-page .compact-mtf-table .bias-meter {
+    border-radius: 4px;
+    gap: 0;
+    justify-content: center;
+    min-height: 20px;
+    min-width: 28px;
+    padding: 0 4px;
+  }
+
+  .mtf-page .compact-mtf-table .bias-meter b {
+    display: none;
+  }
+
+  .mtf-page .compact-mtf-table .bias-meter span {
+    font-size: 10px;
+  }
+
+  .mtf-page .mobile-symbol-summary,
+  .mtf-page .mobile-mtf-detail {
+    display: none !important;
+  }
+}
+
 /* Dense MTF touch desk overrides */
 .app-header {
   position: sticky;
@@ -6400,6 +6527,130 @@ select {
   .mtf-page .compact-mtf-table td::before {
     display: none;
   }
+
+  .mtf-page .live-price-table-wrap {
+    background: #101720;
+    border: 1px solid #23303d;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .mtf-page .compact-mtf-table {
+    border-collapse: separate;
+    display: grid;
+    grid-template-rows: 20px auto;
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  .mtf-page .compact-mtf-table thead {
+    display: grid;
+  }
+
+  .mtf-page .compact-mtf-table thead tr,
+  .mtf-page .compact-mtf-table tbody .stock-row {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr) 48px 44px;
+  }
+
+  .mtf-page .compact-mtf-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .mtf-page .compact-mtf-table .stock-row {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    gap: 0;
+    margin: 0;
+    min-height: 38px;
+    padding: 0;
+  }
+
+  .mtf-page .compact-mtf-table th,
+  .mtf-page .compact-mtf-table .stock-row > td {
+    align-items: center;
+    border-bottom: 1px solid #202a35;
+    display: flex;
+    min-width: 0;
+    overflow: visible;
+    padding: 3px 4px;
+  }
+
+  .mtf-page .compact-mtf-table th {
+    background: #111820;
+    color: #74869a;
+    font-size: 9px;
+    height: 20px;
+    text-transform: uppercase;
+  }
+
+  .mtf-page .compact-mtf-table th button {
+    font-size: 9px;
+    min-height: 16px;
+    padding: 0;
+  }
+
+  .mtf-page .compact-mtf-table .stock-row > td:first-child {
+    justify-content: flex-start;
+  }
+
+  .mtf-page .compact-mtf-table .stock-row > td:first-child strong {
+    font-size: 16px;
+  }
+
+  .mtf-page .compact-mtf-table .mtf-label-cell {
+    display: flex;
+    padding-left: 4px;
+    padding-right: 6px;
+  }
+
+  .mtf-page .compact-mtf-table .mtf-timeline {
+    height: 24px;
+  }
+
+  .mtf-page .compact-mtf-table .mtf-event-bar {
+    bottom: 2px;
+    top: 2px;
+    width: 5px;
+  }
+
+  .mtf-page .compact-mtf-table .stock-row > .signal-cell,
+  .mtf-page .compact-mtf-table .stock-row > .bias-cell {
+    display: flex;
+    justify-content: center;
+  }
+
+  .mtf-page .compact-mtf-table .direction-pill {
+    border-radius: 4px;
+    font-size: 9px;
+    min-height: 20px;
+    min-width: 38px;
+    padding: 0 4px;
+  }
+
+  .mtf-page .compact-mtf-table .bias-meter {
+    border-radius: 4px;
+    gap: 0;
+    justify-content: center;
+    min-height: 20px;
+    min-width: 28px;
+    padding: 0 4px;
+  }
+
+  .mtf-page .compact-mtf-table .bias-meter b {
+    display: none;
+  }
+
+  .mtf-page .compact-mtf-table .bias-meter span {
+    font-size: 10px;
+  }
+
+  .mtf-page .mobile-symbol-summary,
+  .mtf-page .mobile-mtf-detail {
+    display: none !important;
+  }
 }
 
 @media (min-width: 761px) {
@@ -7934,5 +8185,132 @@ select {
 
   .mtf-page .compact-mtf-table td::before {
     display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .mtf-page .live-price-table-wrap {
+    background: #101720;
+    border: 1px solid #23303d;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .mtf-page .compact-mtf-table {
+    border-collapse: separate;
+    display: grid;
+    grid-template-rows: 20px auto;
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  .mtf-page .compact-mtf-table thead {
+    display: grid;
+  }
+
+  .mtf-page .compact-mtf-table thead tr,
+  .mtf-page .compact-mtf-table tbody .stock-row {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr) 48px 44px;
+  }
+
+  .mtf-page .compact-mtf-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .mtf-page .compact-mtf-table .stock-row {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    gap: 0;
+    margin: 0;
+    min-height: 38px;
+    padding: 0;
+  }
+
+  .mtf-page .compact-mtf-table th,
+  .mtf-page .compact-mtf-table .stock-row > td {
+    align-items: center;
+    border-bottom: 1px solid #202a35;
+    display: flex;
+    min-width: 0;
+    overflow: visible;
+    padding: 3px 4px;
+    width: auto;
+  }
+
+  .mtf-page .compact-mtf-table th {
+    background: #111820;
+    color: #74869a;
+    font-size: 9px;
+    height: 20px;
+    text-transform: uppercase;
+  }
+
+  .mtf-page .compact-mtf-table th button {
+    font-size: 9px;
+    min-height: 16px;
+    padding: 0;
+  }
+
+  .mtf-page .compact-mtf-table .stock-row > td:first-child {
+    justify-content: flex-start;
+  }
+
+  .mtf-page .compact-mtf-table .stock-row > td:first-child strong {
+    font-size: 16px;
+  }
+
+  .mtf-page .compact-mtf-table .mtf-label-cell {
+    display: flex;
+    padding-left: 4px;
+    padding-right: 6px;
+  }
+
+  .mtf-page .compact-mtf-table .mtf-timeline {
+    height: 24px;
+  }
+
+  .mtf-page .compact-mtf-table .mtf-event-bar {
+    bottom: 2px;
+    top: 2px;
+    width: 5px;
+  }
+
+  .mtf-page .compact-mtf-table .stock-row > .signal-cell,
+  .mtf-page .compact-mtf-table .stock-row > .bias-cell {
+    display: flex;
+    justify-content: center;
+  }
+
+  .mtf-page .compact-mtf-table .direction-pill {
+    border-radius: 4px;
+    font-size: 9px;
+    min-height: 20px;
+    min-width: 38px;
+    padding: 0 4px;
+  }
+
+  .mtf-page .compact-mtf-table .bias-meter {
+    border-radius: 4px;
+    gap: 0;
+    justify-content: center;
+    min-height: 20px;
+    min-width: 28px;
+    padding: 0 4px;
+  }
+
+  .mtf-page .compact-mtf-table .bias-meter b {
+    display: none;
+  }
+
+  .mtf-page .compact-mtf-table .bias-meter span {
+    font-size: 10px;
+  }
+
+  .mtf-page .mobile-symbol-summary,
+  .mtf-page .mobile-mtf-detail {
+    display: none !important;
   }
 }
