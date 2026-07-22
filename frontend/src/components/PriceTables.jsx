@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { CloudTag } from "./Tags";
 import { cloudStatus, formatPrice } from "../lib/market";
@@ -34,6 +34,7 @@ export function MtfTable({
   const defaultSort = compact ? { key: "sourceTime", direction: "desc" } : { key: "time", direction: "desc" };
   const { sortedRows: sortedQuotes, sort, toggleSort } = useSortableRows(quotes, columns, defaultSort);
   const showActions = Boolean(onBuy) && !compact;
+  const nowPosition = useTimelineNowPosition();
 
   return (
     <section className="price-bucket mtf-bucket">
@@ -65,6 +66,7 @@ export function MtfTable({
                 quote={quote}
                 showWatchlist={showWatchlist}
                 compact={compact}
+                nowPosition={nowPosition}
                 onBuy={onBuy}
                 onDismissNew={onDismissNew}
               />
@@ -363,7 +365,7 @@ function mtfPlanSortValue(quote) {
   return tradeActionForMatches(quote.mtf_matches) || "";
 }
 
-function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDismissNew }) {
+function MtfRow({ buyState, compact, focused, nowPosition, quote, showWatchlist, onBuy, onDismissNew }) {
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
   const riskPlan = aPlusPlusRiskPlan(quote.mtf_matches);
   const tradeAction = tradeActionForMatches(quote.mtf_matches);
@@ -372,6 +374,7 @@ function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDis
   const rowId = ["mtf-row", quote.watchlist_id || "tab", quote.symbol].join("-");
   const mtfTags = (
     <td className="mtf-label-cell" data-label="MTF">
+      <MtfTimeline matches={quote.mtf_matches} nowPosition={nowPosition} />
       <span className="mtf-tag-stack">
         {mtfDisplayMatches(quote.mtf_matches).map(({ label, match }) => (
           <MtfTouchPill key={`${label}-${match?.candle_time || ""}`} label={label} match={match} />
@@ -455,6 +458,42 @@ function MtfTouchPill({ label, match }) {
   );
 }
 
+function MtfTimeline({ matches, nowPosition }) {
+  const events = mtfDisplayMatches(matches)
+    .map(({ label, match }) => ({
+      label,
+      match,
+      position: mtfTimelinePosition(match?.candle_time),
+      time: mtfTouchTime(match),
+      tone: mtfPillTone(label),
+    }))
+    .filter((event) => event.position != null);
+  const timelineStyle = nowPosition == null ? undefined : { "--now-left": `${nowPosition}%` };
+  return (
+    <div className={`mtf-timeline ${nowPosition == null ? "no-live-time" : ""}`} style={timelineStyle} aria-label="MTF touch timeline from 4 AM to 7 PM">
+      <span className="mtf-session-band premarket" aria-hidden="true"></span>
+      <span className="mtf-session-band regular" aria-hidden="true"></span>
+      <span className="mtf-session-band postmarket" aria-hidden="true"></span>
+      {events.map((event) => (
+        <button
+          key={`${event.label}-${event.match?.candle_time || event.position}`}
+          type="button"
+          className={`mtf-event-bar ${event.tone}`}
+          style={{ "--event-left": `${event.position}%` }}
+          title={`${event.label} ${event.time}`}
+          aria-label={`${event.label} touched at ${event.time}`}
+          onClick={(clickEvent) => clickEvent.stopPropagation()}
+          onPointerDown={(pointerEvent) => pointerEvent.stopPropagation()}
+        >
+          <span>{event.label}</span>
+          <time>{event.time}</time>
+        </button>
+      ))}
+      <span className="mtf-live-marker" aria-hidden="true"></span>
+    </div>
+  );
+}
+
 function mtfTimeframeLabel(label) {
   const text = String(label || "").toLowerCase();
   if (text.startsWith("daily") || text.startsWith("1d")) return "1D";
@@ -507,6 +546,32 @@ function mtfTouchTime(match) {
   const parsed = new Date(match.candle_time);
   if (Number.isNaN(parsed.getTime())) return "";
   return parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+const MTF_TIMELINE_START_MINUTES = 4 * 60;
+const MTF_TIMELINE_END_MINUTES = 19 * 60;
+const MTF_TIMELINE_RANGE_MINUTES = MTF_TIMELINE_END_MINUTES - MTF_TIMELINE_START_MINUTES;
+
+function useTimelineNowPosition() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 30 * 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+  return mtfTimelinePosition(now, false);
+}
+
+function mtfTimelinePosition(value, clamp = true) {
+  const parsed = value instanceof Date ? value : new Date(value || "");
+  if (Number.isNaN(parsed.getTime())) return null;
+  const minutes = parsed.getHours() * 60 + parsed.getMinutes();
+  if (!clamp && (minutes < MTF_TIMELINE_START_MINUTES || minutes > MTF_TIMELINE_END_MINUTES)) return null;
+  const boundedMinutes = clampNumber(minutes, MTF_TIMELINE_START_MINUTES, MTF_TIMELINE_END_MINUTES);
+  return ((boundedMinutes - MTF_TIMELINE_START_MINUTES) / MTF_TIMELINE_RANGE_MINUTES) * 100;
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function biasSummaryForQuote(quote) {
