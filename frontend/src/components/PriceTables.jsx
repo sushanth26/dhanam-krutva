@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { CloudTag } from "./Tags";
 import { cloudStatus, formatPrice } from "../lib/market";
@@ -18,8 +18,7 @@ export function MtfTable({
 }) {
   const columns = compact ? [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
-    { key: "mtf", label: "MTF", value: (quote) => mtfDisplayMatches(quote.mtf_matches).map(({ label }) => label).join(" ") },
-    { key: "sourceTime", label: "Source · Time", value: (quote) => latestMtfTime(quote) },
+    { key: "mtf", label: "4A-7P", value: (quote) => latestMtfTime(quote) },
     { key: "signal", label: "Signal", value: (quote) => tradeActionForMatches(quote.mtf_matches) || "Wait" },
     { key: "bias", label: "Bias", value: (quote) => biasSummaryForQuote(quote).label },
   ] : [
@@ -31,9 +30,10 @@ export function MtfTable({
     { key: "plan", label: "Trade plan", value: (quote) => mtfPlanSortValue(quote) },
     { key: "time", label: "Time", value: (quote) => latestMtfTime(quote) },
   ];
-  const defaultSort = compact ? { key: "sourceTime", direction: "desc" } : { key: "time", direction: "desc" };
+  const defaultSort = compact ? { key: "mtf", direction: "desc" } : { key: "time", direction: "desc" };
   const { sortedRows: sortedQuotes, sort, toggleSort } = useSortableRows(quotes, columns, defaultSort);
   const showActions = Boolean(onBuy) && !compact;
+  const nowPosition = useTimelineNowPosition();
 
   return (
     <section className="price-bucket mtf-bucket">
@@ -65,6 +65,7 @@ export function MtfTable({
                 quote={quote}
                 showWatchlist={showWatchlist}
                 compact={compact}
+                nowPosition={nowPosition}
                 onBuy={onBuy}
                 onDismissNew={onDismissNew}
               />
@@ -363,15 +364,16 @@ function mtfPlanSortValue(quote) {
   return tradeActionForMatches(quote.mtf_matches) || "";
 }
 
-function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDismissNew }) {
+function MtfRow({ buyState, compact, focused, nowPosition, quote, showWatchlist, onBuy, onDismissNew }) {
   const triggerTime = mtfTriggerTime(quote.mtf_matches);
   const riskPlan = aPlusPlusRiskPlan(quote.mtf_matches);
   const tradeAction = tradeActionForMatches(quote.mtf_matches);
-  const fiveTwelveStatus = fiveTwelvePriceStatus(quote);
+  const tenMinuteStatus = cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
   const dismissNew = quote.is_new ? () => onDismissNew?.(quote) : undefined;
   const rowId = ["mtf-row", quote.watchlist_id || "tab", quote.symbol].join("-");
   const mtfTags = (
     <td className="mtf-label-cell" data-label="MTF">
+      <MtfTimeline matches={quote.mtf_matches} nowPosition={nowPosition} />
       <span className="mtf-tag-stack">
         {mtfDisplayMatches(quote.mtf_matches).map(({ label, match }) => (
           <MtfTouchPill key={`${label}-${match?.candle_time || ""}`} label={label} match={match} />
@@ -393,16 +395,12 @@ function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDis
         dataMtfSymbol={quote.symbol}
         id={rowId}
         quote={quote}
+        showCompanyName={false}
         showPrice={false}
-        trend={fiveTwelveStatus}
+        trend={tenMinuteStatus}
         onClick={dismissNew}
       >
         {mtfTags}
-        <td className="source-time-cell" data-label="Source · Time">
-          <span className="source-pill">{quote.watchlist_name || "-"}</span>
-          {quote.is_new ? <NewTag onDismiss={dismissNew} symbol={quote.symbol} /> : null}
-          <time>{triggerTime}</time>
-        </td>
         <td className="signal-cell" data-label="Signal"><DirectionPill value={tradeAction || "Wait"} /></td>
         <td className="bias-cell" data-label="Bias"><BiasMeter bias={biasSummaryForQuote(quote)} /></td>
       </BaseRow>
@@ -416,7 +414,7 @@ function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDis
       id={rowId}
       quote={quote}
       showPrice={false}
-      trend={fiveTwelveStatus}
+      trend={tenMinuteStatus}
       onClick={dismissNew}
       action={(
         <BuyCell
@@ -453,6 +451,65 @@ function MtfTouchPill({ label, match }) {
       {touchTime ? <time>{touchTime}</time> : null}
     </span>
   );
+}
+
+function MtfTimeline({ matches, nowPosition }) {
+  const [activeEvent, setActiveEvent] = useState("");
+  const events = mtfTimelineMatches(matches)
+    .map(({ label, match }, index) => {
+      const time = mtfTouchTime(match);
+      return {
+        id: `${label}-${match?.candle_time || time}-${index}`,
+        label,
+        match,
+        position: mtfTimelinePosition(match?.candle_time),
+        time,
+        tone: mtfPillTone(label),
+      };
+    })
+    .filter((event) => event.position != null);
+  const timelineStyle = nowPosition == null ? undefined : { "--now-left": `${nowPosition}%` };
+  return (
+    <div className={`mtf-timeline ${nowPosition == null ? "no-live-time" : ""}`} style={timelineStyle} aria-label="MTF touch timeline from 4 AM to 7 PM">
+      <span className="mtf-session-band premarket" aria-hidden="true"></span>
+      <span className="mtf-session-band regular" aria-hidden="true"></span>
+      <span className="mtf-session-band postmarket" aria-hidden="true"></span>
+      <span className="mtf-session-divider open" aria-hidden="true"></span>
+      <span className="mtf-session-divider close" aria-hidden="true"></span>
+      {events.map((event) => (
+        <button
+          key={event.id}
+          type="button"
+          className={`mtf-event-bar ${event.tone} ${activeEvent === event.id ? "active" : ""}`}
+          style={{ "--event-left": `${event.position}%` }}
+          title={`${event.label} ${event.time}`}
+          aria-label={`${event.label} touched at ${event.time}`}
+          onClick={(clickEvent) => {
+            clickEvent.stopPropagation();
+            setActiveEvent((current) => current === event.id ? "" : event.id);
+          }}
+          onBlur={() => setActiveEvent("")}
+          onPointerDown={(pointerEvent) => pointerEvent.stopPropagation()}
+        >
+          <span className="mtf-event-tooltip">
+            <b>{event.label}</b>
+            <time>{event.time}</time>
+          </span>
+        </button>
+      ))}
+      <span className="mtf-live-marker" aria-hidden="true"></span>
+    </div>
+  );
+}
+
+function mtfTimelineMatches(matches = []) {
+  return matches
+    .map((match) => ({
+      label: String(match.display_label || match.label || "").trim(),
+      match,
+    }))
+    .filter(({ label }) => label)
+    .sort((left, right) => mtfMatchTimeValue(left.match) - mtfMatchTimeValue(right.match));
 }
 
 function mtfTimeframeLabel(label) {
@@ -503,22 +560,69 @@ function mtfMatchTimeValue(match) {
 }
 
 function mtfTouchTime(match) {
-  if (!match?.candle_time) return "";
-  const parsed = new Date(match.candle_time);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  return mtfMarketClock(match?.candle_time)?.label || "";
 }
 
-function fiveTwelvePriceStatus(quote) {
-  const price = Number(quote?.price);
-  const ema5 = Number(quote?.ema_10m?.["5"]);
-  const ema12 = Number(quote?.ema_10m?.["12"]);
-  if (![price, ema5, ema12].every(Number.isFinite)) return "";
-  const low = Math.min(ema5, ema12);
-  const high = Math.max(ema5, ema12);
-  if (price > high) return "Bullish";
-  if (price < low) return "Bearish";
-  return "Chop";
+const MTF_TIMELINE_START_MINUTES = 4 * 60;
+const MTF_TIMELINE_END_MINUTES = 19 * 60;
+const MTF_TIMELINE_RANGE_MINUTES = MTF_TIMELINE_END_MINUTES - MTF_TIMELINE_START_MINUTES;
+
+function useTimelineNowPosition() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 30 * 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+  return mtfTimelinePosition(now, false);
+}
+
+function mtfTimelinePosition(value, clamp = true) {
+  const clock = mtfMarketClock(value);
+  if (!clock) return null;
+  const minutes = clock.minutes;
+  if (!clamp && (minutes < MTF_TIMELINE_START_MINUTES || minutes > MTF_TIMELINE_END_MINUTES)) return null;
+  const boundedMinutes = clampNumber(minutes, MTF_TIMELINE_START_MINUTES, MTF_TIMELINE_END_MINUTES);
+  return ((boundedMinutes - MTF_TIMELINE_START_MINUTES) / MTF_TIMELINE_RANGE_MINUTES) * 100;
+}
+
+function mtfMarketClock(value) {
+  if (!value) return null;
+  if (value instanceof Date) return marketClockFromDate(value);
+  const text = String(value);
+  const isoClock = text.match(/T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/);
+  if (isoClock) {
+    const hours = Number(isoClock[1]);
+    const minutes = Number(isoClock[2]);
+    if (Number.isFinite(hours) && Number.isFinite(minutes)) {
+      return {
+        label: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
+        minutes: hours * 60 + minutes,
+      };
+    }
+  }
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return marketClockFromDate(parsed);
+}
+
+function marketClockFromDate(value) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(value);
+  const hours = Number(parts.find((part) => part.type === "hour")?.value);
+  const minutes = Number(parts.find((part) => part.type === "minute")?.value);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return {
+    label: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
+    minutes: hours * 60 + minutes,
+  };
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function biasSummaryForQuote(quote) {
@@ -625,11 +729,14 @@ function PriceRow({ compact, quote, onRemoveSymbol }) {
   );
 }
 
-function BaseRow({ quote, children, trend = "", action = null, className = "", dataMtfSymbol, id, showPrice = true, onClick }) {
+function BaseRow({ quote, children, trend = "", action = null, className = "", dataMtfSymbol, id, showCompanyName = true, showPrice = true, onClick }) {
   const rowClass = [trend ? `trend-${String(trend).toLowerCase()}` : "", className].filter(Boolean).join(" ");
   return (
     <tr className={`stock-row ${rowClass}`} data-mtf-symbol={dataMtfSymbol} id={id} onClick={onClick}>
-      <td data-label="Symbol"><strong>{quote.symbol}</strong><small>{symbolDisplayName(quote.symbol)}</small></td>
+      <td data-label="Symbol">
+        <strong>{quote.symbol}</strong>
+        {showCompanyName ? <small>{symbolDisplayName(quote.symbol)}</small> : null}
+      </td>
       {children}
       {showPrice ? <td className="price-cell" data-label="Last">{formatPrice(quote.price)}</td> : null}
       {action}

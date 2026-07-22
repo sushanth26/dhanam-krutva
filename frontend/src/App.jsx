@@ -2361,7 +2361,7 @@ export default function App() {
           </div>
         </div>
       ) : null}
-      <main className="shell">
+      <main className={`shell ${activePage === "mtfs" || activePage === "home" ? "mtf-shell" : ""}`}>
         {alert ? <div className={`alert app-alert ${alertKind}`}>{alert}</div> : null}
 
         {activePage === "alerts" ? (
