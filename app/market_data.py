@@ -1,4 +1,4 @@
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, time, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -588,7 +588,7 @@ def session_mtf_touch_matches(
             continue
         high = candle.get("high")
         high = high if high is not None else max(value for value in (candle.get("open"), close, low) if value is not None)
-        candle_time = mtf_touch_candle_start_time(candle.get("time") or candle.get("sort_time") or candle.get("timestamp"))
+        candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
         for label, timeframe, first, second in checks:
             if first is None or second is None:
                 continue
@@ -612,13 +612,6 @@ def session_mtf_touch_matches(
                 "direction": "touch",
             })
     return matches
-
-
-def mtf_touch_candle_start_time(value: Any) -> Any:
-    parsed = parse_iso_time(value)
-    if not parsed:
-        return value
-    return (parsed - timedelta(minutes=10)).isoformat()
 
 
 def current_session_ten_minute_candles(candles: list[dict[str, Any]]) -> list[dict[str, Any]]:

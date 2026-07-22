@@ -662,7 +662,7 @@ def test_session_mtf_touch_matches_keeps_today_premarket_cloud_touch_after_price
     labels = [match["label"] for match in matches]
     assert "10m 34/50 touch" in labels
     assert "Hourly 34/50" in labels
-    assert {match["label"]: match["candle_time"] for match in matches}["Hourly 34/50"] == "2026-07-02T07:00:00"
+    assert {match["label"]: match["candle_time"] for match in matches}["Hourly 34/50"] == "2026-07-02T07:10:00"
 
 
 def test_session_mtf_touch_matches_keeps_repeated_touches_for_same_label():
@@ -692,8 +692,8 @@ def test_session_mtf_touch_matches_keeps_repeated_touches_for_same_label():
 
     hourly_times = [match["candle_time"] for match in matches if match["label"] == "Hourly 34/50"]
     daily_times = [match["candle_time"] for match in matches if match["label"] == "Daily 20/21"]
-    assert hourly_times == ["2026-07-02T09:30:00", "2026-07-02T10:50:00"]
-    assert daily_times == ["2026-07-02T09:30:00", "2026-07-02T10:50:00"]
+    assert hourly_times == ["2026-07-02T09:40:00", "2026-07-02T11:00:00"]
+    assert daily_times == ["2026-07-02T09:40:00", "2026-07-02T11:00:00"]
 
 
 def test_mtf_signal_matches_does_not_wait_when_incomplete_candle_is_far_from_cloud():
