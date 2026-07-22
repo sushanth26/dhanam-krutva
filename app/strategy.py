@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from webull.data.common.category import Category
 from webull.data.common.timespan import Timespan
@@ -22,6 +23,8 @@ WATCHLIST = [
     "MP", "USAR",
     "LLY", "PLTR", "RDDT",
 ]
+
+MARKET_TIMEZONE = ZoneInfo("America/New_York")
 
 
 @dataclass(frozen=True)
@@ -305,8 +308,11 @@ def parse_time(value: Any) -> str | None:
             timestamp = int(text)
             if timestamp > 10_000_000_000:
                 timestamp = timestamp / 1000
-            return datetime.utcfromtimestamp(timestamp).isoformat()
-        return datetime.strptime(text, "%Y-%m-%dT%H:%M:%S.%f%z").astimezone().isoformat()
+            return datetime.fromtimestamp(timestamp, MARKET_TIMEZONE).isoformat()
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=MARKET_TIMEZONE)
+        return parsed.astimezone(MARKET_TIMEZONE).isoformat()
     except (ValueError, OSError):
         return text
 
