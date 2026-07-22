@@ -18,14 +18,14 @@ export function MtfTable({
 }) {
   const columns = compact ? [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
-    { key: "mtf", label: "MTF", value: (quote) => mtfLabels(quote.mtf_matches).join(" ") },
+    { key: "mtf", label: "MTF", value: (quote) => mtfDisplayMatches(quote.mtf_matches).map(({ label }) => label).join(" ") },
     { key: "sourceTime", label: "Source · Time", value: (quote) => latestMtfTime(quote) },
     { key: "signal", label: "Signal", value: (quote) => tradeActionForMatches(quote.mtf_matches) || "Wait" },
     { key: "bias", label: "Bias", value: (quote) => biasSummaryForQuote(quote).label },
   ] : [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     ...(showWatchlist ? [{ key: "watchlist", label: "Watchlist", value: (quote) => quote.watchlist_name || "" }] : []),
-    { key: "mtf", label: "MTF", value: (quote) => mtfLabels(quote.mtf_matches).join(" ") },
+    { key: "mtf", label: "MTF", value: (quote) => mtfDisplayMatches(quote.mtf_matches).map(({ label }) => label).join(" ") },
     { key: "structure", label: "BOS", value: (quote) => quote.structure_10m?.status || "Unknown" },
     { key: "bias", label: "Bias", value: (quote) => tradeActionForMatches(quote.mtf_matches) || directionalBiasForQuote(quote) },
     { key: "plan", label: "Trade plan", value: (quote) => mtfPlanSortValue(quote) },
@@ -372,8 +372,8 @@ function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDis
   const mtfTags = (
     <td className="mtf-label-cell" data-label="MTF">
       <span className="mtf-tag-stack">
-        {mtfLabels(quote.mtf_matches).map((label) => (
-          <MtfTouchPill key={label} label={label} />
+        {mtfDisplayMatches(quote.mtf_matches).map(({ label, match }) => (
+          <MtfTouchPill key={`${label}-${match?.candle_time || ""}`} label={label} match={match} />
         ))}
       </span>
     </td>
@@ -437,15 +437,17 @@ function MtfRow({ buyState, compact, focused, quote, showWatchlist, onBuy, onDis
   );
 }
 
-function MtfTouchPill({ label }) {
+function MtfTouchPill({ label, match }) {
   const normalized = String(label || "").trim();
   const timeframe = mtfTimeframeLabel(normalized);
   const tone = mtfPillTone(normalized);
   const level = normalized.replace(/^(Daily|Hourly|Hour|1D|1H|10m)\s*/i, "").replace(/\s*touch$/i, "").trim();
+  const touchTime = mtfTouchTime(match);
   return (
     <span className={`mtf-touch-pill tf-${timeframe.toLowerCase()} ${tone}`}>
       <b>{timeframe}</b>
       <span>{level || normalized}</span>
+      {touchTime ? <time>{touchTime}</time> : null}
     </span>
   );
 }
@@ -466,16 +468,23 @@ function mtfPillTone(label) {
   return "mtf-default";
 }
 
-function mtfLabels(matches = []) {
-  const labels = [];
-  const seen = new Set();
+function mtfDisplayMatches(matches = []) {
+  const items = [];
+  const indexByLabel = new Map();
   for (const match of matches) {
     const label = String(match.display_label || match.label || "").trim();
-    if (!label || seen.has(label)) continue;
-    labels.push(label);
-    seen.add(label);
+    if (!label) continue;
+    const existingIndex = indexByLabel.get(label);
+    if (existingIndex == null) {
+      indexByLabel.set(label, items.length);
+      items.push({ label, match });
+      continue;
+    }
+    if (mtfMatchTimeValue(match) >= mtfMatchTimeValue(items[existingIndex].match)) {
+      items[existingIndex] = { label, match };
+    }
   }
-  return labels;
+  return items;
 }
 
 function latestMtfTime(quote) {
@@ -483,6 +492,18 @@ function latestMtfTime(quote) {
     .map((match) => Date.parse(match.candle_time || ""))
     .filter(Number.isFinite);
   return times.length ? Math.max(...times) : 0;
+}
+
+function mtfMatchTimeValue(match) {
+  const parsed = Date.parse(match?.candle_time || "");
+  return Number.isFinite(parsed) ? parsed : -Infinity;
+}
+
+function mtfTouchTime(match) {
+  if (!match?.candle_time) return "";
+  const parsed = new Date(match.candle_time);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function biasSummaryForQuote(quote) {

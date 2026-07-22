@@ -6596,6 +6596,13 @@ select {
   padding: 5px 7px;
 }
 
+.mtf-touch-pill time {
+  color: currentColor;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  opacity: 0.72;
+}
+
 .mtf-touch-pill.tf-1d b,
 .mtf-touch-pill.tf-mtf b {
   background: #0d4b3f;
