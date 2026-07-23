@@ -19,7 +19,6 @@ export function MtfTable({
   const columns = compact ? [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     { key: "mtf", label: "4A-7P", value: (quote) => latestMtfTime(quote) },
-    { key: "bias", label: "Bias", value: (quote) => biasSummaryForQuote(quote).label },
   ] : [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     ...(showWatchlist ? [{ key: "watchlist", label: "Watchlist", value: (quote) => quote.watchlist_name || "" }] : []),
@@ -399,7 +398,6 @@ function MtfRow({ buyState, compact, focused, nowPosition, quote, showWatchlist,
         trend={tenMinuteStatus}
       >
         {mtfTags}
-        <td className="bias-cell" data-label="Bias"><BiasMeter bias={biasSummaryForQuote(quote)} /></td>
       </BaseRow>
     );
   }
