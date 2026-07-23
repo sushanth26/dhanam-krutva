@@ -132,8 +132,8 @@ def build_live_prices(
                 "mtf_touches_today": session_mtf_touch_matches(
                     ten_minute_candles,
                     ten_minute_ema,
-                    ema_1h,
-                    ema_daily,
+                    h1_candles,
+                    daily_candles,
                 ),
                 "mtf_matches": mtf_signal_matches(
                     candle_price,
@@ -570,16 +570,12 @@ def mtf_signal_matches(
 def session_mtf_touch_matches(
     ten_minute_candles: list[dict[str, Any]],
     ema_10m: dict[str, float | None],
-    ema_1h: dict[str, float | None],
-    ema_daily: dict[str, float | None],
+    h1_candles: list[dict[str, Any]],
+    daily_candles: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     session_candles = current_session_ten_minute_candles(ten_minute_candles)
-    checks = [
-        ("10m 34/50 touch", "10m", ema_10m.get("34"), ema_10m.get("50")),
-        ("Hourly 34/50", "hourly", ema_1h.get("34"), ema_1h.get("50")),
-        ("Daily 20/21", "daily", ema_daily.get("20"), ema_daily.get("21")),
-        ("Daily 50/55", "daily", ema_daily.get("50"), ema_daily.get("55")),
-    ]
+    h1_ema_snapshots = ema_snapshots_by_time(h1_candles, [34, 50])
+    daily_ema_snapshots = ema_snapshots_by_time(daily_candles, [20, 21, 50, 55])
     matches: list[dict[str, Any]] = []
     for candle in session_candles:
         low = candle.get("low")
@@ -589,6 +585,15 @@ def session_mtf_touch_matches(
         high = candle.get("high")
         high = high if high is not None else max(value for value in (candle.get("open"), close, low) if value is not None)
         candle_time = candle.get("time") or candle.get("sort_time") or candle.get("timestamp")
+        candle_market_time = market_time_for_value(candle_time)
+        ema_1h = ema_snapshot_at(h1_ema_snapshots, candle_market_time)
+        ema_daily = ema_snapshot_at(daily_ema_snapshots, candle_market_time)
+        checks = [
+            ("10m 34/50 touch", "10m", ema_10m.get("34"), ema_10m.get("50")),
+            ("Hourly 34/50", "hourly", ema_1h.get("34"), ema_1h.get("50")),
+            ("Daily 20/21", "daily", ema_daily.get("20"), ema_daily.get("21")),
+            ("Daily 50/55", "daily", ema_daily.get("50"), ema_daily.get("55")),
+        ]
         for label, timeframe, first, second in checks:
             if first is None or second is None:
                 continue
@@ -612,6 +617,51 @@ def session_mtf_touch_matches(
                 "direction": "touch",
             })
     return matches
+
+
+def ema_snapshots_by_time(candles: list[dict[str, Any]], periods: list[int]) -> list[dict[str, Any]]:
+    candle_count = 0
+    ema_by_period: dict[int, float | None] = {period: None for period in periods}
+    snapshots: list[dict[str, Any]] = []
+    for candle in candles:
+        close = candle.get("close")
+        market_time = market_time_for_candle(candle)
+        if close is None or market_time is None:
+            continue
+        candle_count += 1
+        snapshot: dict[str, Any] = {"market_time": market_time}
+        for period in periods:
+            previous_ema = ema_by_period[period]
+            multiplier = 2 / (period + 1)
+            ema_by_period[period] = close if previous_ema is None else (close - previous_ema) * multiplier + previous_ema
+            snapshot[str(period)] = round(ema_by_period[period], 4) if candle_count >= period else None
+        snapshots.append(snapshot)
+    return snapshots
+
+
+def ema_snapshot_at(snapshots: list[dict[str, Any]], market_time: datetime | None) -> dict[str, float | None]:
+    if market_time is None:
+        return {}
+    latest: dict[str, float | None] = {}
+    for snapshot in snapshots:
+        snapshot_time = snapshot.get("market_time")
+        if snapshot_time is None or snapshot_time > market_time:
+            break
+        latest = snapshot
+    return latest
+
+
+def market_time_for_candle(candle: dict[str, Any]) -> datetime | None:
+    return market_time_for_value(candle.get("sort_time") or candle.get("time") or candle.get("timestamp"))
+
+
+def market_time_for_value(value: Any) -> datetime | None:
+    parsed_time = parse_iso_time(value)
+    if parsed_time is None:
+        return None
+    if parsed_time.tzinfo is None:
+        return parsed_time.replace(tzinfo=MARKET_TIMEZONE)
+    return parsed_time.astimezone(MARKET_TIMEZONE)
 
 
 def current_session_ten_minute_candles(candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
