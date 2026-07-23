@@ -28,7 +28,7 @@
   .mtf-page .compact-mtf-table thead tr,
   .mtf-page .compact-mtf-table tbody .stock-row {
     display: grid;
-    grid-template-columns: 52px minmax(0, 1fr) 48px 44px;
+    grid-template-columns: 52px minmax(0, 1fr) 44px;
   }
 
   .mtf-page .compact-mtf-table tbody {
@@ -6550,7 +6550,7 @@ select {
   .mtf-page .compact-mtf-table thead tr,
   .mtf-page .compact-mtf-table tbody .stock-row {
     display: grid;
-    grid-template-columns: 52px minmax(0, 1fr) 48px 44px;
+    grid-template-columns: 52px minmax(0, 1fr) 44px;
   }
 
   .mtf-page .compact-mtf-table tbody {
@@ -6616,7 +6616,6 @@ select {
     width: 5px;
   }
 
-  .mtf-page .compact-mtf-table .stock-row > .signal-cell,
   .mtf-page .compact-mtf-table .stock-row > .bias-cell {
     display: flex;
     justify-content: center;
@@ -6676,7 +6675,7 @@ select {
   .mtf-shell .compact-mtf-table thead tr,
   .mtf-shell .compact-mtf-table tbody .stock-row {
     display: grid !important;
-    grid-template-columns: 104px minmax(520px, 1fr) 76px 82px !important;
+    grid-template-columns: 104px minmax(520px, 1fr) 82px !important;
   }
 
   .mtf-shell .compact-mtf-table tbody {
@@ -6696,7 +6695,6 @@ select {
   }
 
   .mtf-shell .compact-mtf-table .mtf-label-cell,
-  .mtf-shell .compact-mtf-table .signal-cell,
   .mtf-shell .compact-mtf-table .bias-cell {
     display: flex !important;
   }
@@ -7034,11 +7032,6 @@ select {
 
   .mtf-shell .compact-mtf-table th:nth-child(3),
   .mtf-shell .compact-mtf-table td:nth-child(3) {
-    width: 95px;
-  }
-
-  .mtf-shell .compact-mtf-table th:nth-child(4),
-  .mtf-shell .compact-mtf-table td:nth-child(4) {
     width: 92px;
   }
 
@@ -8211,7 +8204,7 @@ select {
   .mtf-page .compact-mtf-table thead tr,
   .mtf-page .compact-mtf-table tbody .stock-row {
     display: grid;
-    grid-template-columns: 52px minmax(0, 1fr) 48px 44px;
+    grid-template-columns: 52px minmax(0, 1fr) 44px;
   }
 
   .mtf-page .compact-mtf-table tbody {
@@ -8278,7 +8271,6 @@ select {
     width: 5px;
   }
 
-  .mtf-page .compact-mtf-table .stock-row > .signal-cell,
   .mtf-page .compact-mtf-table .stock-row > .bias-cell {
     display: flex;
     justify-content: center;
