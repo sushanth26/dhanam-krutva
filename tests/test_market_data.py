@@ -35,6 +35,29 @@ def candle(index: int, close: float) -> dict:
     }
 
 
+def bar_at(stamp: datetime, close: float, low: float | None = None, high: float | None = None) -> dict:
+    return {
+        "time": stamp.isoformat(),
+        "sort_time": stamp.isoformat(),
+        "session_date": stamp.date().isoformat(),
+        "open": close,
+        "high": high if high is not None else close + 1,
+        "low": low if low is not None else close - 1,
+        "close": close,
+        "volume": 100,
+    }
+
+
+def hourly_history(close: float, count: int = 60, start: datetime | None = None) -> list[dict]:
+    first_stamp = start or datetime(2026, 6, 30, 0, 0)
+    return [bar_at(first_stamp + timedelta(hours=index), close) for index in range(count)]
+
+
+def daily_history(close: float, count: int = 60, start: datetime | None = None) -> list[dict]:
+    first_stamp = start or datetime(2026, 5, 1, 16, 0)
+    return [bar_at(first_stamp + timedelta(days=index), close) for index in range(count)]
+
+
 def test_parse_symbols_normalizes_and_filters_empty_entries():
     assert parse_symbols(" be, AAOI ,,lly ") == ["BE", "AAOI", "LLY"]
 
@@ -457,6 +480,24 @@ def test_mtf_matches_alerts_when_current_intraday_candle_touches_hourly_cloud():
     assert "trade_action" not in matches[0]
 
 
+def test_mtf_matches_uses_hourly_slow_cloud_for_mtf():
+    matches = mtf_matches(
+        120,
+        "Bullish",
+        {"5": 122, "12": 121, "34": 100, "50": 110},
+        {"5": 116, "12": 114, "34": 100, "50": 106},
+        {"20": 80, "21": 90, "50": 130, "55": 135},
+        previous_price=118,
+        current_low=104,
+        current_high=105,
+        candle_complete=True,
+    )
+
+    assert [match["label"] for match in matches] == ["Hourly 34/50"]
+    assert matches[0]["low"] == 100
+    assert matches[0]["high"] == 106
+
+
 def test_mtf_signal_matches_does_not_alert_when_only_prior_candle_touched_hourly_cloud():
     matches = mtf_signal_matches(
         120,
@@ -655,12 +696,12 @@ def test_session_mtf_touch_matches_keeps_today_premarket_cloud_touch_after_price
             },
         ],
         {"34": 100, "50": 110},
-        {"34": 101, "50": 105},
-        {"20": 80, "21": 90, "50": 140, "55": 145},
+        hourly_history(103),
+        daily_history(80),
     )
 
     labels = [match["label"] for match in matches]
-    assert "10m 34/50 touch" in labels
+    assert "10m 34/50 touch" not in labels
     assert "Hourly 34/50" in labels
     assert {match["label"]: match["candle_time"] for match in matches}["Hourly 34/50"] == "2026-07-02T07:10:00"
 
@@ -686,14 +727,48 @@ def test_session_mtf_touch_matches_keeps_repeated_touches_for_same_label():
             },
         ],
         {"34": 100, "50": 110},
-        {"34": 101, "50": 105},
-        {"20": 103, "21": 104, "50": 120, "55": 125},
+        hourly_history(103),
+        daily_history(103.5),
     )
 
     hourly_times = [match["candle_time"] for match in matches if match["label"] == "Hourly 34/50"]
     daily_times = [match["candle_time"] for match in matches if match["label"] == "Daily 20/21"]
     assert hourly_times == ["2026-07-02T09:40:00", "2026-07-02T11:00:00"]
     assert daily_times == ["2026-07-02T09:40:00", "2026-07-02T11:00:00"]
+
+
+def test_session_mtf_touch_matches_uses_historical_hourly_cloud_for_each_candle():
+    h1_candles = [
+        *hourly_history(90, count=50, start=datetime(2026, 6, 28, 7, 0)),
+        *hourly_history(120, count=30, start=datetime(2026, 6, 30, 9, 0)),
+    ]
+
+    matches = session_mtf_touch_matches(
+        [
+            {
+                "low": 110,
+                "high": 112,
+                "close": 111,
+                "source_count": 2,
+                "time": "2026-06-30T08:00:00",
+                "session_date": "2026-07-02",
+            },
+            {
+                "low": 110,
+                "high": 112,
+                "close": 111,
+                "source_count": 2,
+                "time": "2026-07-01T10:00:00",
+                "session_date": "2026-07-02",
+            },
+        ],
+        {"34": 10, "50": 20},
+        h1_candles,
+        daily_history(80),
+    )
+
+    hourly_times = [match["candle_time"] for match in matches if match["label"] == "Hourly 34/50"]
+    assert hourly_times == ["2026-07-01T10:00:00"]
 
 
 def test_mtf_signal_matches_does_not_wait_when_incomplete_candle_is_far_from_cloud():

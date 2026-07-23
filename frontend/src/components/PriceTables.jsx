@@ -19,8 +19,6 @@ export function MtfTable({
   const columns = compact ? [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     { key: "mtf", label: "4A-7P", value: (quote) => latestMtfTime(quote) },
-    { key: "signal", label: "Signal", value: (quote) => tradeActionForMatches(quote.mtf_matches) || "Wait" },
-    { key: "bias", label: "Bias", value: (quote) => biasSummaryForQuote(quote).label },
   ] : [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     ...(showWatchlist ? [{ key: "watchlist", label: "Watchlist", value: (quote) => quote.watchlist_name || "" }] : []),
@@ -398,11 +396,8 @@ function MtfRow({ buyState, compact, focused, nowPosition, quote, showWatchlist,
         showCompanyName={false}
         showPrice={false}
         trend={tenMinuteStatus}
-        onClick={dismissNew}
       >
         {mtfTags}
-        <td className="signal-cell" data-label="Signal"><DirectionPill value={tradeAction || "Wait"} /></td>
-        <td className="bias-cell" data-label="Bias"><BiasMeter bias={biasSummaryForQuote(quote)} /></td>
       </BaseRow>
     );
   }
@@ -589,6 +584,10 @@ function mtfMarketClock(value) {
   if (!value) return null;
   if (value instanceof Date) return marketClockFromDate(value);
   const text = String(value);
+  if (/T.*(?:Z|[+-]\d{2}:?\d{2})$/.test(text)) {
+    const parsed = new Date(text);
+    return Number.isNaN(parsed.getTime()) ? null : marketClockFromDate(parsed);
+  }
   const isoClock = text.match(/T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/);
   if (isoClock) {
     const hours = Number(isoClock[1]);
