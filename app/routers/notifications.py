@@ -118,7 +118,7 @@ def test_notification():
     result = MtfPushMonitor(settings).send(
         {
             "title": "MTF notification test",
-            "body": "BE Hourly 5/12 | AAOI Daily 20/21 | LLY Daily 50/55",
+            "body": "BE Hourly 34/50 | AAOI Daily 20/21 | LLY Daily 50/55",
             "tag": "mtf-test",
             "url": "/",
         }

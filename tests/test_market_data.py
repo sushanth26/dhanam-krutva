@@ -473,14 +473,14 @@ def test_mtf_matches_alerts_when_current_intraday_candle_touches_hourly_cloud():
         candle_complete=True,
     )
 
-    assert [match["label"] for match in matches] == ["Hourly 5/12"]
+    assert [match["label"] for match in matches] == ["Hourly 34/50"]
     assert matches[0]["status"] == "confirmed"
     assert matches[0]["direction"] == "touch"
     assert matches[0]["type"] == "mtf_cloud_touch"
     assert "trade_action" not in matches[0]
 
 
-def test_mtf_matches_prefers_hourly_fast_cloud_over_slow_cloud():
+def test_mtf_matches_uses_hourly_slow_cloud_for_mtf():
     matches = mtf_matches(
         120,
         "Bullish",
@@ -488,14 +488,14 @@ def test_mtf_matches_prefers_hourly_fast_cloud_over_slow_cloud():
         {"5": 116, "12": 114, "34": 100, "50": 106},
         {"20": 80, "21": 90, "50": 130, "55": 135},
         previous_price=118,
-        current_low=115,
-        current_high=121,
+        current_low=104,
+        current_high=105,
         candle_complete=True,
     )
 
-    assert [match["label"] for match in matches] == ["Hourly 5/12"]
-    assert matches[0]["low"] == 114
-    assert matches[0]["high"] == 116
+    assert [match["label"] for match in matches] == ["Hourly 34/50"]
+    assert matches[0]["low"] == 100
+    assert matches[0]["high"] == 106
 
 
 def test_mtf_signal_matches_does_not_alert_when_only_prior_candle_touched_hourly_cloud():
@@ -527,7 +527,7 @@ def test_mtf_matches_alerts_bullish_only_after_price_closes_above_cloud():
         candle_complete=True,
     )
 
-    assert [match["label"] for match in matches] == ["Hourly 5/12", "Daily 20/21", "Daily 50/55"]
+    assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 20/21", "Daily 50/55"]
     assert all(match["status"] == "confirmed" and match["direction"] == "above" for match in matches)
     assert all(match["trade_action"] == "Long" for match in matches)
     assert [match["risk_plan"]["stop"] for match in matches] == [97, 105, 101]
@@ -548,7 +548,7 @@ def test_mtf_matches_alerts_bearish_only_after_price_closes_below_cloud():
         candle_complete=True,
     )
 
-    assert [match["label"] for match in matches] == ["Hourly 5/12", "Daily 50/55"]
+    assert [match["label"] for match in matches] == ["Hourly 34/50", "Daily 50/55"]
     assert all(match["status"] == "confirmed" and match["direction"] == "below" for match in matches)
     assert all(match["trade_action"] == "Short" for match in matches)
     assert [match["risk_plan"]["stop"] for match in matches] == [113, 109]
@@ -583,11 +583,11 @@ def test_mtf_signal_matches_prefers_confirmed_bounce_over_matching_breakout_name
     )
 
     assert [match["label"] for match in matches][:3] == [
-        "10m bounce Hourly 5/12",
+        "10m bounce Hourly 34/50",
         "10m bounce Daily 20/21",
         "10m bounce Daily 50/55",
     ]
-    assert "Hourly 5/12" not in [match["label"] for match in matches]
+    assert "Hourly 34/50" not in [match["label"] for match in matches]
     assert "Daily 20/21" not in [match["label"] for match in matches]
     assert "Daily 50/55" not in [match["label"] for match in matches]
     assert matches[0]["status"] == "confirmed"
@@ -610,12 +610,12 @@ def test_mtf_signal_matches_dedupes_bearish_rejection_and_matching_breakout_name
 
     labels = [match["label"] for match in matches]
     assert labels == [
-        "10m bounce Hourly 5/12",
+        "10m bounce Hourly 34/50",
         "10m bounce Daily 20/21",
         "10m bounce Daily 50/55",
         "10m bounce 34/50",
     ]
-    assert "Hourly 5/12" not in labels
+    assert "Hourly 34/50" not in labels
     assert "Daily 20/21" not in labels
     assert "Daily 50/55" not in labels
     assert all(match["display_label"].replace("10m rejection", "10m bounce") == match["label"] for match in matches)
@@ -652,8 +652,8 @@ def test_mtf_signal_matches_waits_for_incomplete_breakouts_until_candle_close():
     )
 
     statuses = {match["label"]: match["status"] for match in matches}
-    assert statuses["Hourly 5/12"] == "confirmed"
-    assert {match["label"]: match["direction"] for match in matches}["Hourly 5/12"] == "touch"
+    assert statuses["Hourly 34/50"] == "confirmed"
+    assert {match["label"]: match["direction"] for match in matches}["Hourly 34/50"] == "touch"
     assert "10m bounce 34/50" not in statuses
     assert "Daily 20/21" not in statuses
     assert "Daily 50/55" not in statuses
@@ -701,9 +701,9 @@ def test_session_mtf_touch_matches_keeps_today_premarket_cloud_touch_after_price
     )
 
     labels = [match["label"] for match in matches]
-    assert "10m 34/50 touch" in labels
-    assert "Hourly 5/12" in labels
-    assert {match["label"]: match["candle_time"] for match in matches}["Hourly 5/12"] == "2026-07-02T07:10:00"
+    assert "10m 34/50 touch" not in labels
+    assert "Hourly 34/50" in labels
+    assert {match["label"]: match["candle_time"] for match in matches}["Hourly 34/50"] == "2026-07-02T07:10:00"
 
 
 def test_session_mtf_touch_matches_keeps_repeated_touches_for_same_label():
@@ -731,7 +731,7 @@ def test_session_mtf_touch_matches_keeps_repeated_touches_for_same_label():
         daily_history(103.5),
     )
 
-    hourly_times = [match["candle_time"] for match in matches if match["label"] == "Hourly 5/12"]
+    hourly_times = [match["candle_time"] for match in matches if match["label"] == "Hourly 34/50"]
     daily_times = [match["candle_time"] for match in matches if match["label"] == "Daily 20/21"]
     assert hourly_times == ["2026-07-02T09:40:00", "2026-07-02T11:00:00"]
     assert daily_times == ["2026-07-02T09:40:00", "2026-07-02T11:00:00"]
@@ -746,17 +746,17 @@ def test_session_mtf_touch_matches_uses_historical_hourly_cloud_for_each_candle(
     matches = session_mtf_touch_matches(
         [
             {
-                "low": 118,
-                "high": 122,
-                "close": 121,
+                "low": 110,
+                "high": 112,
+                "close": 111,
                 "source_count": 2,
                 "time": "2026-06-30T08:00:00",
                 "session_date": "2026-07-02",
             },
             {
-                "low": 118,
-                "high": 122,
-                "close": 121,
+                "low": 110,
+                "high": 112,
+                "close": 111,
                 "source_count": 2,
                 "time": "2026-07-01T10:00:00",
                 "session_date": "2026-07-02",
@@ -767,7 +767,7 @@ def test_session_mtf_touch_matches_uses_historical_hourly_cloud_for_each_candle(
         daily_history(80),
     )
 
-    hourly_times = [match["candle_time"] for match in matches if match["label"] == "Hourly 5/12"]
+    hourly_times = [match["candle_time"] for match in matches if match["label"] == "Hourly 34/50"]
     assert hourly_times == ["2026-07-01T10:00:00"]
 
 
@@ -802,7 +802,7 @@ def test_ema_cloud_bounce_matches_alerts_when_10m_candle_closes_back_above_cloud
 
     assert [match["label"] for match in matches] == [
         "10m bounce 34/50",
-        "10m bounce Hourly 5/12",
+        "10m bounce Hourly 34/50",
         "10m bounce Daily 20/21",
         "10m bounce Daily 50/55",
     ]
@@ -827,7 +827,7 @@ def test_ema_cloud_bounce_matches_alerts_when_bearish_10m_candle_closes_below_cl
 
     assert [match["label"] for match in matches] == [
         "10m bounce 34/50",
-        "10m bounce Hourly 5/12",
+        "10m bounce Hourly 34/50",
         "10m bounce Daily 20/21",
         "10m bounce Daily 50/55",
     ]

@@ -260,10 +260,6 @@ def ema_values(candles: list[dict[str, Any]], periods: list[int]) -> dict[str, f
 
 
 def hourly_mtf_cloud(ema_1h: dict[str, float | None]) -> tuple[float | None, float | None]:
-    first = ema_1h.get("5")
-    second = ema_1h.get("12")
-    if first is not None and second is not None:
-        return first, second
     return ema_1h.get("34"), ema_1h.get("50")
 
 
@@ -465,7 +461,7 @@ def mtf_matches(
     risk_amount: float = A_PLUS_PLUS_MAX_RISK,
 ) -> list[dict[str, Any]]:
     checks = [
-        ("Hourly 5/12", *hourly_mtf_cloud(ema_1h)),
+        ("Hourly 34/50", *hourly_mtf_cloud(ema_1h)),
         ("Daily 20/21", ema_daily.get("20"), ema_daily.get("21")),
         ("Daily 50/55", ema_daily.get("50"), ema_daily.get("55")),
     ]
@@ -597,8 +593,7 @@ def session_mtf_touch_matches(
         ema_1h = ema_snapshot_at(h1_ema_snapshots, candle_market_time)
         ema_daily = ema_snapshot_at(daily_ema_snapshots, candle_market_time)
         checks = [
-            ("10m 34/50 touch", "10m", ema_10m.get("34"), ema_10m.get("50")),
-            ("Hourly 5/12", "hourly", *hourly_mtf_cloud(ema_1h)),
+            ("Hourly 34/50", "hourly", *hourly_mtf_cloud(ema_1h)),
             ("Daily 20/21", "daily", ema_daily.get("20"), ema_daily.get("21")),
             ("Daily 50/55", "daily", ema_daily.get("50"), ema_daily.get("55")),
         ]
@@ -684,8 +679,8 @@ def current_session_ten_minute_candles(candles: list[dict[str, Any]]) -> list[di
 def mtf_signal_cloud_family(match: dict[str, Any]) -> str:
     label = str(match.get("label") or "")
     family_labels = {
-        "Hourly 5/12": "hourly-5-12",
-        "10m bounce Hourly 5/12": "hourly-5-12",
+        "Hourly 34/50": "hourly-34-50",
+        "10m bounce Hourly 34/50": "hourly-34-50",
         "Daily 20/21": "daily-20-21",
         "10m bounce Daily 20/21": "daily-20-21",
         "Daily 50/55": "daily-50-55",
@@ -771,7 +766,7 @@ def ema_cloud_bounce_matches(
 
     checks = [
         ("10m bounce 34/50", ema_10m.get("34"), ema_10m.get("50"), "10m", ten_minute_trend),
-        ("10m bounce Hourly 5/12", *hourly_mtf_cloud(ema_1h), "hourly"),
+        ("10m bounce Hourly 34/50", *hourly_mtf_cloud(ema_1h), "hourly"),
         ("10m bounce Daily 20/21", ema_daily.get("20"), ema_daily.get("21"), "daily"),
         ("10m bounce Daily 50/55", ema_daily.get("50"), ema_daily.get("55"), "daily"),
     ]
