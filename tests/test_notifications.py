@@ -38,11 +38,11 @@ def test_alert_history_store_appends_dedupes_and_sorts(tmp_path):
     store = AlertHistoryStore(tmp_path / "alerts.json", max_items=3)
 
     store.append([
-        {"id": "older", "symbol": "BE", "reason": "Hourly 34/50", "alertedAt": "2026-07-15T12:00:00Z"},
+        {"id": "older", "symbol": "BE", "reason": "Hourly 5/12", "alertedAt": "2026-07-15T12:00:00Z"},
         {"id": "newer", "symbol": "AAOI", "reason": "10m rejection", "alertedAt": "2026-07-15T12:05:00Z"},
     ])
     store.append([
-        {"id": "older", "symbol": "BE", "reason": "Hourly 34/50", "alertedAt": "2026-07-15T12:00:00Z"},
+        {"id": "older", "symbol": "BE", "reason": "Hourly 5/12", "alertedAt": "2026-07-15T12:00:00Z"},
         {"id": "latest", "title": "Push notification", "body": "Batch alert", "createdAt": "2026-07-15T12:10:00Z"},
     ])
 
@@ -56,13 +56,13 @@ def test_alert_history_entries_from_push_saves_one_push_notification_event():
     entries = alert_history_entries_from_push(
         {
             "title": "2 MTF alerts: BE, LLY",
-            "body": "BE Hourly 34/50 • LLY Daily 20/21",
+            "body": "BE Hourly 5/12 • LLY Daily 20/21",
             "targetSymbol": "BE",
             "matches": [
                 {
                     "symbol": "BE",
-                    "labels": ["Hourly 34/50"],
-                    "details": [{"label": "Hourly 34/50", "display_label": "Hourly 34/50", "entry_price": 12.34}],
+                    "labels": ["Hourly 5/12"],
+                    "details": [{"label": "Hourly 5/12", "display_label": "Hourly 5/12", "entry_price": 12.34}],
                 },
                 {"symbol": "LLY", "labels": ["Daily 20/21"]},
             ],
@@ -72,26 +72,26 @@ def test_alert_history_entries_from_push_saves_one_push_notification_event():
     assert len(entries) == 1
     assert entries[0]["symbol"] == "BE"
     assert entries[0]["title"] == "2 MTF alerts: BE, LLY"
-    assert entries[0]["body"] == "BE Hourly 34/50 • LLY Daily 20/21"
+    assert entries[0]["body"] == "BE Hourly 5/12 • LLY Daily 20/21"
     assert entries[0]["payload"]["matches"][0]["symbol"] == "BE"
 
 
 def test_mtf_notification_payload_lists_symbols_and_clouds():
     quotes = [
-        {"symbol": "BE", "mtf_matches": [{"label": "Hourly 34/50"}]},
+        {"symbol": "BE", "mtf_matches": [{"label": "Hourly 5/12"}]},
         {"symbol": "LLY", "mtf_matches": [{"label": "Daily 20/21"}, {"label": "Daily 50/55"}]},
     ]
 
     payload = mtf_notification_payload(quotes)
 
     assert payload["title"] == "2 MTF alerts: BE, LLY"
-    assert payload["body"] == "BE Hourly 34/50 • LLY Daily 20/21"
+    assert payload["body"] == "BE Hourly 5/12 • LLY Daily 20/21"
     assert payload["badgeCount"] == 2
     assert payload["badge_count"] == 2
     assert payload["targetSymbol"] == "BE"
     assert payload["url"] == "/?mtf=BE"
     assert payload["matches"][1]["labels"] == ["Daily 20/21", "Daily 50/55"]
-    assert describe_mtf_matches(quotes) == "BE Hourly 34/50 | LLY Daily 20/21 + Daily 50/55"
+    assert describe_mtf_matches(quotes) == "BE Hourly 5/12 | LLY Daily 20/21 + Daily 50/55"
     assert mtf_signature(list(reversed(quotes))) == mtf_signature(quotes)
 
 
@@ -131,14 +131,14 @@ def test_mtf_notification_payload_includes_touch_time():
             "symbol": "BE",
             "mtf_matches": [
                 {
-                    "label": "Hourly 34/50",
+                    "label": "Hourly 5/12",
                     "candle_time": "2026-07-21T15:20:00",
                 }
             ],
         },
     ])
 
-    assert payload["title"] == "BE: Hourly 34/50, Jul 21 3:20 PM"
+    assert payload["title"] == "BE: Hourly 5/12, Jul 21 3:20 PM"
     assert payload["matches"][0]["details"][0]["candle_time"] == "2026-07-21T15:20:00"
 
 
@@ -147,7 +147,7 @@ def test_confirmed_mtf_quotes_removes_waiting_matches():
         {
             "symbol": "BE",
             "mtf_matches": [
-                {"label": "Hourly 34/50", "status": "waiting"},
+                {"label": "Hourly 5/12", "status": "waiting"},
                 {"label": "Daily 20/21", "status": "waiting", "type": "mtf_cloud_inside"},
                 {"label": "Daily 50/55", "status": "confirmed"},
             ],
@@ -165,21 +165,21 @@ def test_confirmed_mtf_quotes_removes_waiting_matches():
 
 
 def test_new_mtf_touch_quotes_baselines_first_scan_without_alerts():
-    quotes = [{"symbol": "BE", "mtf_matches": [{"label": "Hourly 34/50", "candle_time": "2026-07-21T09:30:00"}]}]
+    quotes = [{"symbol": "BE", "mtf_matches": [{"label": "Hourly 5/12", "candle_time": "2026-07-21T09:30:00"}]}]
 
     new_quotes, keys = new_mtf_touch_quotes(None, quotes)
 
     assert new_quotes == []
-    assert keys == {"BE:Hourly 34/50:2026-07-21T09:30:00"}
+    assert keys == {"BE:Hourly 5/12:2026-07-21T09:30:00"}
 
 
 def test_new_mtf_touch_quotes_returns_only_new_symbol_mtf_time():
-    previous = {"BE:Hourly 34/50:2026-07-21T09:30:00"}
+    previous = {"BE:Hourly 5/12:2026-07-21T09:30:00"}
     quotes = [
         {
             "symbol": "BE",
             "mtf_matches": [
-                {"label": "Hourly 34/50", "candle_time": "2026-07-21T09:30:00"},
+                {"label": "Hourly 5/12", "candle_time": "2026-07-21T09:30:00"},
                 {"label": "Daily 50/55", "candle_time": "2026-07-21T09:40:00"},
             ],
         },
@@ -192,7 +192,7 @@ def test_new_mtf_touch_quotes_returns_only_new_symbol_mtf_time():
     assert new_quotes[0]["mtf_matches"] == [{"label": "10m bounce 34/50", "candle_time": "2026-07-21T09:50:00"}]
     assert new_quotes[1]["mtf_matches"] == [{"label": "Daily 50/55", "candle_time": "2026-07-21T09:40:00"}]
     assert keys == {
-        "BE:Hourly 34/50:2026-07-21T09:30:00",
+        "BE:Hourly 5/12:2026-07-21T09:30:00",
         "BE:Daily 50/55:2026-07-21T09:40:00",
         "AAOI:10m bounce 34/50:2026-07-21T09:50:00",
     }
@@ -330,13 +330,13 @@ def test_push_monitor_sends_only_new_mtf_table_entries(tmp_path, monkeypatch):
         [
             {
                 "symbol": "BE",
-                "mtf_matches": [{"label": "Hourly 34/50", "candle_time": "2026-07-21T09:30:00"}],
+                "mtf_matches": [{"label": "Hourly 5/12", "candle_time": "2026-07-21T09:30:00"}],
             }
         ],
         [
             {
                 "symbol": "BE",
-                "mtf_matches": [{"label": "Hourly 34/50", "candle_time": "2026-07-21T09:30:00"}],
+                "mtf_matches": [{"label": "Hourly 5/12", "candle_time": "2026-07-21T09:30:00"}],
             },
             {
                 "symbol": "AAOI",
@@ -368,9 +368,9 @@ def test_push_monitor_ignores_new_10m_mtf_entries(tmp_path, monkeypatch):
     monitor = MtfPushMonitor(settings)
     sent = []
     quote_sets = iter([
-        [{"symbol": "BE", "mtf_matches": [{"label": "Hourly 34/50", "candle_time": "2026-07-21T09:30:00"}]}],
+        [{"symbol": "BE", "mtf_matches": [{"label": "Hourly 5/12", "candle_time": "2026-07-21T09:30:00"}]}],
         [
-            {"symbol": "BE", "mtf_matches": [{"label": "Hourly 34/50", "candle_time": "2026-07-21T09:30:00"}]},
+            {"symbol": "BE", "mtf_matches": [{"label": "Hourly 5/12", "candle_time": "2026-07-21T09:30:00"}]},
             {"symbol": "AAOI", "mtf_matches": [{"label": "10m bounce 34/50", "candle_time": "2026-07-21T09:40:00"}]},
         ],
     ])
@@ -424,7 +424,7 @@ def test_filter_payload_by_strategies_keeps_all_mtf_table_alerts():
         "title": "MTFs changed",
         "body": "old body",
         "matches": [
-            {"symbol": "BE", "labels": ["Hourly 34/50", "10m bounce Hourly 34/50"]},
+            {"symbol": "BE", "labels": ["Hourly 5/12", "10m bounce Hourly 5/12"]},
             {"symbol": "LLY", "labels": ["Daily 50/55"]},
         ],
     }

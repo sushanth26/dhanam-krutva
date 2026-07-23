@@ -25,7 +25,7 @@ DEFAULT_ALERT_STRATEGIES = {
     "ten-minute-bounce-daily-slow": True,
 }
 
-MTF_TABLE_ALERT_LABELS = {"Hourly 34/50", "Daily 20/21", "Daily 50/55"}
+MTF_TABLE_ALERT_LABELS = {"Hourly 5/12", "Daily 20/21", "Daily 50/55"}
 
 
 class PushSubscriptionStore:
@@ -670,13 +670,13 @@ def strategy_id_for_label(label: str) -> str:
         return "ten-minute-9ema-touch"
     if label == "10m 40 EMA touch":
         return "ten-minute-40ema-touch"
-    if label == "10m bounce Hourly 34/50":
+    if label == "10m bounce Hourly 5/12":
         return "ten-minute-bounce-hourly"
     if label == "10m bounce Daily 20/21":
         return "ten-minute-bounce-daily-fast"
     if label == "10m bounce Daily 50/55":
         return "ten-minute-bounce-daily-slow"
-    if label == "Hourly 34/50":
+    if label == "Hourly 5/12":
         return "hourly-cloud"
     if label == "Daily 20/21":
         return "daily-fast-cloud"

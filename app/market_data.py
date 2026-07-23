@@ -104,7 +104,7 @@ def build_live_prices(
         h1_candles = normalize_bars(h1_map.get(symbol))
         daily_candles = normalize_bars(daily_map.get(symbol))
         price = snapshot_price(snapshot_map.get(symbol))
-        ema_1h = ema_values(h1_candles, [20, 21, 34, 50, 55])
+        ema_1h = ema_values(h1_candles, [5, 12, 20, 21, 34, 50, 55])
         ema_daily = ema_values(daily_candles, [20, 21, 50, 55])
         ten_minute_ema = ema_values(ten_minute_candles, [5, 9, 12, 34, 40, 50])
         ten_minute_cloud = ema_cloud_context(ten_minute_candles, 5, 12)
@@ -257,6 +257,14 @@ def ema_values(candles: list[dict[str, Any]], periods: list[int]) -> dict[str, f
     for period in periods:
         values[str(period)] = round(chart_ema(closes, period)[-1], 4) if len(closes) >= period else None
     return values
+
+
+def hourly_mtf_cloud(ema_1h: dict[str, float | None]) -> tuple[float | None, float | None]:
+    first = ema_1h.get("5")
+    second = ema_1h.get("12")
+    if first is not None and second is not None:
+        return first, second
+    return ema_1h.get("34"), ema_1h.get("50")
 
 
 def ema_cloud_context(candles: list[dict[str, Any]], fast_period: int = 5, slow_period: int = 12) -> dict[str, Any]:
@@ -457,7 +465,7 @@ def mtf_matches(
     risk_amount: float = A_PLUS_PLUS_MAX_RISK,
 ) -> list[dict[str, Any]]:
     checks = [
-        ("Hourly 34/50", ema_1h.get("34"), ema_1h.get("50")),
+        ("Hourly 5/12", *hourly_mtf_cloud(ema_1h)),
         ("Daily 20/21", ema_daily.get("20"), ema_daily.get("21")),
         ("Daily 50/55", ema_daily.get("50"), ema_daily.get("55")),
     ]
@@ -574,7 +582,7 @@ def session_mtf_touch_matches(
     daily_candles: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     session_candles = current_session_ten_minute_candles(ten_minute_candles)
-    h1_ema_snapshots = ema_snapshots_by_time(h1_candles, [34, 50])
+    h1_ema_snapshots = ema_snapshots_by_time(h1_candles, [5, 12, 34, 50])
     daily_ema_snapshots = ema_snapshots_by_time(daily_candles, [20, 21, 50, 55])
     matches: list[dict[str, Any]] = []
     for candle in session_candles:
@@ -590,7 +598,7 @@ def session_mtf_touch_matches(
         ema_daily = ema_snapshot_at(daily_ema_snapshots, candle_market_time)
         checks = [
             ("10m 34/50 touch", "10m", ema_10m.get("34"), ema_10m.get("50")),
-            ("Hourly 34/50", "hourly", ema_1h.get("34"), ema_1h.get("50")),
+            ("Hourly 5/12", "hourly", *hourly_mtf_cloud(ema_1h)),
             ("Daily 20/21", "daily", ema_daily.get("20"), ema_daily.get("21")),
             ("Daily 50/55", "daily", ema_daily.get("50"), ema_daily.get("55")),
         ]
@@ -676,8 +684,8 @@ def current_session_ten_minute_candles(candles: list[dict[str, Any]]) -> list[di
 def mtf_signal_cloud_family(match: dict[str, Any]) -> str:
     label = str(match.get("label") or "")
     family_labels = {
-        "Hourly 34/50": "hourly-34-50",
-        "10m bounce Hourly 34/50": "hourly-34-50",
+        "Hourly 5/12": "hourly-5-12",
+        "10m bounce Hourly 5/12": "hourly-5-12",
         "Daily 20/21": "daily-20-21",
         "10m bounce Daily 20/21": "daily-20-21",
         "Daily 50/55": "daily-50-55",
@@ -763,7 +771,7 @@ def ema_cloud_bounce_matches(
 
     checks = [
         ("10m bounce 34/50", ema_10m.get("34"), ema_10m.get("50"), "10m", ten_minute_trend),
-        ("10m bounce Hourly 34/50", ema_1h.get("34"), ema_1h.get("50"), "hourly"),
+        ("10m bounce Hourly 5/12", *hourly_mtf_cloud(ema_1h), "hourly"),
         ("10m bounce Daily 20/21", ema_daily.get("20"), ema_daily.get("21"), "daily"),
         ("10m bounce Daily 50/55", ema_daily.get("50"), ema_daily.get("55"), "daily"),
     ]

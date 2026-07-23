@@ -10,9 +10,9 @@ export const ALERT_STRATEGIES = [
   },
   {
     id: "hourly-cloud",
-    name: "Hourly 34/50",
-    description: "Price breaks through or touches the hourly 34/50 EMA cloud.",
-    match: (match) => String(match?.label || "") === "Hourly 34/50",
+    name: "Hourly 5/12",
+    description: "Price breaks through or touches the hourly 5/12 EMA cloud.",
+    match: (match) => String(match?.label || "") === "Hourly 5/12",
   },
   {
     id: "daily-fast-cloud",
@@ -46,9 +46,9 @@ export const ALERT_STRATEGIES = [
   },
   {
     id: "ten-minute-bounce-hourly",
-    name: "10m bounce/rejection 1hr 34/50",
-    description: "10m candle rejects or bounces through the hourly 34/50 EMA cloud with trend direction.",
-    match: (match) => String(match?.label || "") === "10m bounce Hourly 34/50",
+    name: "10m bounce/rejection 1hr 5/12",
+    description: "10m candle rejects or bounces through the hourly 5/12 EMA cloud with trend direction.",
+    match: (match) => String(match?.label || "") === "10m bounce Hourly 5/12",
   },
   {
     id: "ten-minute-bounce-daily-fast",
@@ -64,7 +64,7 @@ export const ALERT_STRATEGIES = [
   },
 ];
 
-const MTF_TABLE_ALERT_LABELS = new Set(["Hourly 34/50", "Daily 20/21", "Daily 50/55"]);
+const MTF_TABLE_ALERT_LABELS = new Set(["Hourly 5/12", "Daily 20/21", "Daily 50/55"]);
 
 export const MTF_ALERT_STRATEGIES = ALERT_STRATEGIES.filter((strategy) => (
   !strategy.scannerOnly && MTF_TABLE_ALERT_LABELS.has(strategy.name)

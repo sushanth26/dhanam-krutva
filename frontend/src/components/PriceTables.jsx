@@ -584,6 +584,10 @@ function mtfMarketClock(value) {
   if (!value) return null;
   if (value instanceof Date) return marketClockFromDate(value);
   const text = String(value);
+  if (/T.*(?:Z|[+-]\d{2}:?\d{2})$/.test(text)) {
+    const parsed = new Date(text);
+    return Number.isNaN(parsed.getTime()) ? null : marketClockFromDate(parsed);
+  }
   const isoClock = text.match(/T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/);
   if (isoClock) {
     const hours = Number(isoClock[1]);
