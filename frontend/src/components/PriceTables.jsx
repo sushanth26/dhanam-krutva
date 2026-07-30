@@ -19,10 +19,12 @@ export function MtfTable({
   const columns = compact ? [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     { key: "mtf", label: "4A-7P", value: (quote) => latestMtfTime(quote) },
+    { key: "map", label: "Map", value: (quote) => mtfPriceMapSortValue(quote) },
   ] : [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     ...(showWatchlist ? [{ key: "watchlist", label: "Watchlist", value: (quote) => quote.watchlist_name || "" }] : []),
     { key: "mtf", label: "MTF", value: (quote) => mtfDisplayMatches(quote.mtf_matches).map(({ label }) => label).join(" ") },
+    { key: "map", label: "Map", value: (quote) => mtfPriceMapSortValue(quote) },
     { key: "structure", label: "BOS", value: (quote) => quote.structure_10m?.status || "Unknown" },
     { key: "bias", label: "Bias", value: (quote) => tradeActionForMatches(quote.mtf_matches) || directionalBiasForQuote(quote) },
     { key: "plan", label: "Trade plan", value: (quote) => mtfPlanSortValue(quote) },
@@ -398,6 +400,7 @@ function MtfRow({ buyState, compact, focused, nowPosition, quote, showWatchlist,
         trend={tenMinuteStatus}
       >
         {mtfTags}
+        <td className="mtf-price-map-cell" data-label="Map"><MtfPriceMap quote={quote} compact /></td>
       </BaseRow>
     );
   }
@@ -423,6 +426,7 @@ function MtfRow({ buyState, compact, focused, nowPosition, quote, showWatchlist,
     >
       {watchlistCell}
       {mtfTags}
+      <td className="mtf-price-map-cell" data-label="Map"><MtfPriceMap quote={quote} /></td>
       <td data-label="BOS"><span className={`structure-pill ${structureClass(quote.structure_10m?.status)}`}>{structureLabel(quote.structure_10m?.status)}</span></td>
       <td data-label="Bias"><DirectionPill value={tradeAction || directionalBiasForQuote(quote)} /></td>
       <td className="mtf-plan-cell" data-label="Trade plan">
@@ -495,6 +499,175 @@ function MtfTimeline({ matches, nowPosition }) {
       <span className="mtf-live-marker" aria-hidden="true"></span>
     </div>
   );
+}
+
+function MtfPriceMap({ quote, compact = false }) {
+  const map = mtfPriceMap(quote);
+  if (!map) {
+    return <span className="mtf-price-map-empty">-</span>;
+  }
+  return (
+    <div
+      className={`mtf-price-map ${compact ? "compact" : ""} price-${map.priceStatus}`}
+      aria-label={`${map.stateLabel}: current price ${formatPrice(map.price)} against MTF cloud levels`}
+      title={`${map.stateLabel} ${map.contextLabel} | Current ${formatPrice(map.price)} | ${map.bands.map((band) => `${band.label} ${formatPrice(band.low)}-${formatPrice(band.high)}`).join(" | ")}`}
+    >
+      <span className={`mtf-map-state ${map.priceStatus}`}>
+        <b>{map.stateLabel}</b>
+        <small>{map.contextLabel}</small>
+      </span>
+      <span className="mtf-map-plot">
+        <span className="mtf-map-axis top">{formatPrice(map.max)}</span>
+        <span className="mtf-map-axis bottom">{formatPrice(map.min)}</span>
+        <span className="mtf-map-rail" aria-hidden="true"></span>
+        {map.bands.map((band) => (
+          <span
+            key={band.id}
+            className={`mtf-map-band ${band.tone} ${band.relation}`}
+            style={{
+              "--band-top": `${band.top}%`,
+              "--band-height": `${band.height}%`,
+            }}
+            aria-hidden="true"
+          >
+            <b>{band.shortLabel}</b>
+            <small>{formatPrice(band.low)}-{formatPrice(band.high)}</small>
+          </span>
+        ))}
+        <span className="mtf-current-line" style={{ "--price-top": `${map.priceTop}%` }}>
+          <b>NOW {formatPrice(map.price)}</b>
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function mtfPriceMap(quote) {
+  const price = Number(quote?.price ?? quote?.scanner_price);
+  const bands = mtfDisplayMatches(quote?.mtf_matches)
+    .map(({ label, match }, index) => mtfPriceBand(label, match, index))
+    .filter(Boolean);
+  if (!Number.isFinite(price) || !bands.length) return null;
+  const values = [price, ...bands.flatMap((band) => [band.low, band.high])];
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const baseRange = Math.max(rawMax - rawMin, Math.abs(price) * 0.006, 0.5);
+  const padding = baseRange * 0.18;
+  const min = rawMin - padding;
+  const max = rawMax + padding;
+  const range = max - min || 1;
+  const enrichedBands = bands.map((band) => {
+    const top = ((max - band.high) / range) * 100;
+    const bottom = ((max - band.low) / range) * 100;
+    return {
+      ...band,
+      relation: mtfBandRelation(price, band),
+      top: clampNumber(top, 2, 96),
+      height: clampNumber(bottom - top, 5, 28),
+    };
+  });
+  const priceStatus = mtfPriceStatus(price, bands);
+  const summary = mtfPriceMapSummary(price, bands, priceStatus);
+  return {
+    bands: enrichedBands,
+    contextLabel: summary.contextLabel,
+    max,
+    min,
+    price,
+    priceStatus,
+    priceTop: clampNumber(((max - price) / range) * 100, 4, 96),
+    stateLabel: summary.stateLabel,
+  };
+}
+
+function mtfPriceBand(label, match, index) {
+  const low = Number(match?.low ?? match?.cloud_low ?? match?.stop_cloud_low);
+  const high = Number(match?.high ?? match?.cloud_high ?? match?.stop_cloud_high);
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
+  const bandLow = Math.min(low, high);
+  const bandHigh = Math.max(low, high);
+  return {
+    id: `${label}-${bandLow}-${bandHigh}-${index}`,
+    label,
+    low: bandLow,
+    high: bandHigh,
+    shortLabel: mtfPriceBandShortLabel(label),
+    tone: mtfPillTone(label),
+  };
+}
+
+function mtfPriceBandShortLabel(label) {
+  const text = String(label || "").toLowerCase();
+  if (text.includes("daily 50/55")) return "D50";
+  if (text.includes("daily 20/21")) return "D20";
+  if (text.includes("hourly")) return "1H";
+  if (text.includes("10m")) return "10m";
+  return "MTF";
+}
+
+function mtfPriceStatus(price, bands) {
+  if (bands.some((band) => price >= band.low && price <= band.high)) return "inside";
+  if (price > Math.max(...bands.map((band) => band.high))) return "above";
+  if (price < Math.min(...bands.map((band) => band.low))) return "below";
+  return "between";
+}
+
+function mtfBandRelation(price, band) {
+  if (price >= band.low && price <= band.high) return "active";
+  if (price > band.high) return "below-price";
+  return "above-price";
+}
+
+function mtfPriceMapSummary(price, bands, priceStatus) {
+  const insideBands = bands.filter((band) => price >= band.low && price <= band.high);
+  if (insideBands.length) {
+    return {
+      stateLabel: "Inside",
+      contextLabel: insideBands.map((band) => band.shortLabel).join(" + "),
+    };
+  }
+
+  const belowPrice = bands
+    .filter((band) => band.high < price)
+    .sort((left, right) => right.high - left.high);
+  const abovePrice = bands
+    .filter((band) => band.low > price)
+    .sort((left, right) => left.low - right.low);
+
+  if (priceStatus === "above") {
+    return {
+      stateLabel: "Above all",
+      contextLabel: belowPrice[0] ? `${belowPrice[0].shortLabel} +${mtfDistancePercent(price, belowPrice[0].high)}` : "No cloud below",
+    };
+  }
+
+  if (priceStatus === "below") {
+    return {
+      stateLabel: "Below all",
+      contextLabel: abovePrice[0] ? `${abovePrice[0].shortLabel} -${mtfDistancePercent(price, abovePrice[0].low)}` : "No cloud above",
+    };
+  }
+
+  return {
+    stateLabel: "Between",
+    contextLabel: [abovePrice[0]?.shortLabel, belowPrice[0]?.shortLabel].filter(Boolean).join(" / ") || "Cloud gap",
+  };
+}
+
+function mtfDistancePercent(price, level) {
+  const numericPrice = Number(price);
+  const numericLevel = Number(level);
+  if (!Number.isFinite(numericPrice) || !Number.isFinite(numericLevel) || numericPrice === 0) return "-";
+  return `${((Math.abs(numericPrice - numericLevel) / Math.abs(numericPrice)) * 100).toFixed(1)}%`;
+}
+
+function mtfPriceMapSortValue(quote) {
+  const map = mtfPriceMap(quote);
+  if (!map) return Number.POSITIVE_INFINITY;
+  return Math.min(...map.bands.map((band) => {
+    if (map.price >= band.low && map.price <= band.high) return 0;
+    return Math.min(Math.abs(map.price - band.low), Math.abs(map.price - band.high));
+  }));
 }
 
 function mtfTimelineMatches(matches = []) {

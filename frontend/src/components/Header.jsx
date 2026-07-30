@@ -115,6 +115,16 @@ export function Header({
             </button>
             <button
               type="button"
+              className={`account-menu-button secondary-button ${activePage === "insiders" ? "active" : ""}`}
+              disabled={pageLoading}
+              onClick={() => onNavigate("insiders")}
+              aria-label="Open insider buying"
+              title="Insider Buying"
+            >
+              <span>Insiders</span>
+            </button>
+            <button
+              type="button"
               className={`account-menu-button secondary-button ${activePage === "alerts" ? "active" : ""}`}
               disabled={pageLoading}
               onClick={() => onNavigate("alerts")}
@@ -408,6 +418,7 @@ function pushStatusDetail(state, pushEnabled) {
 function notificationKindLabel(kind) {
   const value = String(kind || "").toLowerCase();
   if (value.includes("scanner")) return "Scanner";
+  if (value.includes("insider")) return "Insider";
   if (value.includes("bos")) return "BOS";
   if (value.includes("push")) return "Push";
   if (value.includes("system")) return "System";
