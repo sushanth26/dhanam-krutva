@@ -1104,7 +1104,6 @@ export default function App() {
   const [activePage, setActivePage] = useState(() => {
     if (window.location.hash === "#alerts") return "alerts";
     if (window.location.hash === "#mtfs") return "mtfs";
-    if (window.location.hash === "#trades") return "trades";
     if (window.location.hash === "#insiders") return "insiders";
     if (window.location.hash === "#watchlist") return "watchlist";
     return "mtfs";
@@ -1755,13 +1754,11 @@ export default function App() {
       ? "#alerts"
       : nextPage === "mtfs"
         ? "#mtfs"
-        : nextPage === "trades"
-          ? "#trades"
-          : nextPage === "insiders"
-            ? "#insiders"
-            : nextPage === "watchlist"
-              ? "#watchlist"
-              : "";
+        : nextPage === "insiders"
+          ? "#insiders"
+          : nextPage === "watchlist"
+            ? "#watchlist"
+            : "";
     window.history.replaceState(null, "", hash || window.location.pathname);
   }
 
@@ -1885,7 +1882,6 @@ export default function App() {
           message: `${plan.quantity} shares long @ ${formatPrice(plan.entry)}, target ${formatPrice(plan.target)}, SL ${formatPrice(plan.stop)}.`,
           kind: "trade",
         });
-        if (activePage === "trades") refreshAutoTrades({ showLoading: false });
       } catch (error) {
         setBuyState((current) => ({ ...current, [quote.symbol]: { status: "error" } }));
         addNotification({
@@ -1938,24 +1934,25 @@ export default function App() {
   }
 
   function removeSymbolFromWatchlist(symbol, tab = watchlistTab) {
+    const normalizedSymbol = String(symbol || "").trim().toUpperCase();
     updateWatchlists((current) => current.map((watchlist) => (
       watchlist.id === tab
-        ? { ...watchlist, symbols: watchlist.symbols.filter((item) => item !== symbol) }
+        ? { ...watchlist, symbols: watchlist.symbols.filter((item) => String(item || "").trim().toUpperCase() !== normalizedSymbol) }
         : watchlist
     )));
     setQuotesByTab((current) => ({
       ...current,
-      [tab]: (current[tab] || []).filter((quote) => quote.symbol !== symbol),
+      [tab]: (current[tab] || []).filter((quote) => String(quote.symbol || "").trim().toUpperCase() !== normalizedSymbol),
     }));
     lastMtfSignature.current = { ...lastMtfSignature.current, [tab]: null };
     const tabRows = { ...(lastMtfRows.current[tab] || {}) };
-    delete tabRows[symbol];
+    delete tabRows[normalizedSymbol];
     lastMtfRows.current = { ...lastMtfRows.current, [tab]: tabRows };
     const nextBosRows = { ...lastBosRows.current };
-    delete nextBosRows[String(symbol || "").toUpperCase()];
+    delete nextBosRows[normalizedSymbol];
     lastBosRows.current = nextBosRows;
     saveBosState(nextBosRows);
-    dismissNewMtfRow(tab, symbol);
+    dismissNewMtfRow(tab, normalizedSymbol);
   }
 
   function clearWatchlist(id = watchlistTab) {
@@ -2407,10 +2404,6 @@ export default function App() {
     syncNotificationPreferences().catch(() => {});
   }, [notificationState.appEnabled]);
 
-  useEffect(() => {
-    if (accountsConfirmedRef.current && activePage === "trades") refreshAutoTrades();
-  }, [activePage, tradingAccountId]);
-
   return (
     <>
       <Header
@@ -2478,15 +2471,6 @@ export default function App() {
             mtfQuotes={allTouchedMtfs}
             onBuy={buyMtfQuote}
             onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
-          />
-        ) : activePage === "trades" ? (
-          <AutoTradesPage
-            accountId={tradingAccountId}
-            alert={autoTradeAlert}
-            loading={loading.trades}
-            orders={autoTradeOrders}
-            onRefresh={refreshAutoTrades}
-            structureBySymbol={structureBySymbol}
           />
         ) : activePage === "insiders" ? (
           <InsiderBuyingPage onDataLoaded={handleInsiderData} />

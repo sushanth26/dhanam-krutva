@@ -8004,17 +8004,25 @@ select {
 
 .watchlist-design-page .compact-watchlist-bucket .live-price-table th:first-child,
 .watchlist-design-page .compact-watchlist-bucket .live-price-table td:first-child {
-  width: 42%;
+  width: 38%;
 }
 
 .watchlist-design-page .compact-watchlist-bucket .live-price-table th:nth-child(2),
 .watchlist-design-page .compact-watchlist-bucket .live-price-table td:nth-child(2) {
-  width: 34%;
+  width: 30%;
 }
 
 .watchlist-design-page .compact-watchlist-bucket .live-price-table th:nth-child(3),
 .watchlist-design-page .compact-watchlist-bucket .live-price-table td:nth-child(3) {
-  width: 24%;
+  width: 22%;
+}
+
+.watchlist-design-page .compact-watchlist-bucket .live-price-table th.action-col,
+.watchlist-design-page .compact-watchlist-bucket .live-price-table .row-action-cell {
+  padding-left: 6px;
+  padding-right: 12px;
+  text-align: right;
+  width: 10%;
 }
 
 .watchlist-design-page .compact-watchlist-bucket .stock-row > td:first-child strong {

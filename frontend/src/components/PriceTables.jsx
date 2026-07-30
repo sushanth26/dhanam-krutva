@@ -92,7 +92,7 @@ export function PriceBucket({ title, quotes, kind, compact = false, onRemoveSymb
     { key: "price", label: "Last", className: "price-col", value: (quote) => Number(quote.price) },
   ];
   const { sortedRows, sort, toggleSort } = useSortableRows(quotes, columns, { key: "bias", direction: "asc" });
-  const showActions = Boolean(onRemoveSymbol) && !compact;
+  const showActions = Boolean(onRemoveSymbol);
 
   return (
     <section className={`price-bucket ${compact ? "compact-watchlist-bucket" : ""} ${kind ? `watchlist-${kind}` : ""}`}>
@@ -886,7 +886,7 @@ function PriceRow({ compact, quote, onRemoveSymbol }) {
   const tenMinuteStatus = cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
   if (compact) {
     return (
-      <BaseRow quote={quote} trend={tenMinuteStatus} showPrice={false}>
+      <BaseRow quote={quote} trend={tenMinuteStatus} showPrice={false} action={onRemoveSymbol ? <RemoveCell onRemove={() => onRemoveSymbol(quote.symbol)} symbol={quote.symbol} /> : null}>
         <td data-label="Structure"><span className={`structure-pill ${structureClass(quote.structure_10m?.status)}`}>{structureLabel(quote.structure_10m?.status)}</span></td>
         <td data-label="Bias"><DirectionPill value={directionalBiasForQuote(quote)} /></td>
       </BaseRow>
