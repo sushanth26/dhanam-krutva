@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertStrategies } from "./components/AlertStrategies";
 import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
+import { InsiderBuyingPage } from "./components/InsiderBuying";
 import { MtfTable, PreMarketScannerTable, PriceBucket, SpyComparisonTable } from "./components/PriceTables";
 import { deleteJson, getJson, postJson } from "./lib/api";
 import { ALERT_STRATEGIES, MTF_ALERT_STRATEGIES, filterMtfTableQuotes, loadStrategyState, saveStrategyState, strategyIdForMatch } from "./lib/alertStrategies";
@@ -21,7 +22,9 @@ const RETAINED_MTF_QUOTES_KEY = "dhanam-retained-mtf-quotes";
 const AUTO_TRADE_KEY = "dhanam-auto-trade";
 const AUTO_TRADE_EXECUTIONS_KEY = "dhanam-auto-trade-executions";
 const BOS_STATE_KEY = "dhanam-bos-state";
+const INSIDER_SEEN_KEY = "dhanam-insider-seen-records";
 const MAX_AUTO_TRADE_EXECUTIONS = 500;
+const MAX_INSIDER_SEEN_RECORDS = 1000;
 const WATCHLIST_REFRESH_CONCURRENCY = 1;
 const ALL_WATCHLISTS_TAB_ID = "__all-watchlists";
 const OG_WATCHLIST_ID = "og";
@@ -570,6 +573,55 @@ function saveBosState(items) {
   window.localStorage.setItem(BOS_STATE_KEY, JSON.stringify(items || {}));
 }
 
+function loadInsiderSeenRecords() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(INSIDER_SEEN_KEY) || "[]");
+    return Array.isArray(saved) ? saved.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveInsiderSeenRecords(keys) {
+  const uniqueKeys = [...new Set((keys || []).map(String).filter(Boolean))].slice(0, MAX_INSIDER_SEEN_RECORDS);
+  window.localStorage.setItem(INSIDER_SEEN_KEY, JSON.stringify(uniqueKeys));
+  return uniqueKeys;
+}
+
+function insiderRecordKey(record) {
+  return [
+    record?.ticker,
+    record?.filingDate,
+    record?.insider,
+    record?.role,
+    record?.shares,
+    Math.round(Number(record?.value || 0)),
+  ].map((value) => String(value || "").trim().toUpperCase()).join(":");
+}
+
+function insiderNotificationDetails(records) {
+  const sortedRecords = [...records].sort((left, right) => Number(right.value || 0) - Number(left.value || 0));
+  const topRecord = sortedRecords[0] || {};
+  const symbols = [...new Set(sortedRecords.map((record) => String(record.ticker || "").toUpperCase()).filter(Boolean))];
+  const symbolText = symbols.slice(0, 4).join(", ");
+  const extraText = symbols.length > 4 ? ` +${symbols.length - 4}` : "";
+  const count = sortedRecords.length;
+  const title = count === 1
+    ? `New insider buy: ${topRecord.ticker || "QQQ"}`
+    : `${count} new insider buys`;
+  const body = count === 1
+    ? `${topRecord.insider || "An insider"} bought ${topRecord.ticker || "a Nasdaq-100 stock"} filed ${topRecord.filingDate || "today"}.`
+    : `${symbolText}${extraText} have new Nasdaq insider buy filings.`;
+  return {
+    title,
+    body,
+    badgeCount: count,
+    tag: "insider-buy-update",
+    targetSymbol: topRecord.ticker || symbols[0] || "",
+    url: "/#insiders",
+  };
+}
+
 function normalizeAlertHistoryItems(items) {
   const byId = new Map();
   for (const item of items || []) {
@@ -1053,6 +1105,7 @@ export default function App() {
     if (window.location.hash === "#alerts") return "alerts";
     if (window.location.hash === "#mtfs") return "mtfs";
     if (window.location.hash === "#trades") return "trades";
+    if (window.location.hash === "#insiders") return "insiders";
     if (window.location.hash === "#watchlist") return "watchlist";
     return "mtfs";
   });
@@ -1086,6 +1139,7 @@ export default function App() {
   const autoTradeRef = useRef(autoTrade);
   const autoTradeExecutionsRef = useRef(new Set(loadAutoTradeExecutions()));
   const alertLogRef = useRef(alertLog);
+  const insiderSeenRecordsRef = useRef(loadInsiderSeenRecords());
   const selectedAccountIdRef = useRef(selectedAccountId);
   const accountsRef = useRef(accounts);
   const accountsConfirmedRef = useRef(false);
@@ -1643,6 +1697,35 @@ export default function App() {
     showScannerDeviceNotification(notification);
   }
 
+  function handleInsiderData(payload) {
+    const records = Array.isArray(payload?.records) ? payload.records : [];
+    const nextKeys = records.map(insiderRecordKey).filter(Boolean);
+    if (!nextKeys.length) return;
+
+    const previousKeys = new Set(insiderSeenRecordsRef.current);
+    const unseenRecords = records.filter((record) => !previousKeys.has(insiderRecordKey(record)));
+    insiderSeenRecordsRef.current = saveInsiderSeenRecords([...nextKeys, ...insiderSeenRecordsRef.current]);
+    if (!previousKeys.size || !unseenRecords.length) return;
+
+    const notification = insiderNotificationDetails(unseenRecords);
+    appendAlertLog([
+      notificationHistoryEntry({
+        title: notification.title,
+        message: notification.body,
+        kind: "notification",
+        symbol: notification.targetSymbol,
+        source: "insider-monitor",
+        payload: notification,
+      }),
+    ]);
+    addNotification({
+      title: notification.title,
+      message: notification.body,
+      kind: "insider",
+    });
+    showInsiderDeviceNotification(notification);
+  }
+
   function appendAlertLog(entries) {
     if (!entries.length) return;
     setAlertLog((current) => {
@@ -1674,9 +1757,11 @@ export default function App() {
         ? "#mtfs"
         : nextPage === "trades"
           ? "#trades"
-          : nextPage === "watchlist"
-            ? "#watchlist"
-            : "";
+          : nextPage === "insiders"
+            ? "#insiders"
+            : nextPage === "watchlist"
+              ? "#watchlist"
+              : "";
     window.history.replaceState(null, "", hash || window.location.pathname);
   }
 
@@ -2060,6 +2145,18 @@ export default function App() {
     }).catch((error) => setLiveAlert(error.message));
   }
 
+  function showInsiderDeviceNotification(notification) {
+    if (!notificationState.appEnabled || notificationState.permission !== "granted") return;
+    showDeviceNotification({
+      title: notification.title,
+      body: notification.body,
+      badgeCount: notification.badgeCount,
+      tag: notification.tag,
+      targetSymbol: notification.targetSymbol,
+      url: notification.url,
+    }).catch((error) => setLiveAlert(error.message));
+  }
+
   function showBosDeviceNotification(notification) {
     if (!notificationState.appEnabled || notificationState.permission !== "granted") return;
     showDeviceNotification({
@@ -2391,6 +2488,8 @@ export default function App() {
             onRefresh={refreshAutoTrades}
             structureBySymbol={structureBySymbol}
           />
+        ) : activePage === "insiders" ? (
+          <InsiderBuyingPage onDataLoaded={handleInsiderData} />
         ) : activePage === "watchlist" ? (
           <WatchlistWorkspace
             activeTab={watchlistTab}
