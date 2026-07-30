@@ -105,16 +105,6 @@ export function Header({
             </button>
             <button
               type="button"
-              className={`account-menu-button secondary-button ${activePage === "trades" ? "active" : ""}`}
-              disabled={pageLoading}
-              onClick={() => onNavigate("trades")}
-              aria-label="Open auto trades"
-              title="Auto Trades"
-            >
-              <span>Trades</span>
-            </button>
-            <button
-              type="button"
               className={`account-menu-button secondary-button ${activePage === "insiders" ? "active" : ""}`}
               disabled={pageLoading}
               onClick={() => onNavigate("insiders")}
