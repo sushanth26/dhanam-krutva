@@ -33,6 +33,7 @@ const ALL_WATCHLISTS_TAB_ID = "__all-watchlists";
 const OG_WATCHLIST_ID = "og";
 const SPY_SYMBOL = "SPY";
 const TRADINGVIEW_WIDGET_URL = "https://www.tradingview-widget.com/embed-widget/advanced-chart/";
+const CHART_GROUP_COLORS = ["#f59e0b", "#38bdf8", "#22c55e", "#f43f5e", "#a78bfa", "#14b8a6"];
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
   "ASTS", "AMD", "ARM", "AVGO", "DELL", "INTC", "APP", "LLY",
@@ -2638,15 +2639,62 @@ export default function App() {
 }
 
 function ChartsPage({ watchlists }) {
-  const symbols = useMemo(() => uniqueSortedSymbolsFromWatchlists(watchlists), [watchlists]);
+  const chartGroups = useMemo(() => chartGroupsFromWatchlists(watchlists), [watchlists]);
+  const chartItems = useMemo(
+    () => chartGroups.flatMap((group) => group.symbols.map((symbol) => ({
+      color: group.color,
+      groupId: group.id,
+      groupName: group.name,
+      symbol,
+    }))),
+    [chartGroups]
+  );
+  const [activeChartIndex, setActiveChartIndex] = useState(null);
+  const activeChart = activeChartIndex == null ? null : chartItems[activeChartIndex];
+
+  useEffect(() => {
+    if (activeChartIndex != null && activeChartIndex >= chartItems.length) {
+      setActiveChartIndex(chartItems.length ? chartItems.length - 1 : null);
+    }
+  }, [activeChartIndex, chartItems.length]);
+
+  function showPreviousChart() {
+    setActiveChartIndex((index) => {
+      if (index == null || !chartItems.length) return index;
+      return (index - 1 + chartItems.length) % chartItems.length;
+    });
+  }
+
+  function showNextChart() {
+    setActiveChartIndex((index) => {
+      if (index == null || !chartItems.length) return index;
+      return (index + 1) % chartItems.length;
+    });
+  }
 
   return (
     <section className="charts-page" aria-label="Watchlist TradingView charts">
-      {symbols.length ? (
-        <div className="tradingview-chart-grid">
-          {symbols.map((symbol) => (
-            <TradingViewChart key={symbol} symbol={symbol} />
-          ))}
+      {chartGroups.length ? (
+        <div className="watchlist-chart-board">
+          <div className="watchlist-chart-legend" aria-label="Watchlist chart groups">
+            {chartGroups.map((group) => (
+              <span key={group.id} style={{ "--watchlist-color": group.color }}>
+                <b>{group.name}</b>
+                <em>{group.symbols.length}</em>
+              </span>
+            ))}
+          </div>
+          <div className="tradingview-chart-grid">
+            {chartItems.map((item, chartIndex) => (
+              <TradingViewChart
+                color={item.color}
+                groupName={item.groupName}
+                key={`${item.groupId}-${item.symbol}`}
+                onOpen={() => setActiveChartIndex(chartIndex)}
+                symbol={item.symbol}
+              />
+            ))}
+          </div>
         </div>
       ) : (
         <div className="charts-empty-state">
@@ -2654,23 +2702,96 @@ function ChartsPage({ watchlists }) {
           <span>Add tickers to a watchlist, then they will appear here.</span>
         </div>
       )}
+      {activeChart ? (
+        <ChartModal
+          chart={activeChart}
+          current={activeChartIndex + 1}
+          key={`${activeChart.groupId}-${activeChart.symbol}`}
+          onClose={() => setActiveChartIndex(null)}
+          onNext={showNextChart}
+          onPrevious={showPreviousChart}
+          total={chartItems.length}
+        />
+      ) : null}
     </section>
   );
 }
 
-function TradingViewChart({ symbol }) {
+function chartGroupsFromWatchlists(watchlists) {
+  return watchlists
+    .map((watchlist, index) => {
+      const symbols = normalizeSymbols(watchlist.symbols || []);
+      return {
+        color: CHART_GROUP_COLORS[index % CHART_GROUP_COLORS.length],
+        id: watchlist.id || `watchlist-${index}`,
+        name: watchlist.name || "Watchlist",
+        symbols,
+      };
+    })
+    .filter((group) => group.symbols.length);
+}
+
+function TradingViewChart({ color, groupName, onOpen, symbol }) {
   const chartUrl = tradingViewEmbedUrl(symbol);
 
   return (
-    <article className="tradingview-chart-card" aria-label={`${symbol} TradingView chart`}>
+    <article
+      className="tradingview-chart-card"
+      style={{ "--watchlist-color": color }}
+      aria-label={`${symbol} TradingView chart`}
+    >
       <div className="tradingview-chart-label">{symbol}</div>
+      <div className="tradingview-watchlist-label">{groupName}</div>
       <iframe
         className="tradingview-widget-frame"
         title={`${symbol} chart`}
         src={chartUrl}
         allowFullScreen
       />
+      <button
+        type="button"
+        className="chart-open-hit-area"
+        onClick={onOpen}
+        aria-label={`Open ${symbol} chart`}
+      />
     </article>
+  );
+}
+
+function ChartModal({ chart, current, onClose, onNext, onPrevious, total }) {
+  const chartUrl = tradingViewEmbedUrl(chart.symbol);
+
+  return (
+    <div className="chart-modal-backdrop" role="presentation" onClick={onClose} onMouseDown={onClose}>
+      <section
+        className="chart-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${chart.symbol} enlarged chart`}
+        onClick={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="chart-modal-toolbar">
+          <div>
+            <strong>{chart.symbol}</strong>
+            <span>{chart.groupName}</span>
+          </div>
+          <div className="chart-modal-actions">
+            <button type="button" className="secondary-button" onClick={onPrevious}>Previous</button>
+            <span>{current} / {total}</span>
+            <button type="button" className="secondary-button" onClick={onNext}>Next</button>
+            <button type="button" className="secondary-button" onClick={onClose} aria-label="Close chart">Close</button>
+          </div>
+        </div>
+        <iframe
+          key={`${chart.groupId}-${chart.symbol}`}
+          className="chart-modal-frame"
+          title={`${chart.symbol} enlarged chart`}
+          src={chartUrl}
+          allowFullScreen
+        />
+      </section>
+    </div>
   );
 }
 
@@ -2698,6 +2819,10 @@ function tradingViewEmbedUrl(symbol) {
     extended_hours: true,
     show_extended_hours: true,
     withdateranges: false,
+    overrides: {
+      "backgrounds.preMarket.color": "rgba(148, 163, 184, 0.18)",
+      "backgrounds.postMarket.color": "rgba(148, 163, 184, 0.12)",
+    },
     support_host: "https://www.tradingview.com",
     width: "100%",
     height: "100%",
