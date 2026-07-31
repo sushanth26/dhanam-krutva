@@ -2706,6 +2706,7 @@ function ChartsPage({ watchlists }) {
         <ChartModal
           chart={activeChart}
           current={activeChartIndex + 1}
+          key={`${activeChart.groupId}-${activeChart.symbol}`}
           onClose={() => setActiveChartIndex(null)}
           onNext={showNextChart}
           onPrevious={showPreviousChart}
@@ -2783,6 +2784,7 @@ function ChartModal({ chart, current, onClose, onNext, onPrevious, total }) {
           </div>
         </div>
         <iframe
+          key={`${chart.groupId}-${chart.symbol}`}
           className="chart-modal-frame"
           title={`${chart.symbol} enlarged chart`}
           src={chartUrl}
