@@ -5663,63 +5663,68 @@ select {
   display: block;
 }
 
-.watchlist-chart-sections {
-  display: grid;
-  gap: 10px;
-}
-
-.watchlist-chart-section {
+.watchlist-chart-board {
   display: grid;
   gap: 6px;
 }
 
-.watchlist-chart-heading {
+.watchlist-chart-legend {
   align-items: center;
-  background: #f8fafc;
-  border: 1px solid #cbd5e1;
-  border-left: 4px solid #f59e0b;
-  border-radius: 4px;
   display: flex;
-  gap: 8px;
-  justify-content: space-between;
-  min-height: 34px;
-  padding: 0 10px;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 24px;
 }
 
-.watchlist-chart-heading h2 {
-  color: #0f172a;
-  font-size: 15px;
+.watchlist-chart-legend span {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid var(--watchlist-color);
+  border-left: 4px solid var(--watchlist-color);
+  border-radius: 4px;
+  color: #f8fafc;
+  display: inline-flex;
+  gap: 7px;
+  min-height: 24px;
+  padding: 0 8px;
+}
+
+.watchlist-chart-legend b {
+  font-size: 12px;
   font-weight: 900;
   line-height: 1;
 }
 
-.watchlist-chart-heading span {
+.watchlist-chart-legend em {
   align-items: center;
-  background: #f59e0b;
-  border: 1px solid #d97706;
+  background: var(--watchlist-color);
   border-radius: 999px;
-  color: #111827;
+  color: #06111f;
   display: inline-flex;
+  font-style: normal;
   font-size: 11px;
   font-weight: 900;
-  height: 22px;
+  height: 18px;
   justify-content: center;
-  min-width: 28px;
-  padding: 0 7px;
+  min-width: 20px;
+  padding: 0 6px;
 }
 
 .tradingview-chart-grid {
   display: grid;
   gap: 6px;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(clamp(170px, 13vw, 260px), 1fr));
 }
 
 .tradingview-chart-card {
   background: #080d14;
   border: 0;
+  border-left: 3px solid var(--watchlist-color);
   border-radius: 0;
   display: block;
-  min-height: 270px;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.24);
+  height: clamp(175px, calc((100vh - 160px) / 3), 270px);
+  min-height: 0;
   overflow: hidden;
   position: relative;
 }
@@ -5757,10 +5762,31 @@ select {
   z-index: 2;
 }
 
+.tradingview-watchlist-label {
+  align-items: center;
+  background: var(--watchlist-color);
+  border-radius: 4px;
+  color: #06111f;
+  display: inline-flex;
+  font-size: 9px;
+  font-weight: 900;
+  max-width: 46%;
+  min-height: 18px;
+  overflow: hidden;
+  padding: 0 6px;
+  pointer-events: none;
+  position: absolute;
+  right: 5px;
+  text-overflow: ellipsis;
+  top: 5px;
+  white-space: nowrap;
+  z-index: 2;
+}
+
 .tradingview-widget-frame {
   border: 0;
-  height: 270px;
-  min-height: 270px;
+  height: 100%;
+  min-height: 0;
   width: 100%;
 }
 

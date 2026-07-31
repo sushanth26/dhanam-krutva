@@ -33,6 +33,7 @@ const ALL_WATCHLISTS_TAB_ID = "__all-watchlists";
 const OG_WATCHLIST_ID = "og";
 const SPY_SYMBOL = "SPY";
 const TRADINGVIEW_WIDGET_URL = "https://www.tradingview-widget.com/embed-widget/advanced-chart/";
+const CHART_GROUP_COLORS = ["#f59e0b", "#38bdf8", "#22c55e", "#f43f5e", "#a78bfa", "#14b8a6"];
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
   "ASTS", "AMD", "ARM", "AVGO", "DELL", "INTC", "APP", "LLY",
@@ -2640,7 +2641,12 @@ export default function App() {
 function ChartsPage({ watchlists }) {
   const chartGroups = useMemo(() => chartGroupsFromWatchlists(watchlists), [watchlists]);
   const chartItems = useMemo(
-    () => chartGroups.flatMap((group) => group.symbols.map((symbol) => ({ groupId: group.id, groupName: group.name, symbol }))),
+    () => chartGroups.flatMap((group) => group.symbols.map((symbol) => ({
+      color: group.color,
+      groupId: group.id,
+      groupName: group.name,
+      symbol,
+    }))),
     [chartGroups]
   );
   const [activeChartIndex, setActiveChartIndex] = useState(null);
@@ -2669,27 +2675,26 @@ function ChartsPage({ watchlists }) {
   return (
     <section className="charts-page" aria-label="Watchlist TradingView charts">
       {chartGroups.length ? (
-        <div className="watchlist-chart-sections">
-          {chartGroups.map((group) => (
-            <section className="watchlist-chart-section" key={group.id} aria-label={`${group.name} charts`}>
-              <div className="watchlist-chart-heading">
-                <h2>{group.name}</h2>
-                <span>{group.symbols.length}</span>
-              </div>
-              <div className="tradingview-chart-grid">
-                {group.symbols.map((symbol) => {
-                  const chartIndex = chartItems.findIndex((item) => item.groupId === group.id && item.symbol === symbol);
-                  return (
-                    <TradingViewChart
-                      key={`${group.id}-${symbol}`}
-                      onOpen={() => setActiveChartIndex(chartIndex)}
-                      symbol={symbol}
-                    />
-                  );
-                })}
-              </div>
-            </section>
-          ))}
+        <div className="watchlist-chart-board">
+          <div className="watchlist-chart-legend" aria-label="Watchlist chart groups">
+            {chartGroups.map((group) => (
+              <span key={group.id} style={{ "--watchlist-color": group.color }}>
+                <b>{group.name}</b>
+                <em>{group.symbols.length}</em>
+              </span>
+            ))}
+          </div>
+          <div className="tradingview-chart-grid">
+            {chartItems.map((item, chartIndex) => (
+              <TradingViewChart
+                color={item.color}
+                groupName={item.groupName}
+                key={`${item.groupId}-${item.symbol}`}
+                onOpen={() => setActiveChartIndex(chartIndex)}
+                symbol={item.symbol}
+              />
+            ))}
+          </div>
         </div>
       ) : (
         <div className="charts-empty-state">
@@ -2716,6 +2721,7 @@ function chartGroupsFromWatchlists(watchlists) {
     .map((watchlist, index) => {
       const symbols = normalizeSymbols(watchlist.symbols || []);
       return {
+        color: CHART_GROUP_COLORS[index % CHART_GROUP_COLORS.length],
         id: watchlist.id || `watchlist-${index}`,
         name: watchlist.name || "Watchlist",
         symbols,
@@ -2724,12 +2730,17 @@ function chartGroupsFromWatchlists(watchlists) {
     .filter((group) => group.symbols.length);
 }
 
-function TradingViewChart({ onOpen, symbol }) {
+function TradingViewChart({ color, groupName, onOpen, symbol }) {
   const chartUrl = tradingViewEmbedUrl(symbol);
 
   return (
-    <article className="tradingview-chart-card" aria-label={`${symbol} TradingView chart`}>
+    <article
+      className="tradingview-chart-card"
+      style={{ "--watchlist-color": color }}
+      aria-label={`${symbol} TradingView chart`}
+    >
       <div className="tradingview-chart-label">{symbol}</div>
+      <div className="tradingview-watchlist-label">{groupName}</div>
       <iframe
         className="tradingview-widget-frame"
         title={`${symbol} chart`}
@@ -2750,12 +2761,13 @@ function ChartModal({ chart, current, onClose, onNext, onPrevious, total }) {
   const chartUrl = tradingViewEmbedUrl(chart.symbol);
 
   return (
-    <div className="chart-modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="chart-modal-backdrop" role="presentation" onClick={onClose} onMouseDown={onClose}>
       <section
         className="chart-modal"
         role="dialog"
         aria-modal="true"
         aria-label={`${chart.symbol} enlarged chart`}
+        onClick={(event) => event.stopPropagation()}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="chart-modal-toolbar">
