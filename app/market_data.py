@@ -19,6 +19,7 @@ INTRADAY_EMA_SESSIONS = ["PRE", "RTH", "ATH"]
 WEBULL_BATCH_BAR_LIMIT = 20
 MARKET_TIMEZONE = ZoneInfo("America/New_York")
 REGULAR_MARKET_OPEN = time(9, 30)
+PREMARKET_OPEN = time(4, 0)
 NINE_EMA_TOUCH_CUTOFF = time(10, 30)
 NINE_EMA_RECENT_CLOUD_LOOKBACK = 4
 A_PLUS_PLUS_MAX_RISK = 100
@@ -112,6 +113,8 @@ def build_live_prices(
         latest_10m_candle = latest_ten_minute_candle(ten_minute_candles)
         latest_10m_close = latest_10m_candle.get("close") if latest_10m_candle else None
         candle_price = latest_ten_minute_price(ten_minute_candles, price)
+        daily_range = previous_daily_range(daily_candles)
+        premarket = premarket_range(normalize_bars(m5_map.get(symbol)))
         quotes.append(
             {
                 "symbol": symbol,
@@ -123,7 +126,8 @@ def build_live_prices(
                 "latest_10m_time": latest_10m_candle.get("time") if latest_10m_candle else None,
                 "change": snapshot_change(snapshot_map.get(symbol)),
                 "change_ratio": snapshot_change_ratio(snapshot_map.get(symbol)),
-                "previous_day": previous_daily_range(daily_candles),
+                "previous_day": daily_range,
+                "premarket": premarket,
                 "ema_10m": ten_minute_ema,
                 "ema_10m_cloud": ten_minute_cloud,
                 "ema_1h": ema_1h,
@@ -175,12 +179,12 @@ def previous_daily_range(candles: list[dict[str, Any]]) -> dict[str, Any] | None
     completed = [
         candle for candle in candles
         if candle.get("session_date") and candle.get("session_date") < today
-        and candle.get("high") is not None and candle.get("low") is not None
+        and candle.get("high") is not None and candle.get("low") is not None and candle.get("close") is not None
     ]
     if not completed:
         completed = [
             candle for candle in candles
-            if candle.get("high") is not None and candle.get("low") is not None
+            if candle.get("high") is not None and candle.get("low") is not None and candle.get("close") is not None
         ][:-1]
     if not completed:
         return None
@@ -189,6 +193,30 @@ def previous_daily_range(candles: list[dict[str, Any]]) -> dict[str, Any] | None
         "date": candle.get("session_date"),
         "high": round(candle["high"], 4),
         "low": round(candle["low"], 4),
+        "close": round(candle["close"], 4),
+    }
+
+
+def premarket_range(candles: list[dict[str, Any]]) -> dict[str, Any] | None:
+    today = datetime.now(MARKET_TIMEZONE).date().isoformat()
+    premarket_candles = []
+    for candle in candles:
+        if candle.get("session_date") != today:
+            continue
+        parsed_time = parse_iso_time(candle.get("sort_time") or candle.get("time"))
+        if not parsed_time:
+            continue
+        local_time = parsed_time.astimezone(MARKET_TIMEZONE).time() if parsed_time.tzinfo else parsed_time.time()
+        if PREMARKET_OPEN <= local_time < REGULAR_MARKET_OPEN:
+            premarket_candles.append(candle)
+    highs = [candle.get("high") for candle in premarket_candles if candle.get("high") is not None]
+    lows = [candle.get("low") for candle in premarket_candles if candle.get("low") is not None]
+    if not highs or not lows:
+        return None
+    return {
+        "date": today,
+        "high": round(max(highs), 4),
+        "low": round(min(lows), 4),
     }
 
 
