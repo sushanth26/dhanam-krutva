@@ -5659,9 +5659,168 @@ select {
   gap: 14px;
 }
 
+.charts-page {
+  display: block;
+}
+
+.tradingview-chart-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+}
+
+.tradingview-chart-card {
+  background: #080d14;
+  border: 0;
+  border-radius: 0;
+  display: block;
+  min-height: 430px;
+  overflow: hidden;
+  position: relative;
+}
+
+.tradingview-chart-label {
+  align-items: center;
+  background: rgba(8, 13, 20, 0.86);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 4px;
+  color: #f8fafc;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  left: 8px;
+  min-height: 24px;
+  padding: 0 8px;
+  pointer-events: none;
+  position: absolute;
+  top: 8px;
+  z-index: 2;
+}
+
+.ema-cloud-chart {
+  display: block;
+  height: 430px;
+  width: 100%;
+}
+
+.chart-bg {
+  fill: #080d14;
+}
+
+.chart-grid-line {
+  stroke: rgba(148, 163, 184, 0.14);
+  stroke-dasharray: 1 5;
+}
+
+.cloud-fill.fast {
+  fill: rgba(34, 211, 238, 0.18);
+}
+
+.cloud-fill.slow {
+  fill: rgba(245, 158, 11, 0.18);
+}
+
+.ema-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.ema-line.ema5 {
+  stroke: #22d3ee;
+}
+
+.ema-line.ema12 {
+  stroke: #22c55e;
+}
+
+.ema-line.ema34 {
+  stroke: #f59e0b;
+}
+
+.ema-line.ema50 {
+  stroke: #f43f5e;
+}
+
+.candle line {
+  stroke-width: 1;
+}
+
+.candle rect {
+  stroke-width: 0;
+}
+
+.candle.up line,
+.candle.up rect {
+  fill: #00d6b9;
+  stroke: #00d6b9;
+}
+
+.candle.down line,
+.candle.down rect {
+  fill: #ff3152;
+  stroke: #ff3152;
+}
+
+.chart-price-label {
+  dominant-baseline: middle;
+  fill: #f8fafc;
+  font-size: 12px;
+  font-weight: 800;
+  text-anchor: start;
+}
+
+.chart-loading,
+.chart-error {
+  align-items: center;
+  color: #94a3b8;
+  display: grid;
+  min-height: 430px;
+  place-items: center;
+}
+
+.chart-error {
+  background: rgba(248, 113, 113, 0.08);
+  color: #fecaca;
+  min-height: 44px;
+}
+
+.charts-empty-state {
+  align-items: center;
+  background: #0f1722;
+  border: 1px solid #1f2a37;
+  border-radius: 8px;
+  color: #94a3b8;
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  min-height: 180px;
+  padding: 24px;
+  text-align: center;
+}
+
+.charts-empty-state strong {
+  color: #f8fafc;
+}
+
 @media (max-width: 900px) {
   .watchlist-panel {
     grid-template-columns: 1fr;
+  }
+
+  .tradingview-chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tradingview-chart-card {
+    min-height: 360px;
+  }
+
+  .ema-cloud-chart,
+  .chart-loading {
+    height: 360px;
+    min-height: 360px;
   }
 
   .daily-list-editor {
