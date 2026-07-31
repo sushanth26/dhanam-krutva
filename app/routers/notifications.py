@@ -28,6 +28,7 @@ class NotificationHistoryPayload(BaseModel):
 def notification_config(request: Request):
     settings = get_settings()
     monitor = getattr(request.app.state, "mtf_push_monitor", None)
+    insider_monitor = getattr(request.app.state, "insider_push_monitor", None)
     status = monitor.status() if monitor else {
         "running": False,
         "subscriptions": len(PushSubscriptionStore(settings.push_subscription_file).all()),
@@ -40,6 +41,13 @@ def notification_config(request: Request):
         "vapid_public_key": settings.vapid_public_key,
         "poll_seconds": settings.mtf_push_poll_seconds,
         "monitor": status,
+        "insider_monitor": insider_monitor.status() if insider_monitor else {
+            "running": False,
+            "push_polling_enabled": settings.insider_push_enabled,
+            "poll_seconds": settings.insider_push_poll_seconds,
+            "subscriptions": len(PushSubscriptionStore(settings.push_subscription_file).all()),
+            "last_error": None,
+        },
     }
 
 
@@ -73,6 +81,11 @@ def subscribe(payload: PushSubscriptionPayload, request: Request):
     if monitor is not None:
         monitor.store = PushSubscriptionStore(settings.push_subscription_file)
         monitor.start()
+    insider_monitor = getattr(request.app.state, "insider_push_monitor", None)
+    if insider_monitor is not None:
+        insider_monitor.store = PushSubscriptionStore(settings.push_subscription_file)
+        insider_monitor.sender.store = insider_monitor.store
+        insider_monitor.start()
     return {"ok": True, "subscriptions": total}
 
 

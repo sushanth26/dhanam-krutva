@@ -41,6 +41,10 @@ class Settings:
     mtf_push_enabled: bool
     mtf_push_poll_seconds: int
     mtf_push_timezone: str
+    sec_user_agent: str = "Dhanam-Krutva/1.0 sushanth@example.com"
+    insider_push_enabled: bool = True
+    insider_push_poll_seconds: int = 120
+    insider_seen_file: Path = Path(".insider-filings-seen.json")
 
     @property
     def endpoint(self) -> str:
@@ -87,6 +91,13 @@ def get_settings() -> Settings:
         mtf_push_enabled=env_bool("MTF_PUSH_ENABLED", True),
         mtf_push_poll_seconds=max(30, int(os.getenv("MTF_PUSH_POLL_SECONDS", "60") or "60")),
         mtf_push_timezone=os.getenv("MTF_PUSH_TIMEZONE", "America/Chicago").strip() or "America/Chicago",
+        sec_user_agent=(
+            os.getenv("SEC_USER_AGENT", "Dhanam-Krutva/1.0 sushanth@example.com").strip()
+            or "Dhanam-Krutva/1.0 sushanth@example.com"
+        ),
+        insider_push_enabled=env_bool("INSIDER_PUSH_ENABLED", True),
+        insider_push_poll_seconds=max(60, int(os.getenv("INSIDER_PUSH_POLL_SECONDS", "120") or "120")),
+        insider_seen_file=Path(os.getenv("INSIDER_SEEN_FILE", "").strip() or default_insider_seen_file()),
     )
 
 
@@ -118,6 +129,12 @@ def default_webull_guard_file() -> str:
     if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
         return "/data/webull-guard.json"
     return ".webull-guard.json"
+
+
+def default_insider_seen_file() -> str:
+    if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
+        return "/data/insider-filings-seen.json"
+    return ".insider-filings-seen.json"
 
 
 def env_bool(name: str, default: bool) -> bool:

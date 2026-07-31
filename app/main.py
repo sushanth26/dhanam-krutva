@@ -7,6 +7,7 @@ from starlette.responses import Response
 
 from app.auth import is_authorized
 from app.config import get_settings
+from app.insider_monitor import InsiderPushMonitor
 from app.notifications import MtfPushMonitor
 from app.routers import accounts, insiders, notifications, strategy, trade, tradingview, webull
 
@@ -43,16 +44,20 @@ app.include_router(trade.router)
 
 
 @app.on_event("startup")
-async def start_mtf_push_monitor():
-    app.state.mtf_push_monitor = MtfPushMonitor(get_settings())
+async def start_push_monitors():
+    settings = get_settings()
+    app.state.mtf_push_monitor = MtfPushMonitor(settings)
     app.state.mtf_push_monitor.start()
+    app.state.insider_push_monitor = InsiderPushMonitor(settings)
+    app.state.insider_push_monitor.start()
 
 
 @app.on_event("shutdown")
-async def stop_mtf_push_monitor():
-    monitor = getattr(app.state, "mtf_push_monitor", None)
-    if monitor:
-        await monitor.stop()
+async def stop_push_monitors():
+    for name in ("mtf_push_monitor", "insider_push_monitor"):
+        monitor = getattr(app.state, name, None)
+        if monitor:
+            await monitor.stop()
 
 
 @app.middleware("http")

@@ -15,7 +15,29 @@ const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
 });
 
+const priceFormatter = new Intl.NumberFormat("en-US", {
+  currency: "USD",
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 2,
+  style: "currency",
+});
+
 const numberFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+const filedAtFormatter = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  month: "short",
+  timeZoneName: "short",
+  year: "numeric",
+});
+const RECENT_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
 
 function marketCapInRange(value, range) {
   if (range === "mega") return value >= 200000000000;
@@ -36,6 +58,91 @@ function importanceLabel(record) {
   return "Important buy";
 }
 
+function formatTradePrice(value) {
+  const price = Number(value);
+  return Number.isFinite(price) && price > 0 ? priceFormatter.format(price) : "N/A";
+}
+
+function formatDate(value) {
+  if (!value) return "N/A";
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime()) ? String(value) : dateFormatter.format(parsed);
+}
+
+function formatFiledAt(record) {
+  if (record.filedAt) {
+    const parsed = new Date(record.filedAt);
+    if (!Number.isNaN(parsed.getTime())) return filedAtFormatter.format(parsed);
+  }
+  return formatDate(record.filingDate);
+}
+
+function recordKey(record) {
+  return record.recordId || [
+    record.accessionNumber,
+    record.ticker,
+    record.transactionDate || record.filingDate,
+    record.insider,
+    record.shares,
+    Number(record.price || 0).toFixed(4),
+  ].join(":");
+}
+
+function mergeRecords(currentRecords, recentRecords) {
+  const currentPrices = Object.fromEntries(
+    currentRecords
+      .filter((record) => Number(record.currentPrice) > 0)
+      .map((record) => [String(record.ticker || "").toUpperCase(), record.currentPrice]),
+  );
+  const byKey = new Map();
+  [...recentRecords, ...currentRecords].forEach((record) => {
+    const ticker = String(record.ticker || "").toUpperCase();
+    const key = recordKey(record);
+    if (!byKey.has(key)) {
+      byKey.set(key, {
+        ...record,
+        currentPrice: record.currentPrice || currentPrices[ticker] || null,
+      });
+    }
+  });
+  return [...byKey.values()];
+}
+
+async function loadCurrentPrices(records) {
+  const symbols = [...new Set(records.map((record) => String(record.ticker || "").toUpperCase()).filter(Boolean))];
+  const currentPrices = {};
+  for (let index = 0; index < symbols.length; index += 25) {
+    const params = new URLSearchParams({
+      force: "true",
+      symbols: symbols.slice(index, index + 25).join(","),
+    });
+    const pricePayload = await getJson(`/api/webull/live-prices?${params.toString()}`);
+    if (pricePayload.ok === false) {
+      throw new Error(pricePayload.errors?.[0]?.error || "Live prices are unavailable.");
+    }
+    (pricePayload.quotes || []).forEach((quote) => {
+      const symbol = String(quote.symbol || "").toUpperCase();
+      const price = Number(quote.price);
+      if (symbol && Number.isFinite(price) && price > 0) currentPrices[symbol] = price;
+    });
+  }
+  return currentPrices;
+}
+
+function priceComparison(record) {
+  const boughtAt = Number(record.price);
+  const currentPrice = Number(record.currentPrice);
+  if (!Number.isFinite(boughtAt) || boughtAt <= 0 || !Number.isFinite(currentPrice) || currentPrice <= 0) {
+    return { changePct: null, label: "Unavailable", tone: "unknown" };
+  }
+  const changePct = ((currentPrice - boughtAt) / boughtAt) * 100;
+  return {
+    changePct,
+    label: currentPrice >= boughtAt ? "Green" : "Red",
+    tone: currentPrice >= boughtAt ? "green" : "red",
+  };
+}
+
 function compareValues(left, right) {
   if (typeof left === "number" && typeof right === "number") return left - right;
   return String(left || "").localeCompare(String(right || ""), undefined, {
@@ -51,7 +158,10 @@ function groupRecords(records, sortKey, sortDirection) {
     map.set(record.ticker, rows);
     return map;
   }, new Map()).values()].map((rows) => {
-    const latestDate = rows.reduce((latest, row) => row.filingDate > latest ? row.filingDate : latest, "");
+    const latestDate = rows.reduce((latest, row) => {
+      const rowDate = row.transactionDate || row.filingDate || "";
+      return rowDate > latest ? rowDate : latest;
+    }, "");
     return {
       rows,
       summary: {
@@ -60,6 +170,8 @@ function groupRecords(records, sortKey, sortDirection) {
         executiveBuys: rows.filter((row) => row.isExecutiveBuy).length,
         latestDate,
         marketCap: rows[0]?.marketCap || 0,
+        averageBuyPrice: rows.reduce((sum, row) => sum + row.value, 0) / Math.max(rows.reduce((sum, row) => sum + row.shares, 0), 1),
+        currentPrice: rows.find((row) => Number(row.currentPrice) > 0)?.currentPrice || 0,
         ticker: rows[0]?.ticker || "",
         totalShares: rows.reduce((sum, row) => sum + row.shares, 0),
         totalValue: rows.reduce((sum, row) => sum + row.value, 0),
@@ -77,6 +189,17 @@ function groupRecords(records, sortKey, sortDirection) {
     else if (sortKey === "marketCap") result = compareValues(leftSummary.marketCap, rightSummary.marketCap);
     else if (sortKey === "shares") result = compareValues(leftSummary.totalShares, rightSummary.totalShares);
     else if (sortKey === "value") result = compareValues(leftSummary.totalValue, rightSummary.totalValue);
+    else if (sortKey === "price") result = compareValues(leftSummary.averageBuyPrice, rightSummary.averageBuyPrice);
+    else if (sortKey === "currentPrice") result = compareValues(leftSummary.currentPrice, rightSummary.currentPrice);
+    else if (sortKey === "performance") {
+      const leftChange = leftSummary.averageBuyPrice > 0 && leftSummary.currentPrice > 0
+        ? ((leftSummary.currentPrice - leftSummary.averageBuyPrice) / leftSummary.averageBuyPrice) * 100
+        : Number.NEGATIVE_INFINITY;
+      const rightChange = rightSummary.averageBuyPrice > 0 && rightSummary.currentPrice > 0
+        ? ((rightSummary.currentPrice - rightSummary.averageBuyPrice) / rightSummary.averageBuyPrice) * 100
+        : Number.NEGATIVE_INFINITY;
+      result = compareValues(leftChange, rightChange);
+    }
     else result = compareValues(leftSummary.latestDate, rightSummary.latestDate);
     return result ? result * direction : leftSummary.ticker.localeCompare(rightSummary.ticker);
   });
@@ -91,24 +214,106 @@ export function InsiderBuyingPage({ onDataLoaded }) {
   const [marketCapRange, setMarketCapRange] = useState("all");
   const [sortKey, setSortKey] = useState("date");
   const [sortDirection, setSortDirection] = useState("desc");
-  const [status, setStatus] = useState({ loading: true, error: "", meta: null });
+  const [status, setStatus] = useState({
+    loading: true,
+    pricesLoading: false,
+    error: "",
+    priceError: "",
+    meta: null,
+  });
 
   async function loadData(nextDays = days) {
-    setStatus((current) => ({ ...current, loading: true, error: "" }));
+    setStatus((current) => ({
+      ...current,
+      loading: true,
+      pricesLoading: false,
+      error: "",
+      priceError: "",
+    }));
     try {
       const payload = await getJson(`/api/insiders/qqq?days=${nextDays}`);
-      setRecords(Array.isArray(payload.records) ? payload.records : []);
+      const nextRecords = Array.isArray(payload.records) ? payload.records : [];
+      setRecords(nextRecords);
       setSortKey("date");
       setSortDirection("desc");
-      setStatus({ loading: false, error: "", meta: payload });
+      setStatus({
+        loading: false,
+        pricesLoading: nextRecords.length > 0,
+        error: "",
+        priceError: "",
+        meta: payload,
+      });
       onDataLoaded?.(payload);
+
+      if (!nextRecords.length) return;
+
+      try {
+        const currentPrices = await loadCurrentPrices(nextRecords);
+        setRecords(nextRecords.map((record) => ({
+          ...record,
+          currentPrice: currentPrices[String(record.ticker || "").toUpperCase()] || null,
+        })));
+        setStatus((current) => ({
+          ...current,
+          pricesLoading: false,
+          priceError: "",
+        }));
+      } catch (error) {
+        setStatus((current) => ({
+          ...current,
+          pricesLoading: false,
+          priceError: error.message || "Current prices are unavailable.",
+        }));
+      }
     } catch (error) {
-      setStatus({ loading: false, error: error.message || "Unable to load insider buys.", meta: null });
+      setStatus({
+        loading: false,
+        pricesLoading: false,
+        error: error.message || "Unable to load insider buys.",
+        priceError: "",
+        meta: null,
+      });
+    }
+  }
+
+  async function loadRecentData() {
+    try {
+      const payload = await getJson("/api/insiders/qqq/recent");
+      const recentRecords = Array.isArray(payload.records) ? payload.records : [];
+      if (!recentRecords.length) {
+        setStatus((current) => ({
+          ...current,
+          meta: { ...current.meta, ...payload },
+        }));
+        onDataLoaded?.(payload);
+        return;
+      }
+      let currentPrices = {};
+      try {
+        currentPrices = await loadCurrentPrices(recentRecords);
+      } catch {
+        // Existing prices remain visible until the next full refresh.
+      }
+      const pricedRecords = recentRecords.map((record) => ({
+        ...record,
+        currentPrice: currentPrices[String(record.ticker || "").toUpperCase()] || null,
+      }));
+      setRecords((current) => mergeRecords(current, pricedRecords));
+      setStatus((current) => ({
+        ...current,
+        meta: { ...current.meta, ...payload },
+      }));
+      onDataLoaded?.(payload);
+    } catch {
+      // Keep the existing table and retry on the next SEC polling cycle.
     }
   }
 
   useEffect(() => {
     loadData();
+    loadRecentData();
+    const timer = window.setInterval(loadRecentData, RECENT_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
   }, []);
 
   const visibleRecords = useMemo(() => {
@@ -158,16 +363,16 @@ export function InsiderBuyingPage({ onDataLoaded }) {
     <section className="insider-page">
       <div className="insider-page-header">
         <div>
-          <span className="insider-eyebrow">Nasdaq-100 monitor</span>
+          <span className="insider-eyebrow">SEC Form 4 monitor</span>
           <h2>QQQ Insider Buys</h2>
           <p>
             {status.meta
               ? `${status.meta.holdingsScanned} Nasdaq-100 names scanned from ${status.meta.source}.`
-              : "Board and executive open-market buys from Nasdaq insider activity."}
+              : "Officer and director open-market purchases from SEC Form 4 filings, with Nasdaq history."}
           </p>
         </div>
-        <button type="button" className="secondary-button" disabled={status.loading} onClick={() => loadData()}>
-          {status.loading ? "Checking" : "Refresh"}
+        <button type="button" className="secondary-button" disabled={status.loading || status.pricesLoading} onClick={() => loadData()}>
+          {status.loading ? "Checking" : status.pricesLoading ? "Pricing" : "Refresh"}
         </button>
       </div>
 
@@ -206,6 +411,8 @@ export function InsiderBuyingPage({ onDataLoaded }) {
       </div>
 
       {status.error ? <div className="alert app-alert error">{status.error}</div> : null}
+      {status.meta?.secError ? <div className="alert app-alert warning">SEC live filings are temporarily unavailable. Nasdaq history is still shown.</div> : null}
+      {status.priceError ? <div className="alert app-alert warning">{status.priceError}</div> : null}
 
       <div className="insider-metrics">
         <Summary label="Stocks" value={numberFormatter.format(groups.length)} />
@@ -221,22 +428,24 @@ export function InsiderBuyingPage({ onDataLoaded }) {
               {[
                 ["ticker", "Ticker"],
                 ["insider", "Insider"],
-                ["role", "Role"],
                 ["shares", "Shares"],
                 ["marketCap", "Market cap"],
-                ["value", "Value"],
+                ["price", "Bought at"],
+                ["currentPrice", "Current"],
+                ["performance", "Result"],
                 ["tag", "Tag"],
+                ["transactionDate", "Trade date"],
                 ["date", "Filed"],
               ].map(([key, label]) => renderHeader(key, label))}
             </tr>
           </thead>
           <tbody>
             {status.loading ? (
-              <tr><td colSpan="8" className="insider-empty">Loading QQQ insider activity...</td></tr>
+              <tr><td colSpan="10" className="insider-empty">Loading QQQ insider activity...</td></tr>
             ) : groups.length ? groups.map(({ rows, summary }) => (
               <Fragment key={`${summary.ticker}-section`}>
                 <tr className="insider-stock-row" key={`${summary.ticker}-group`}>
-                  <td colSpan="8">
+                  <td colSpan="10">
                     <div className="insider-stock-title">
                       <a href={`https://www.nasdaq.com/market-activity/stocks/${summary.ticker.toLowerCase()}/insider-activity`} target="_blank" rel="noreferrer">{summary.ticker}</a>
                       <strong>{summary.companyName}</strong>
@@ -247,25 +456,42 @@ export function InsiderBuyingPage({ onDataLoaded }) {
                       <span>{summary.boardBuys} board</span>
                       <span>{formatMarketCap(summary.marketCap)}</span>
                       <span>{currencyFormatter.format(summary.totalValue)}</span>
-                      <span>Latest {summary.latestDate}</span>
+                      <span>Latest trade {formatDate(summary.latestDate)}</span>
                     </div>
                   </td>
                 </tr>
-	                {rows.map((record) => (
-	                  <tr key={`${record.ticker}-${record.insider}-${record.filingDate}-${record.value}`}>
-	                    <td data-label="Ticker">{record.ticker}</td>
-	                    <td data-label="Insider"><strong>{record.insider}</strong><span>{record.ownership}</span></td>
-	                    <td data-label="Role">{record.role}</td>
-	                    <td data-label="Shares">{numberFormatter.format(record.shares)}</td>
-	                    <td data-label="Market cap">{formatMarketCap(record.marketCap)}</td>
-	                    <td data-label="Value">{record.value ? currencyFormatter.format(record.value) : "Unpriced"}</td>
-	                    <td data-label="Tag"><span className={`insider-tag ${record.isBoardBuy ? "board" : "exec"}`}>{importanceLabel(record)}</span></td>
-	                    <td data-label="Filed">{record.filingDate}</td>
-	                  </tr>
-	                ))}
+                {rows.map((record) => {
+                  const comparison = priceComparison(record);
+                  return (
+                    <tr key={recordKey(record)}>
+                      <td data-label="Ticker">{record.ticker}</td>
+                      <td data-label="Insider"><strong>{record.insider}</strong><span>{record.ownership}</span></td>
+                      <td data-label="Shares">{numberFormatter.format(record.shares)}</td>
+                      <td data-label="Market cap">{formatMarketCap(record.marketCap)}</td>
+                      <td data-label="Bought at" className="insider-price-cell">{formatTradePrice(record.price)}</td>
+                      <td data-label="Current" className="insider-price-cell">
+                        {status.pricesLoading && !record.currentPrice ? "Loading" : formatTradePrice(record.currentPrice)}
+                      </td>
+                      <td data-label="Result">
+                        <span className={`insider-performance ${comparison.tone}`}>
+                          {comparison.label}
+                          {comparison.changePct === null ? null : (
+                            <small>{comparison.changePct >= 0 ? "+" : ""}{comparison.changePct.toFixed(1)}%</small>
+                          )}
+                        </span>
+                      </td>
+                      <td data-label="Tag"><span className={`insider-tag ${record.isBoardBuy ? "board" : "exec"}`}>{importanceLabel(record)}</span></td>
+                      <td data-label="Trade date">{formatDate(record.transactionDate || record.filingDate)}</td>
+                      <td data-label="Filed">
+                        <a className="insider-source-link" href={record.sourceUrl} target="_blank" rel="noreferrer">{formatFiledAt(record)}</a>
+                        <span>{record.source}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </Fragment>
             )) : (
-              <tr><td colSpan="8" className="insider-empty">No matching insider buys found.</td></tr>
+              <tr><td colSpan="10" className="insider-empty">No matching insider buys found.</td></tr>
             )}
           </tbody>
         </table>

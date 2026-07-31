@@ -68,7 +68,7 @@ APP_PASSWORD=<strong private password>
 when Webull support has reset a verification/rate-limit lock. Turn it back on
 after the retry.
 
-For phone app-style MTF push notifications, generate VAPID keys once:
+For phone app-style MTF and insider push notifications, generate VAPID keys once:
 
 ```bash
 npx web-push generate-vapid-keys
@@ -84,6 +84,10 @@ PUSH_SUBSCRIPTION_FILE=/data/push-subscriptions.json
 MTF_PUSH_ENABLED=true
 MTF_PUSH_POLL_SECONDS=60
 MTF_PUSH_TIMEZONE=America/Chicago
+SEC_USER_AGENT=Dhanam-Krutva/1.0 you@example.com
+INSIDER_PUSH_ENABLED=true
+INSIDER_PUSH_POLL_SECONDS=120
+INSIDER_SEEN_FILE=/data/insider-filings-seen.json
 ```
 
 `MTF_PUSH_ENABLED` defaults to true when omitted, so use
@@ -92,12 +96,21 @@ off while keeping manual notification checks available. `MTF_PUSH_POLL_SECONDS`
 defaults to 60, so the backend checks for push alerts once per minute during
 weekdays from 3:00 AM through 5:59 PM in `MTF_PUSH_TIMEZONE`.
 
+The insider monitor polls SEC EDGAR every two minutes by default, reads each
+Form 4 as soon as it is filed, and alerts only for officer or director
+open-market purchases with transaction code `P`. The first successful scan
+establishes a baseline; later filing IDs are persisted in
+`INSIDER_SEEN_FILE`, so deploys do not create duplicate alerts. Use a real
+monitored email address in `SEC_USER_AGENT`, as required by SEC fair-access
+guidance.
+
 After the first deploy, open the installed phone app, sign in, and tap
 `Enable Notifications` once. Keep the same VAPID keys in Railway and keep
 `PUSH_SUBSCRIPTION_FILE` on the `/data` volume. On later deploys, the phone app
 automatically re-registers its service worker and re-syncs the push subscription
-with Railway when it opens. The backend will poll Webull during the configured
-market refresh window and send a push notification when the MTF table changes.
+with Railway when it opens. The backend polls Webull during the configured
+market refresh window and SEC EDGAR throughout the day, then sends push
+notifications for new MTF entries or insider purchase filings.
 
 Railway uses `nixpacks.toml` to install Python dependencies, install the React
 frontend with `npm ci`, build React into `app/static`, and run:
