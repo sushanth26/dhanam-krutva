@@ -32,6 +32,7 @@ const MAX_WATCHLIST_SYMBOLS = 25;
 const ALL_WATCHLISTS_TAB_ID = "__all-watchlists";
 const OG_WATCHLIST_ID = "og";
 const SPY_SYMBOL = "SPY";
+const TRADINGVIEW_WIDGET_URL = "https://www.tradingview-widget.com/embed-widget/advanced-chart/";
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
   "ASTS", "AMD", "ARM", "AVGO", "DELL", "INTC", "APP", "LLY",
@@ -1108,6 +1109,7 @@ export default function App() {
   const [retainedMtfQuotesByTab, setRetainedMtfQuotesByTab] = useState(loadRetainedMtfQuotes);
   const [activePage, setActivePage] = useState(() => {
     if (window.location.hash === "#alerts") return "alerts";
+    if (window.location.hash === "#charts") return "charts";
     if (window.location.hash === "#mtfs") return "mtfs";
     if (window.location.hash === "#insiders") return "insiders";
     if (window.location.hash === "#watchlist") return "watchlist";
@@ -1770,9 +1772,11 @@ export default function App() {
         ? "#mtfs"
         : nextPage === "insiders"
           ? "#insiders"
-          : nextPage === "watchlist"
-            ? "#watchlist"
-            : "";
+          : nextPage === "charts"
+            ? "#charts"
+            : nextPage === "watchlist"
+              ? "#watchlist"
+              : "";
     window.history.replaceState(null, "", hash || window.location.pathname);
   }
 
@@ -2573,7 +2577,7 @@ export default function App() {
         </div>
       ) : null}
       <main className={`shell ${activePage === "mtfs" || activePage === "home" ? "mtf-shell" : ""}`}>
-        {alert ? <div className={`alert app-alert ${alertKind}`}>{alert}</div> : null}
+        {alert && activePage !== "charts" ? <div className={`alert app-alert ${alertKind}`}>{alert}</div> : null}
 
         {activePage === "alerts" ? (
           <AlertLogPage
@@ -2595,6 +2599,8 @@ export default function App() {
           />
         ) : activePage === "insiders" ? (
           <InsiderBuyingPage onDataLoaded={handleInsiderData} />
+        ) : activePage === "charts" ? (
+          <ChartsPage watchlists={watchlists} />
         ) : activePage === "watchlist" ? (
           <WatchlistWorkspace
             activeTab={watchlistTab}
@@ -2629,6 +2635,74 @@ export default function App() {
       </main>
     </>
   );
+}
+
+function ChartsPage({ watchlists }) {
+  const symbols = useMemo(() => uniqueSortedSymbolsFromWatchlists(watchlists), [watchlists]);
+
+  return (
+    <section className="charts-page" aria-label="Watchlist TradingView charts">
+      {symbols.length ? (
+        <div className="tradingview-chart-grid">
+          {symbols.map((symbol) => (
+            <TradingViewChart key={symbol} symbol={symbol} />
+          ))}
+        </div>
+      ) : (
+        <div className="charts-empty-state">
+          <strong>No watchlist symbols yet.</strong>
+          <span>Add tickers to a watchlist, then they will appear here.</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TradingViewChart({ symbol }) {
+  const chartUrl = tradingViewEmbedUrl(symbol);
+
+  return (
+    <article className="tradingview-chart-card" aria-label={`${symbol} TradingView chart`}>
+      <div className="tradingview-chart-label">{symbol}</div>
+      <iframe
+        className="tradingview-widget-frame"
+        title={`${symbol} chart`}
+        src={chartUrl}
+        allowFullScreen
+      />
+    </article>
+  );
+}
+
+function tradingViewEmbedUrl(symbol) {
+  const config = {
+    autosize: true,
+    symbol,
+    interval: "5",
+    range: "1D",
+    timezone: "America/Chicago",
+    theme: "dark",
+    style: "1",
+    locale: "en",
+    backgroundColor: "#080d14",
+    gridColor: "rgba(148, 163, 184, 0.12)",
+    hide_top_toolbar: true,
+    hide_side_toolbar: true,
+    hide_legend: true,
+    allow_symbol_change: true,
+    calendar: false,
+    details: false,
+    hotlist: false,
+    hide_volume: true,
+    save_image: false,
+    extended_hours: true,
+    show_extended_hours: true,
+    withdateranges: false,
+    support_host: "https://www.tradingview.com",
+    width: "100%",
+    height: "100%",
+  };
+  return `${TRADINGVIEW_WIDGET_URL}?locale=en#${encodeURIComponent(JSON.stringify(config))}`;
 }
 
 function MtfPage({

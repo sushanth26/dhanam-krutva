@@ -33,5 +33,14 @@
     ],
     "locked": false,
     "auto_trade_enabled": true
+  },
+  {
+    "id": "er",
+    "name": "ER",
+    "symbols": [
+      "AAPL"
+    ],
+    "locked": false,
+    "auto_trade_enabled": true
   }
 ]
