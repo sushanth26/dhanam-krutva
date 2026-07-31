@@ -26,6 +26,7 @@ const INSIDER_SEEN_KEY = "dhanam-insider-seen-records";
 const MAX_AUTO_TRADE_EXECUTIONS = 500;
 const MAX_INSIDER_SEEN_RECORDS = 1000;
 const WATCHLIST_REFRESH_CONCURRENCY = 1;
+const MAX_WATCHLIST_SYMBOLS = 25;
 const ALL_WATCHLISTS_TAB_ID = "__all-watchlists";
 const OG_WATCHLIST_ID = "og";
 const SPY_SYMBOL = "SPY";
@@ -92,7 +93,7 @@ function normalizeWatchlists(watchlists) {
     normalized.push({
       id,
       name: id === OG_WATCHLIST_ID ? "OG list" : name,
-      symbols: normalizeSymbols(item?.symbols || []).slice(0, 25),
+      symbols: normalizeSymbols(item?.symbols || []).slice(0, MAX_WATCHLIST_SYMBOLS),
       locked: id === OG_WATCHLIST_ID,
       autoTradeEnabled: item?.autoTradeEnabled !== false && item?.auto_trade_enabled !== false && item?.do_not_auto_trade !== true,
     });
@@ -1926,7 +1927,7 @@ export default function App() {
     if (!incoming.length) return;
     updateWatchlists((current) => current.map((watchlist) => (
       watchlist.id === watchlistTab
-        ? { ...watchlist, symbols: normalizeSymbols([...watchlist.symbols, ...incoming]).slice(0, 25) }
+        ? { ...watchlist, symbols: normalizeSymbols([...watchlist.symbols, ...incoming]).slice(0, MAX_WATCHLIST_SYMBOLS) }
         : watchlist
     )));
     setSymbolInputs((current) => ({ ...current, [watchlistTab]: "" }));
@@ -1953,6 +1954,98 @@ export default function App() {
     lastBosRows.current = nextBosRows;
     saveBosState(nextBosRows);
     dismissNewMtfRow(tab, normalizedSymbol);
+  }
+
+  function moveSymbolsBetweenWatchlists(symbols, fromId, toId) {
+    const source = watchlistsRef.current.find((watchlist) => watchlist.id === fromId);
+    const destination = watchlistsRef.current.find((watchlist) => watchlist.id === toId);
+    if (!source || !destination || source.id === destination.id) return false;
+
+    const sourceSymbols = new Set(source.symbols.map((symbol) => String(symbol || "").toUpperCase()));
+    const destinationSymbols = new Set(destination.symbols.map((symbol) => String(symbol || "").toUpperCase()));
+    const requested = normalizeSymbols(symbols).filter((symbol) => sourceSymbols.has(symbol));
+    if (!requested.length) return false;
+
+    const newDestinationSymbols = requested.filter((symbol) => !destinationSymbols.has(symbol));
+    const availableSlots = MAX_WATCHLIST_SYMBOLS - destination.symbols.length;
+    if (newDestinationSymbols.length > availableSlots) {
+      setAppAlert(
+        `${destination.name} has room for ${Math.max(availableSlots, 0)} more symbol${availableSlots === 1 ? "" : "s"}. Reduce the selection and try again.`,
+        "warning",
+      );
+      return false;
+    }
+
+    const movedSymbols = new Set(requested);
+    updateWatchlists((current) => current.map((watchlist) => {
+      if (watchlist.id === fromId) {
+        return { ...watchlist, symbols: watchlist.symbols.filter((symbol) => !movedSymbols.has(String(symbol || "").toUpperCase())) };
+      }
+      if (watchlist.id === toId) {
+        return { ...watchlist, symbols: normalizeSymbols([...watchlist.symbols, ...requested]) };
+      }
+      return watchlist;
+    }));
+
+    setQuotesByTab((current) => {
+      const movedQuotes = (current[fromId] || []).filter((quote) => movedSymbols.has(String(quote.symbol || "").toUpperCase()));
+      const destinationQuoteSymbols = new Set((current[toId] || []).map((quote) => String(quote.symbol || "").toUpperCase()));
+      return {
+        ...current,
+        [fromId]: (current[fromId] || []).filter((quote) => !movedSymbols.has(String(quote.symbol || "").toUpperCase())),
+        [toId]: [
+          ...(current[toId] || []),
+          ...movedQuotes.filter((quote) => !destinationQuoteSymbols.has(String(quote.symbol || "").toUpperCase())),
+        ],
+      };
+    });
+    setUpdatedTextByTab((current) => ({
+      ...current,
+      [fromId]: `Moved ${requested.length} symbol${requested.length === 1 ? "" : "s"} to ${destination.name}`,
+      [toId]: `Received ${requested.length} symbol${requested.length === 1 ? "" : "s"} from ${source.name}`,
+    }));
+    lastMtfSignature.current = {
+      ...lastMtfSignature.current,
+      [fromId]: null,
+      [toId]: null,
+    };
+
+    const sourceRows = { ...(lastMtfRows.current[fromId] || {}) };
+    const destinationRows = { ...(lastMtfRows.current[toId] || {}) };
+    requested.forEach((symbol) => {
+      if (sourceRows[symbol]) destinationRows[symbol] = sourceRows[symbol];
+      delete sourceRows[symbol];
+    });
+    lastMtfRows.current = {
+      ...lastMtfRows.current,
+      [fromId]: sourceRows,
+      [toId]: destinationRows,
+    };
+
+    const nextBosRows = { ...lastBosRows.current };
+    requested.forEach((symbol) => {
+      if (nextBosRows[symbol]?.watchlistId === fromId) {
+        nextBosRows[symbol] = {
+          ...nextBosRows[symbol],
+          watchlistId: toId,
+          watchlistName: destination.name,
+        };
+      }
+    });
+    lastBosRows.current = nextBosRows;
+    saveBosState(nextBosRows);
+    setNewMtfRows((current) => {
+      const next = { ...current };
+      requested.forEach((symbol) => {
+        delete next[mtfRowId(fromId, symbol)];
+      });
+      return next;
+    });
+    setAppAlert(
+      `Moved ${requested.length} symbol${requested.length === 1 ? "" : "s"} from ${source.name} to ${destination.name}.`,
+      "success",
+    );
+    return true;
   }
 
   function clearWatchlist(id = watchlistTab) {
@@ -2485,6 +2578,7 @@ export default function App() {
             onAddTab={addWatchlist}
             onClearWatchlist={clearWatchlist}
             onDeleteTab={deleteWatchlist}
+            onMoveSymbols={moveSymbolsBetweenWatchlists}
             onRemoveSymbol={removeSymbolFromWatchlist}
             onSwitchTab={switchWatchlistTab}
             onSymbolInput={(tab, value) => setSymbolInputs((current) => ({ ...current, [tab]: value }))}
@@ -2669,6 +2763,7 @@ function WatchlistWorkspace({
   onAddTab,
   onClearWatchlist,
   onDeleteTab,
+  onMoveSymbols,
   onRemoveSymbol,
   onSwitchTab,
   onSymbolInput,
@@ -2678,6 +2773,54 @@ function WatchlistWorkspace({
   updatedText,
   watchlists,
 }) {
+  const moveTargets = useMemo(
+    () => watchlists.filter((watchlist) => watchlist.id !== activeTab),
+    [activeTab, watchlists],
+  );
+  const activeSymbols = contextWatchlist?.symbols || [];
+  const [selectedSymbols, setSelectedSymbols] = useState([]);
+  const [moveTargetId, setMoveTargetId] = useState("");
+  const moveTarget = moveTargets.find((watchlist) => watchlist.id === moveTargetId) || moveTargets[0];
+  const destinationSymbols = new Set((moveTarget?.symbols || []).map((symbol) => String(symbol || "").toUpperCase()));
+  const selectedNewSymbolCount = selectedSymbols.filter((symbol) => !destinationSymbols.has(symbol)).length;
+  const availableSlots = Math.max(0, MAX_WATCHLIST_SYMBOLS - (moveTarget?.symbols.length || 0));
+  const hasDestinationRoom = selectedNewSymbolCount <= availableSlots;
+  const allSymbolsSelected = activeSymbols.length > 0 && selectedSymbols.length === activeSymbols.length;
+
+  useEffect(() => {
+    setSelectedSymbols([]);
+    setMoveTargetId(moveTargets[0]?.id || "");
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!moveTargets.length) {
+      setMoveTargetId("");
+    } else if (!moveTargets.some((watchlist) => watchlist.id === moveTargetId)) {
+      setMoveTargetId(moveTargets[0].id);
+    }
+  }, [moveTargetId, moveTargets]);
+
+  useEffect(() => {
+    const available = new Set(activeSymbols);
+    setSelectedSymbols((current) => current.filter((symbol) => available.has(symbol)));
+  }, [activeSymbols]);
+
+  function toggleMoveSymbol(symbol) {
+    setSelectedSymbols((current) => (
+      current.includes(symbol)
+        ? current.filter((item) => item !== symbol)
+        : [...current, symbol]
+    ));
+  }
+
+  function submitBulkMove(event) {
+    event.preventDefault();
+    if (!selectedSymbols.length || !moveTarget) return;
+    if (onMoveSymbols(selectedSymbols, contextWatchlist.id, moveTarget.id)) {
+      setSelectedSymbols([]);
+    }
+  }
+
   return (
     <div className="watchlist-workspace watchlist-design-page">
       <WatchlistTabs
@@ -2702,6 +2845,69 @@ function WatchlistWorkspace({
           <p className="muted">{updatedText}</p>
         </div>
       </div>
+      {isAllWatchlistsTab ? null : (
+        <section className="watchlist-bulk-move" aria-label="Bulk move symbols">
+          <div className="bulk-move-heading">
+            <div>
+              <h3>Move symbols</h3>
+              <span>{selectedSymbols.length} selected</span>
+            </div>
+            <button
+              type="button"
+              className="bulk-select-all"
+              onClick={() => setSelectedSymbols(allSymbolsSelected ? [] : [...activeSymbols])}
+              disabled={!activeSymbols.length}
+            >
+              {allSymbolsSelected ? "Clear selection" : "Select all"}
+            </button>
+          </div>
+          {activeSymbols.length ? (
+            <div className="bulk-symbol-options" aria-label={`Symbols in ${contextWatchlist?.name || "watchlist"}`}>
+              {activeSymbols.map((symbol) => (
+                <label key={symbol} className={`bulk-symbol-option ${selectedSymbols.includes(symbol) ? "selected" : ""}`}>
+                  <input
+                    type="checkbox"
+                    checked={selectedSymbols.includes(symbol)}
+                    onChange={() => toggleMoveSymbol(symbol)}
+                  />
+                  <span>{symbol}</span>
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="bulk-move-empty">No symbols to move.</p>
+          )}
+          <form className="bulk-move-controls" onSubmit={submitBulkMove}>
+            <label>
+              <span>Move to</span>
+              <select
+                value={moveTarget?.id || ""}
+                onChange={(event) => setMoveTargetId(event.target.value)}
+                disabled={!moveTargets.length}
+              >
+                {moveTargets.length ? moveTargets.map((watchlist) => (
+                  <option key={watchlist.id} value={watchlist.id}>
+                    {watchlist.name} ({watchlist.symbols.length}/{MAX_WATCHLIST_SYMBOLS})
+                  </option>
+                )) : (
+                  <option value="">Create another watchlist first</option>
+                )}
+              </select>
+            </label>
+            <span className={`bulk-move-capacity ${hasDestinationRoom ? "" : "warning"}`} aria-live="polite">
+              {moveTarget
+                ? `${availableSlots} open slot${availableSlots === 1 ? "" : "s"}`
+                : "No destination"}
+            </span>
+            <button
+              type="submit"
+              disabled={loading || !selectedSymbols.length || !moveTarget || !hasDestinationRoom}
+            >
+              Move {selectedSymbols.length || ""}
+            </button>
+          </form>
+        </section>
+      )}
       <div className="trend-price-grid">
         {isAllWatchlistsTab ? (
           <>

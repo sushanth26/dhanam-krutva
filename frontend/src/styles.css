@@ -7874,6 +7874,144 @@ select {
   font-weight: 700;
 }
 
+.watchlist-design-page .watchlist-bulk-move {
+  align-items: center;
+  background: #0d141c;
+  border-bottom: 1px solid #1e2a36;
+  border-top: 1px solid #1e2a36;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto minmax(280px, 1fr) minmax(310px, auto);
+  margin-left: -18px;
+  margin-right: -18px;
+  padding: 12px 18px;
+}
+
+.watchlist-design-page .bulk-move-heading {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.watchlist-design-page .bulk-move-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.watchlist-design-page .bulk-move-heading h3 {
+  color: #eef4fb;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.watchlist-design-page .bulk-move-heading span,
+.watchlist-design-page .bulk-move-controls label > span {
+  color: #7f8fa2;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.watchlist-design-page .bulk-select-all {
+  background: transparent;
+  border-color: #344255;
+  color: #c7d2df;
+  font-size: 12px;
+  min-height: 34px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.watchlist-design-page .bulk-symbol-options {
+  display: flex;
+  gap: 7px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 2px 0;
+  scrollbar-color: #344255 transparent;
+  scrollbar-width: thin;
+}
+
+.watchlist-design-page .bulk-symbol-option {
+  align-items: center;
+  background: #141d27;
+  border: 1px solid #2a3745;
+  border-radius: 6px;
+  color: #b8c4d2;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 900;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.watchlist-design-page .bulk-symbol-option:hover {
+  border-color: #4a5d70;
+  color: #eef4fb;
+}
+
+.watchlist-design-page .bulk-symbol-option.selected {
+  background: #0a342d;
+  border-color: #159174;
+  color: #75efd0;
+}
+
+.watchlist-design-page .bulk-symbol-option input {
+  accent-color: #1fc59c;
+  height: 15px;
+  min-height: 15px;
+  padding: 0;
+  width: 15px;
+}
+
+.watchlist-design-page .bulk-move-empty {
+  color: #7f8fa2;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.watchlist-design-page .bulk-move-controls {
+  align-items: end;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(170px, 1fr) auto auto;
+}
+
+.watchlist-design-page .bulk-move-controls label {
+  display: grid;
+  gap: 4px;
+}
+
+.watchlist-design-page .bulk-move-controls select {
+  background: #121b24;
+  border-color: #2a3745;
+  color: #dce5ee;
+  min-height: 38px;
+}
+
+.watchlist-design-page .bulk-move-capacity {
+  color: #7f8fa2;
+  font-size: 11px;
+  font-weight: 800;
+  padding-bottom: 12px;
+  white-space: nowrap;
+}
+
+.watchlist-design-page .bulk-move-capacity.warning {
+  color: #f2c96d;
+}
+
+.watchlist-design-page .bulk-move-controls button {
+  background: #075b4a;
+  border-color: #159174;
+  color: #f0fdfa;
+  min-height: 38px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
 .watchlist-design-page .trend-price-grid {
   align-items: start;
   display: grid;
@@ -8118,6 +8256,15 @@ select {
     grid-template-columns: 1fr;
   }
 
+  .watchlist-design-page .watchlist-bulk-move {
+    align-items: start;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .watchlist-design-page .bulk-move-controls {
+    grid-column: 1 / -1;
+  }
+
   .watchlist-design-page .daily-list-editor form {
     grid-template-columns: minmax(180px, 1fr) auto auto;
   }
@@ -8128,6 +8275,27 @@ select {
 }
 
 @media (max-width: 520px) {
+  .watchlist-design-page .watchlist-bulk-move {
+    grid-template-columns: 1fr;
+  }
+
+  .watchlist-design-page .bulk-move-heading {
+    justify-content: space-between;
+  }
+
+  .watchlist-design-page .bulk-move-controls {
+    grid-column: auto;
+    grid-template-columns: 1fr auto;
+  }
+
+  .watchlist-design-page .bulk-move-controls label {
+    grid-column: 1 / -1;
+  }
+
+  .watchlist-design-page .bulk-move-capacity {
+    padding: 0;
+  }
+
   .daily-list-editor form,
   .watchlist-design-page .daily-list-editor form {
     grid-template-columns: 1fr 1fr;
