@@ -5659,9 +5659,85 @@ select {
   gap: 14px;
 }
 
+.charts-page {
+  display: block;
+}
+
+.tradingview-chart-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+}
+
+.tradingview-chart-card {
+  background: #080d14;
+  border: 0;
+  border-radius: 0;
+  display: block;
+  min-height: 430px;
+  overflow: hidden;
+  position: relative;
+}
+
+.tradingview-chart-label {
+  align-items: center;
+  background: rgba(8, 13, 20, 0.86);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 4px;
+  color: #f8fafc;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  left: 8px;
+  min-height: 24px;
+  padding: 0 8px;
+  pointer-events: none;
+  position: absolute;
+  top: 8px;
+  z-index: 2;
+}
+
+.tradingview-widget-frame {
+  border: 0;
+  height: 430px;
+  min-height: 430px;
+  width: 100%;
+}
+
+.charts-empty-state {
+  align-items: center;
+  background: #0f1722;
+  border: 1px solid #1f2a37;
+  border-radius: 8px;
+  color: #94a3b8;
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  min-height: 180px;
+  padding: 24px;
+  text-align: center;
+}
+
+.charts-empty-state strong {
+  color: #f8fafc;
+}
+
 @media (max-width: 900px) {
   .watchlist-panel {
     grid-template-columns: 1fr;
+  }
+
+  .tradingview-chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tradingview-chart-card {
+    min-height: 360px;
+  }
+
+  .tradingview-widget-frame {
+    height: 360px;
+    min-height: 360px;
   }
 
   .daily-list-editor {
