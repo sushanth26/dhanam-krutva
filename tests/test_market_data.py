@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from app.market_data import (
     LIVE_WATCHLIST,
+    MARKET_TIMEZONE,
     aggregate_by_minutes,
     batch_history_bars_chunked,
     build_live_prices,
@@ -16,6 +17,7 @@ from app.market_data import (
     market_structure,
     nine_ema_touch_matches,
     parse_symbols,
+    premarket_range,
     previous_daily_range,
     session_mtf_touch_matches,
     symbol_chunks,
@@ -278,13 +280,27 @@ def test_market_structure_keeps_repeated_bullish_bos_during_orderly_pullback():
 
 def test_previous_daily_range_uses_latest_completed_daily_candle():
     candles = [
-        {"session_date": "2000-01-01", "high": 101.12345, "low": 95.43219},
-        {"session_date": "2000-01-02", "high": 104, "low": 97},
+        {"session_date": "2000-01-01", "high": 101.12345, "low": 95.43219, "close": 99},
+        {"session_date": "2000-01-02", "high": 104, "low": 97, "close": 101.25},
     ]
 
     previous_day = previous_daily_range(candles)
 
-    assert previous_day == {"date": "2000-01-02", "high": 104, "low": 97}
+    assert previous_day == {"date": "2000-01-02", "high": 104, "low": 97, "close": 101.25}
+
+
+def test_premarket_range_uses_today_candles_before_regular_open():
+    today = datetime.now(MARKET_TIMEZONE).date().isoformat()
+    candles = [
+        {"session_date": today, "time": f"{today}T03:55:00-04:00", "high": 103, "low": 99},
+        {"session_date": today, "time": f"{today}T04:00:00-04:00", "high": 104, "low": 98},
+        {"session_date": today, "time": f"{today}T08:15:00-04:00", "high": 106, "low": 100},
+        {"session_date": today, "time": f"{today}T09:30:00-04:00", "high": 110, "low": 96},
+    ]
+
+    levels = premarket_range(candles)
+
+    assert levels == {"date": today, "high": 106, "low": 98}
 
 
 def test_nine_ema_touch_matches_buys_bullish_stock_at_9ema_with_34_50_cloud_stop():
