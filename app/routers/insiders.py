@@ -10,7 +10,7 @@ import json
 from fastapi import APIRouter, HTTPException, Query
 
 from app.config import get_settings
-from app.insider_data import load_recent_sec_records, merge_insider_records
+from app.insider_data import load_recent_sec_records, load_sec_records_for_targets, merge_insider_records
 
 
 router = APIRouter(prefix="/api/insiders")
@@ -23,6 +23,7 @@ SEC_PAYLOAD_TTL_SECONDS = 2 * 60
 _cache: dict[str, tuple[float, Any]] = {}
 _recent_sec_cache: tuple[float, dict[str, Any]] | None = None
 _recent_sec_lock = asyncio.Lock()
+_historical_sec_lock = asyncio.Lock()
 
 
 def _parse_number(value: Any) -> float:
@@ -215,6 +216,39 @@ async def qqq_recent_insider_buys():
         raise HTTPException(status_code=502, detail=f"Unable to load recent SEC Form 4 filings: {exc}") from exc
 
 
+@router.get("/qqq/filing-details")
+async def qqq_insider_filing_details(days: int = Query(default=365, ge=30, le=365)):
+    cache_key = f"qqq:filing-details:{days}"
+    cached = _cache.get(cache_key)
+    if cached and time.time() - cached[0] < CACHE_TTL_SECONDS:
+        return cached[1]
+
+    try:
+        async with _historical_sec_lock:
+            cached = _cache.get(cache_key)
+            if cached and time.time() - cached[0] < CACHE_TTL_SECONDS:
+                return cached[1]
+            nasdaq_payload = await _load_nasdaq_history(days)
+            sec_records, companies_scanned = await load_sec_records_for_targets(
+                nasdaq_payload.get("records", []),
+                user_agent=get_settings().sec_user_agent,
+            )
+            recent_records = _recent_sec_cache[1].get("records", []) if _recent_sec_cache else []
+            records = merge_insider_records([*recent_records, *sec_records], nasdaq_payload.get("records", []))
+            payload = {
+                **nasdaq_payload,
+                "records": records,
+                "source": "SEC EDGAR Form 4 + Nasdaq insider activity",
+                "totalFilingsFound": len(records),
+                "historicalFilingsMatched": len(sec_records),
+                "historicalCompaniesScanned": companies_scanned,
+            }
+            _cache[cache_key] = (time.time(), payload)
+            return payload
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Unable to match historical SEC filings: {exc}") from exc
+
+
 @router.get("/qqq")
 async def qqq_insider_buys(days: int = Query(default=365, ge=30, le=365)):
     try:
@@ -230,6 +264,7 @@ async def qqq_insider_buys(days: int = Query(default=365, ge=30, le=365)):
             "totalFilingsFound": len(records),
             "secFilingsFound": len(sec_records),
             "secPending": not bool(_recent_sec_cache),
+            "filingDetailsPending": any(not record.get("filingDate") for record in records),
             "secError": "",
         }
     except Exception as exc:
