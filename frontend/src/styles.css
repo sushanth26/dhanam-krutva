@@ -5666,7 +5666,7 @@ select {
 .tradingview-chart-grid {
   display: grid;
   gap: 6px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
 .tradingview-chart-card {
@@ -5674,7 +5674,7 @@ select {
   border: 0;
   border-radius: 0;
   display: block;
-  min-height: 150px;
+  min-height: 270px;
   overflow: hidden;
   position: relative;
 }
@@ -5699,8 +5699,8 @@ select {
 
 .tradingview-widget-frame {
   border: 0;
-  height: 150px;
-  min-height: 150px;
+  height: 270px;
+  min-height: 270px;
   width: 100%;
 }
 
