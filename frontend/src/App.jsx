@@ -2640,7 +2640,15 @@ export default function App() {
 
 function ChartsPage({ quotesByTab, watchlists }) {
   const chartGroups = useMemo(() => chartGroupsFromWatchlists(watchlists), [watchlists]);
-  const quoteMap = useMemo(() => chartQuoteMap(watchlists, quotesByTab), [quotesByTab, watchlists]);
+  const chartSymbols = useMemo(
+    () => normalizeSymbols(chartGroups.flatMap((group) => group.symbols)),
+    [chartGroups]
+  );
+  const [chartLevelQuotes, setChartLevelQuotes] = useState({});
+  const quoteMap = useMemo(
+    () => chartQuoteMap(watchlists, quotesByTab, chartLevelQuotes),
+    [chartLevelQuotes, quotesByTab, watchlists]
+  );
   const chartItems = useMemo(
     () => chartGroups.flatMap((group) => group.symbols.map((symbol) => ({
       color: group.color,
@@ -2659,6 +2667,37 @@ function ChartsPage({ quotesByTab, watchlists }) {
       setActiveChartIndex(chartItems.length ? chartItems.length - 1 : null);
     }
   }, [activeChartIndex, chartItems.length]);
+
+  useEffect(() => {
+    if (!chartSymbols.length) {
+      setChartLevelQuotes({});
+      return undefined;
+    }
+    let cancelled = false;
+    Promise.all(chartSymbolChunks(chartSymbols, 25).map((symbols) => {
+      const query = new URLSearchParams({
+        symbols: symbols.join(","),
+        force: "true",
+      });
+      return getJson(`/api/webull/live-prices?${query.toString()}`);
+    }))
+      .then((payloads) => {
+        if (cancelled) return;
+        const quotes = payloads.flatMap((payload) => payload.ok ? (payload.quotes || []) : []);
+        if (!quotes.length) return;
+        setChartLevelQuotes(Object.fromEntries(
+          quotes
+            .map((quote) => [String(quote.symbol || "").trim().toUpperCase(), quote])
+            .filter(([symbol]) => symbol)
+        ));
+      })
+      .catch(() => {
+        if (!cancelled) setChartLevelQuotes({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chartSymbols]);
 
   function showPreviousChart() {
     setActiveChartIndex((index) => {
@@ -2734,8 +2773,12 @@ function chartGroupsFromWatchlists(watchlists) {
     .filter((group) => group.symbols.length);
 }
 
-function chartQuoteMap(watchlists, quotesByTab) {
+function chartQuoteMap(watchlists, quotesByTab, chartLevelQuotes = {}) {
   const map = new Map();
+  for (const [symbol, quote] of Object.entries(chartLevelQuotes)) {
+    const normalizedSymbol = String(symbol || "").trim().toUpperCase();
+    if (normalizedSymbol) map.set(normalizedSymbol, quote);
+  }
   for (const watchlist of watchlists) {
     for (const quote of quotesByTab[watchlist.id] || []) {
       const symbol = String(quote.symbol || "").trim().toUpperCase();
@@ -2745,6 +2788,14 @@ function chartQuoteMap(watchlists, quotesByTab) {
     }
   }
   return map;
+}
+
+function chartSymbolChunks(symbols, size) {
+  const chunks = [];
+  for (let index = 0; index < symbols.length; index += size) {
+    chunks.push(symbols.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function TradingViewChart({ color, groupName, onOpen, quote, symbol }) {
