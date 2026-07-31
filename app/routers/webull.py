@@ -7,7 +7,7 @@ from webull.data.common.category import Category
 
 from app.config import get_settings
 from app.dependencies import service
-from app.market_data import LIVE_WATCHLIST, build_live_prices
+from app.market_data import LIVE_WATCHLIST, build_chart_levels, build_live_prices
 from app.watchlists import WatchlistStore
 from app.webull_service import WebullConfigurationError
 
@@ -55,6 +55,18 @@ def webull_live_prices(
         return payload
     except WebullConfigurationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/chart-levels")
+def webull_chart_levels(
+    symbols: str = Query(default=",".join(LIVE_WATCHLIST)),
+    include_webull: bool = Query(default=False),
+):
+    try:
+        webull_service = service()
+    except WebullConfigurationError:
+        webull_service = None
+    return build_chart_levels(webull_service, symbols, include_webull=include_webull)
 
 
 @router.get("/watchlists")

@@ -2674,28 +2674,28 @@ function ChartsPage({ quotesByTab, watchlists }) {
       return undefined;
     }
     let cancelled = false;
-    Promise.all(chartSymbolChunks(chartSymbols, 25).map((symbols) => {
-      const query = new URLSearchParams({
-        symbols: symbols.join(","),
-        force: "true",
-      });
-      return getJson(`/api/webull/live-prices?${query.toString()}`);
-    }))
-      .then((payloads) => {
-        if (cancelled) return;
-        const quotes = payloads.flatMap((payload) => payload.ok ? (payload.quotes || []) : []);
-        if (!quotes.length) return;
-        setChartLevelQuotes(Object.fromEntries(
-          quotes
-            .map((quote) => [String(quote.symbol || "").trim().toUpperCase(), quote])
-            .filter(([symbol]) => symbol)
-        ));
-      })
-      .catch(() => {
-        if (!cancelled) setChartLevelQuotes({});
-      });
+    const timer = window.setTimeout(() => {
+      Promise.all(chartSymbolChunks(chartSymbols, 25).map((symbols) => {
+        const query = new URLSearchParams({ symbols: symbols.join(",") });
+        return getJson(`/api/webull/chart-levels?${query.toString()}`);
+      }))
+        .then((payloads) => {
+          if (cancelled) return;
+          const quotes = payloads.flatMap((payload) => payload.ok ? (payload.quotes || []) : []);
+          if (!quotes.length) return;
+          setChartLevelQuotes(Object.fromEntries(
+            quotes
+              .map((quote) => [String(quote.symbol || "").trim().toUpperCase(), quote])
+              .filter(([symbol]) => symbol)
+          ));
+        })
+        .catch(() => {
+          if (!cancelled) setChartLevelQuotes({});
+        });
+    }, 1200);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [chartSymbols]);
 

@@ -5,6 +5,7 @@ from app.market_data import (
     MARKET_TIMEZONE,
     aggregate_by_minutes,
     batch_history_bars_chunked,
+    build_chart_levels,
     build_live_prices,
     daily_volatility,
     ema_cloud_context,
@@ -301,6 +302,50 @@ def test_premarket_range_uses_today_candles_before_regular_open():
     levels = premarket_range(candles)
 
     assert levels == {"date": today, "high": 106, "low": 98}
+
+
+def test_build_chart_levels_falls_back_to_nasdaq_without_webull(monkeypatch):
+    monkeypatch.setattr(
+        "app.market_data.nasdaq_previous_daily_ranges",
+        lambda symbols: {symbol: {"date": "2026-07-30", "high": 104, "low": 96, "close": 101} for symbol in symbols},
+    )
+
+    payload = build_chart_levels(None, "AAOI,AAPL")
+
+    assert payload["ok"] is True
+    assert payload["source"] == "nasdaq"
+    assert payload["quotes"] == [
+        {
+            "symbol": "AAOI",
+            "price": None,
+            "scanner_price": None,
+            "previous_day": {"date": "2026-07-30", "high": 104, "low": 96, "close": 101},
+            "premarket": None,
+        },
+        {
+            "symbol": "AAPL",
+            "price": None,
+            "scanner_price": None,
+            "previous_day": {"date": "2026-07-30", "high": 104, "low": 96, "close": 101},
+            "premarket": None,
+        },
+    ]
+
+
+def test_build_chart_levels_does_not_use_webull_by_default(monkeypatch):
+    class ExplodingWebull:
+        def market_snapshot(self, *args, **kwargs):
+            raise AssertionError("Webull should not be called for default chart levels")
+
+    monkeypatch.setattr(
+        "app.market_data.nasdaq_previous_daily_ranges",
+        lambda symbols: {symbol: {"date": "2026-07-30", "high": 104, "low": 96, "close": 101} for symbol in symbols},
+    )
+
+    payload = build_chart_levels(ExplodingWebull(), "AAOI")
+
+    assert payload["source"] == "nasdaq"
+    assert payload["quotes"][0]["previous_day"]["high"] == 104
 
 
 def test_nine_ema_touch_matches_buys_bullish_stock_at_9ema_with_34_50_cloud_stop():

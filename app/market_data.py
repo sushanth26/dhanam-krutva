@@ -1,5 +1,11 @@
-from datetime import datetime, time, timezone
+import json
+import ssl
+import time as monotonic_time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, time, timezone
 from typing import Any
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
@@ -17,6 +23,9 @@ LIVE_WATCHLIST = [
 ]
 INTRADAY_EMA_SESSIONS = ["PRE", "RTH", "ATH"]
 WEBULL_BATCH_BAR_LIMIT = 20
+NASDAQ_HISTORICAL_URL = "https://api.nasdaq.com/api/quote/{symbol}/historical"
+NASDAQ_LEVEL_CACHE_TTL_SECONDS = 15 * 60
+NASDAQ_LEVEL_FETCH_WORKERS = 6
 MARKET_TIMEZONE = ZoneInfo("America/New_York")
 REGULAR_MARKET_OPEN = time(9, 30)
 PREMARKET_OPEN = time(4, 0)
@@ -54,6 +63,7 @@ SYMBOL_SECTORS = {
     "NBIS": "Cloud AI",
     "WULF": "Crypto Mining",
 }
+_nasdaq_level_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
 
 
 def build_live_prices(
@@ -174,6 +184,51 @@ def build_live_prices(
     }
 
 
+def build_chart_levels(webull: WebullService | None, symbols: str, include_webull: bool = False) -> dict[str, Any]:
+    selected_symbols = parse_symbols(symbols)
+    webull_quotes: dict[str, dict[str, Any]] = {}
+    errors = []
+    if include_webull and webull is not None:
+        try:
+            payload = build_live_prices(webull, symbols)
+            webull_quotes = {
+                str(quote.get("symbol") or "").upper(): quote
+                for quote in payload.get("quotes", [])
+                if quote.get("symbol")
+            }
+            errors.extend(payload.get("errors") or [])
+        except Exception as exc:  # noqa: BLE001 - fallback must survive missing Webull setup
+            errors.append({"source": "webull", "error": str(exc)})
+
+    fallback_ranges = nasdaq_previous_daily_ranges(selected_symbols)
+    quotes = []
+    for symbol in selected_symbols:
+        webull_quote = webull_quotes.get(symbol) or {}
+        previous_day = webull_quote.get("previous_day") or fallback_ranges.get(symbol)
+        quotes.append({
+            "symbol": symbol,
+            "price": webull_quote.get("price"),
+            "scanner_price": webull_quote.get("scanner_price"),
+            "previous_day": previous_day,
+            "premarket": webull_quote.get("premarket"),
+        })
+
+    return {
+        "ok": True,
+        "source": "webull,nasdaq" if webull_quotes else "nasdaq",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "symbols": selected_symbols,
+        "quotes": quotes,
+        "errors": errors,
+    }
+
+
+def nasdaq_previous_daily_ranges(symbols: list[str]) -> dict[str, dict[str, Any] | None]:
+    with ThreadPoolExecutor(max_workers=min(NASDAQ_LEVEL_FETCH_WORKERS, max(len(symbols), 1))) as executor:
+        values = executor.map(nasdaq_previous_daily_range, symbols)
+    return dict(zip(symbols, values, strict=False))
+
+
 def previous_daily_range(candles: list[dict[str, Any]]) -> dict[str, Any] | None:
     today = datetime.now(MARKET_TIMEZONE).date().isoformat()
     completed = [
@@ -195,6 +250,72 @@ def previous_daily_range(candles: list[dict[str, Any]]) -> dict[str, Any] | None
         "low": round(candle["low"], 4),
         "close": round(candle["close"], 4),
     }
+
+
+def nasdaq_previous_daily_range(symbol: str) -> dict[str, Any] | None:
+    symbol = symbol.upper()
+    cached = _nasdaq_level_cache.get(symbol)
+    if cached and monotonic_time.time() - cached[0] < NASDAQ_LEVEL_CACHE_TTL_SECONDS:
+        return cached[1]
+    today = datetime.now(MARKET_TIMEZONE).date()
+    from_date = (today - timedelta(days=14)).isoformat()
+    to_date = today.isoformat()
+    url = (
+        NASDAQ_HISTORICAL_URL.format(symbol=quote(symbol.upper()))
+        + f"?assetclass=stocks&fromdate={from_date}&todate={to_date}&limit=10"
+    )
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json",
+            "Accept-Encoding": "identity",
+        },
+    )
+    context = ssl._create_unverified_context()
+    try:
+        with urlopen(request, timeout=10, context=context) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        _nasdaq_level_cache[symbol] = (monotonic_time.time(), None)
+        return None
+    rows = (((payload.get("data") or {}).get("tradesTable") or {}).get("rows") or [])
+    for row in rows:
+        parsed_date = parse_nasdaq_date(row.get("date"))
+        if not parsed_date or parsed_date >= today:
+            continue
+        high = parse_money(row.get("high"))
+        low = parse_money(row.get("low"))
+        close = parse_money(row.get("close"))
+        if high is None or low is None or close is None:
+            continue
+        levels = {
+            "date": parsed_date.isoformat(),
+            "high": round(high, 4),
+            "low": round(low, 4),
+            "close": round(close, 4),
+        }
+        _nasdaq_level_cache[symbol] = (monotonic_time.time(), levels)
+        return levels
+    _nasdaq_level_cache[symbol] = (monotonic_time.time(), None)
+    return None
+
+
+def parse_nasdaq_date(value: Any):
+    try:
+        return datetime.strptime(str(value), "%m/%d/%Y").date()
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_money(value: Any) -> float | None:
+    text = str(value or "").replace("$", "").replace(",", "").strip()
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
 
 
 def premarket_range(candles: list[dict[str, Any]]) -> dict[str, Any] | None:
