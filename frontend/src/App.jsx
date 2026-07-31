@@ -34,6 +34,10 @@ const OG_WATCHLIST_ID = "og";
 const SPY_SYMBOL = "SPY";
 const TRADINGVIEW_WIDGET_URL = "https://www.tradingview-widget.com/embed-widget/advanced-chart/";
 const CHART_GROUP_COLORS = ["#f59e0b", "#38bdf8", "#22c55e", "#f43f5e", "#a78bfa", "#14b8a6"];
+const CHART_REFERENCE_LINE_STUDIES = [
+  "PivotPointsStandard@tv-basicstudies",
+  "PivotPointsHighLow@tv-basicstudies",
+];
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
   "ASTS", "AMD", "ARM", "AVGO", "DELL", "INTC", "APP", "LLY",
@@ -2816,6 +2820,7 @@ function tradingViewEmbedUrl(symbol) {
     hotlist: false,
     hide_volume: true,
     save_image: false,
+    studies: CHART_REFERENCE_LINE_STUDIES,
     extended_hours: true,
     show_extended_hours: true,
     withdateranges: false,
