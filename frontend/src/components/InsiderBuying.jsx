@@ -217,7 +217,9 @@ export function InsiderBuyingPage({ onDataLoaded }) {
   const [status, setStatus] = useState({
     loading: true,
     pricesLoading: false,
+    filingsLoading: false,
     error: "",
+    filingError: "",
     priceError: "",
     meta: null,
   });
@@ -227,7 +229,9 @@ export function InsiderBuyingPage({ onDataLoaded }) {
       ...current,
       loading: true,
       pricesLoading: false,
+      filingsLoading: false,
       error: "",
+      filingError: "",
       priceError: "",
     }));
     try {
@@ -239,17 +243,20 @@ export function InsiderBuyingPage({ onDataLoaded }) {
       setStatus({
         loading: false,
         pricesLoading: nextRecords.length > 0,
+        filingsLoading: nextRecords.some((record) => !record.filingDate),
         error: "",
+        filingError: "",
         priceError: "",
         meta: payload,
       });
       onDataLoaded?.(payload);
 
       if (!nextRecords.length) return;
+      loadFilingDetails(nextDays);
 
       try {
         const currentPrices = await loadCurrentPrices(nextRecords);
-        setRecords(nextRecords.map((record) => ({
+        setRecords((current) => current.map((record) => ({
           ...record,
           currentPrice: currentPrices[String(record.ticker || "").toUpperCase()] || null,
         })));
@@ -269,10 +276,42 @@ export function InsiderBuyingPage({ onDataLoaded }) {
       setStatus({
         loading: false,
         pricesLoading: false,
+        filingsLoading: false,
         error: error.message || "Unable to load insider buys.",
+        filingError: "",
         priceError: "",
         meta: null,
       });
+    }
+  }
+
+  async function loadFilingDetails(nextDays) {
+    try {
+      const payload = await getJson(`/api/insiders/qqq/filing-details?days=${nextDays}`);
+      const detailedRecords = Array.isArray(payload.records) ? payload.records : [];
+      setRecords((current) => {
+        const prices = Object.fromEntries(
+          current
+            .filter((record) => Number(record.currentPrice) > 0)
+            .map((record) => [String(record.ticker || "").toUpperCase(), record.currentPrice]),
+        );
+        return detailedRecords.map((record) => ({
+          ...record,
+          currentPrice: prices[String(record.ticker || "").toUpperCase()] || null,
+        }));
+      });
+      setStatus((current) => ({
+        ...current,
+        filingsLoading: false,
+        filingError: "",
+        meta: { ...current.meta, ...payload },
+      }));
+    } catch (error) {
+      setStatus((current) => ({
+        ...current,
+        filingsLoading: false,
+        filingError: error.message || "Some SEC filing dates could not be matched.",
+      }));
     }
   }
 
@@ -371,8 +410,8 @@ export function InsiderBuyingPage({ onDataLoaded }) {
               : "Officer and director open-market purchases from SEC Form 4 filings, with Nasdaq history."}
           </p>
         </div>
-        <button type="button" className="secondary-button" disabled={status.loading || status.pricesLoading} onClick={() => loadData()}>
-          {status.loading ? "Checking" : status.pricesLoading ? "Pricing" : "Refresh"}
+        <button type="button" className="secondary-button" disabled={status.loading || status.pricesLoading || status.filingsLoading} onClick={() => loadData()}>
+          {status.loading ? "Checking" : status.pricesLoading ? "Pricing" : status.filingsLoading ? "Matching filings" : "Refresh"}
         </button>
       </div>
 
@@ -412,6 +451,7 @@ export function InsiderBuyingPage({ onDataLoaded }) {
 
       {status.error ? <div className="alert app-alert error">{status.error}</div> : null}
       {status.meta?.secError ? <div className="alert app-alert warning">SEC live filings are temporarily unavailable. Nasdaq history is still shown.</div> : null}
+      {status.filingError ? <div className="alert app-alert warning">{status.filingError}</div> : null}
       {status.priceError ? <div className="alert app-alert warning">{status.priceError}</div> : null}
 
       <div className="insider-metrics">
@@ -483,7 +523,9 @@ export function InsiderBuyingPage({ onDataLoaded }) {
                       <td data-label="Tag"><span className={`insider-tag ${record.isBoardBuy ? "board" : "exec"}`}>{importanceLabel(record)}</span></td>
                       <td data-label="Trade date">{formatDate(record.transactionDate || record.filingDate)}</td>
                       <td data-label="Filed">
-                        <a className="insider-source-link" href={record.sourceUrl} target="_blank" rel="noreferrer">{formatFiledAt(record)}</a>
+                        <a className="insider-source-link" href={record.sourceUrl} target="_blank" rel="noreferrer">
+                          {status.filingsLoading && !record.filingDate ? "Matching..." : formatFiledAt(record)}
+                        </a>
                         <span>{record.source}</span>
                       </td>
                     </tr>

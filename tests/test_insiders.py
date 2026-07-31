@@ -84,6 +84,33 @@ def test_form4_parser_returns_only_open_market_purchase_with_both_dates():
     assert records[0]["isBoardBuy"] is True
 
 
+def test_historical_parser_can_match_inconsistent_code_p_disposition():
+    inconsistent_xml = FORM4_XML.replace(
+        b"<transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>",
+        b"<transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>",
+        1,
+    )
+
+    strict_records = parse_form4_xml(
+        inconsistent_xml,
+        holding={"ticker": "EXM", "companyName": "Example", "marketCap": 1},
+        filing=filing(),
+        source_url="https://sec.example/ownership.xml",
+    )
+    historical_records = parse_form4_xml(
+        inconsistent_xml,
+        holding={"ticker": "EXM", "companyName": "Example", "marketCap": 1},
+        filing=filing(),
+        source_url="https://sec.example/ownership.xml",
+        require_acquired=False,
+    )
+
+    assert strict_records == []
+    assert len(historical_records) == 1
+    assert historical_records[0]["transactionCode"] == "P"
+    assert historical_records[0]["isAcquisition"] is False
+
+
 def test_recent_form4_filings_ignores_amendments_and_old_filings():
     payload = {
         "filings": {
@@ -93,6 +120,7 @@ def test_recent_form4_filings_ignores_amendments_and_old_filings():
                 "acceptanceDateTime": ["20260730163045", "20260730170000", "20260601100000"],
                 "accessionNumber": ["one", "amended", "old"],
                 "primaryDocument": ["one.xml", "amended.xml", "old.xml"],
+                "reportDate": ["2026-07-29", "2026-07-29", "2026-06-01"],
             }
         }
     }
@@ -103,6 +131,7 @@ def test_recent_form4_filings_ignores_amendments_and_old_filings():
             "acceptanceDateTime": "20260730163045",
             "filingDate": "2026-07-30",
             "primaryDocument": "one.xml",
+            "reportDate": "2026-07-29",
         }
     ]
 
@@ -120,11 +149,14 @@ def test_sec_record_replaces_matching_nasdaq_fallback():
         filing=filing(),
         source_url="https://sec.example/ownership.xml",
     )[0]
+    sec_record = {**sec_record, "shares": 124.64, "price": 42.503, "value": 124.64 * 42.503}
     nasdaq_record = {
         **sec_record,
         "recordId": "",
         "accessionNumber": "",
         "filedAt": "",
+        "shares": 125,
+        "price": 42.50,
         "source": "Nasdaq insider activity",
     }
 
@@ -132,6 +164,41 @@ def test_sec_record_replaces_matching_nasdaq_fallback():
 
     assert len(merged) == 1
     assert merged[0]["source"] == "SEC EDGAR Form 4"
+
+
+def test_sec_transaction_group_replaces_aggregated_nasdaq_row():
+    first = parse_form4_xml(
+        FORM4_XML,
+        holding={"ticker": "EXM", "companyName": "Example", "marketCap": 1},
+        filing=filing(),
+        source_url="https://sec.example/ownership.xml",
+    )[0]
+    first = {**first, "shares": 100, "price": 92.71, "value": 9271}
+    second = {
+        **first,
+        "recordId": f"{first['accessionNumber']}:1",
+        "shares": 11,
+        "price": 66.10,
+        "value": 727.1,
+    }
+    nasdaq_record = {
+        **first,
+        "recordId": "",
+        "accessionNumber": "",
+        "filedAt": "",
+        "filingDate": "",
+        "insider": "DOE JANE",
+        "shares": 111,
+        "price": 66.10,
+        "value": 7337.1,
+        "source": "Nasdaq insider activity",
+    }
+
+    merged = merge_insider_records([first, second], [nasdaq_record])
+
+    assert len(merged) == 2
+    assert {record["shares"] for record in merged} == {100, 11}
+    assert all(record["source"] == "SEC EDGAR Form 4" for record in merged)
 
 
 def test_insider_monitor_baselines_then_alerts_for_new_filing(tmp_path, monkeypatch):
