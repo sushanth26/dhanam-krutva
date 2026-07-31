@@ -5675,9 +5675,9 @@ select {
 
 .watchlist-chart-heading {
   align-items: center;
-  background: #132033;
-  border: 1px solid #315170;
-  border-left: 4px solid #38bdf8;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-left: 4px solid #f59e0b;
   border-radius: 4px;
   display: flex;
   gap: 8px;
@@ -5687,7 +5687,7 @@ select {
 }
 
 .watchlist-chart-heading h2 {
-  color: #ffffff;
+  color: #0f172a;
   font-size: 15px;
   font-weight: 900;
   line-height: 1;
@@ -5695,10 +5695,10 @@ select {
 
 .watchlist-chart-heading span {
   align-items: center;
-  background: #38bdf8;
-  border: 1px solid #7dd3fc;
+  background: #f59e0b;
+  border: 1px solid #d97706;
   border-radius: 999px;
-  color: #04111d;
+  color: #111827;
   display: inline-flex;
   font-size: 11px;
   font-weight: 900;
