@@ -5665,8 +5665,8 @@ select {
 
 .tradingview-chart-grid {
   display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
 .tradingview-chart-card {
@@ -5674,7 +5674,7 @@ select {
   border: 0;
   border-radius: 0;
   display: block;
-  min-height: 430px;
+  min-height: 270px;
   overflow: hidden;
   position: relative;
 }
@@ -5686,104 +5686,22 @@ select {
   border-radius: 4px;
   color: #f8fafc;
   display: inline-flex;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 900;
-  left: 8px;
-  min-height: 24px;
-  padding: 0 8px;
+  left: 5px;
+  min-height: 18px;
+  padding: 0 6px;
   pointer-events: none;
   position: absolute;
-  top: 8px;
+  top: 5px;
   z-index: 2;
 }
 
-.ema-cloud-chart {
-  display: block;
-  height: 430px;
+.tradingview-widget-frame {
+  border: 0;
+  height: 270px;
+  min-height: 270px;
   width: 100%;
-}
-
-.chart-bg {
-  fill: #080d14;
-}
-
-.chart-grid-line {
-  stroke: rgba(148, 163, 184, 0.14);
-  stroke-dasharray: 1 5;
-}
-
-.cloud-fill.fast {
-  fill: rgba(34, 211, 238, 0.18);
-}
-
-.cloud-fill.slow {
-  fill: rgba(245, 158, 11, 0.18);
-}
-
-.ema-line {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.6;
-}
-
-.ema-line.ema5 {
-  stroke: #22d3ee;
-}
-
-.ema-line.ema12 {
-  stroke: #22c55e;
-}
-
-.ema-line.ema34 {
-  stroke: #f59e0b;
-}
-
-.ema-line.ema50 {
-  stroke: #f43f5e;
-}
-
-.candle line {
-  stroke-width: 1;
-}
-
-.candle rect {
-  stroke-width: 0;
-}
-
-.candle.up line,
-.candle.up rect {
-  fill: #00d6b9;
-  stroke: #00d6b9;
-}
-
-.candle.down line,
-.candle.down rect {
-  fill: #ff3152;
-  stroke: #ff3152;
-}
-
-.chart-price-label {
-  dominant-baseline: middle;
-  fill: #f8fafc;
-  font-size: 12px;
-  font-weight: 800;
-  text-anchor: start;
-}
-
-.chart-loading,
-.chart-error {
-  align-items: center;
-  color: #94a3b8;
-  display: grid;
-  min-height: 430px;
-  place-items: center;
-}
-
-.chart-error {
-  background: rgba(248, 113, 113, 0.08);
-  color: #fecaca;
-  min-height: 44px;
 }
 
 .charts-empty-state {
@@ -5814,13 +5732,12 @@ select {
   }
 
   .tradingview-chart-card {
-    min-height: 360px;
+    min-height: 260px;
   }
 
-  .ema-cloud-chart,
-  .chart-loading {
-    height: 360px;
-    min-height: 360px;
+  .tradingview-widget-frame {
+    height: 260px;
+    min-height: 260px;
   }
 
   .daily-list-editor {

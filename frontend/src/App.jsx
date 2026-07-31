@@ -32,7 +32,7 @@ const MAX_WATCHLIST_SYMBOLS = 25;
 const ALL_WATCHLISTS_TAB_ID = "__all-watchlists";
 const OG_WATCHLIST_ID = "og";
 const SPY_SYMBOL = "SPY";
-const CHART_SYMBOL_BATCH_SIZE = 25;
+const TRADINGVIEW_WIDGET_URL = "https://www.tradingview-widget.com/embed-widget/advanced-chart/";
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
   "ASTS", "AMD", "ARM", "AVGO", "DELL", "INTC", "APP", "LLY",
@@ -2639,54 +2639,13 @@ export default function App() {
 
 function ChartsPage({ watchlists }) {
   const symbols = useMemo(() => uniqueSortedSymbolsFromWatchlists(watchlists), [watchlists]);
-  const [charts, setCharts] = useState({});
-  const [status, setStatus] = useState({ loading: false, error: "" });
-
-  useEffect(() => {
-    if (!symbols.length) {
-      setCharts({});
-      setStatus({ loading: false, error: "" });
-      return undefined;
-    }
-    let cancelled = false;
-    setStatus({ loading: true, error: "" });
-    Promise.all(
-      chunkArray(symbols, CHART_SYMBOL_BATCH_SIZE).map((chunk) => {
-        const query = new URLSearchParams({
-          symbols: chunk.join(","),
-          timeframe: "5",
-          count: "240",
-        });
-        return getJson(`/api/webull/chart-bars?${query.toString()}`);
-      })
-    )
-      .then((payloads) => {
-        if (cancelled) return;
-        setCharts(
-          payloads.reduce((merged, payload) => ({ ...merged, ...(payload.charts || {}) }), {})
-        );
-        setStatus({ loading: false, error: "" });
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setStatus({ loading: false, error: error.message || "Could not load charts." });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [symbols]);
 
   return (
-    <section className="charts-page" aria-label="Watchlist charts">
+    <section className="charts-page" aria-label="Watchlist TradingView charts">
       {symbols.length ? (
         <div className="tradingview-chart-grid">
           {symbols.map((symbol) => (
-            <CloudChart
-              key={symbol}
-              bars={charts[symbol]?.bars || []}
-              loading={status.loading && !charts[symbol]}
-              symbol={symbol}
-            />
+            <TradingViewChart key={symbol} symbol={symbol} />
           ))}
         </div>
       ) : (
@@ -2695,128 +2654,55 @@ function ChartsPage({ watchlists }) {
           <span>Add tickers to a watchlist, then they will appear here.</span>
         </div>
       )}
-      {status.error ? <div className="chart-error">{status.error}</div> : null}
     </section>
   );
 }
 
-function CloudChart({ bars, loading, symbol }) {
-  const chart = useMemo(() => buildCloudChart(bars), [bars]);
+function TradingViewChart({ symbol }) {
+  const chartUrl = tradingViewEmbedUrl(symbol);
+
   return (
-    <article className="tradingview-chart-card" aria-label={`${symbol} chart`}>
+    <article className="tradingview-chart-card" aria-label={`${symbol} TradingView chart`}>
       <div className="tradingview-chart-label">{symbol}</div>
-      {chart ? (
-        <svg className="ema-cloud-chart" viewBox="0 0 640 380" role="img" aria-label={`${symbol} EMA cloud chart`}>
-          <rect className="chart-bg" x="0" y="0" width="640" height="380" />
-          {chart.grid.map((line) => (
-            <line key={line.key} className={line.className} x1={line.x1} x2={line.x2} y1={line.y1} y2={line.y2} />
-          ))}
-          {chart.fastCloud ? <path className="cloud-fill fast" d={chart.fastCloud} /> : null}
-          {chart.slowCloud ? <path className="cloud-fill slow" d={chart.slowCloud} /> : null}
-          {chart.candles.map((candle) => (
-            <g key={candle.key} className={`candle ${candle.up ? "up" : "down"}`}>
-              <line x1={candle.x} x2={candle.x} y1={candle.high} y2={candle.low} />
-              <rect x={candle.bodyX} y={candle.bodyY} width={candle.bodyWidth} height={candle.bodyHeight} rx="1" />
-            </g>
-          ))}
-          {chart.paths.map((path) => (
-            <path key={path.key} className={`ema-line ${path.key}`} d={path.d} />
-          ))}
-          {chart.priceLabels.map((label) => (
-            <text key={label.key} className="chart-price-label" x="616" y={label.y}>{label.text}</text>
-          ))}
-        </svg>
-      ) : (
-        <div className="chart-loading">{loading ? "Loading" : "No data"}</div>
-      )}
+      <iframe
+        className="tradingview-widget-frame"
+        title={`${symbol} chart`}
+        src={chartUrl}
+        allowFullScreen
+      />
     </article>
   );
 }
 
-function buildCloudChart(rawBars) {
-  const bars = rawBars.slice(-140).filter((bar) => Number.isFinite(bar?.close));
-  if (bars.length < 2) return null;
-  const width = 640;
-  const height = 380;
-  const padding = { top: 20, right: 52, bottom: 18, left: 8 };
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
-  const values = bars.flatMap((bar) => [
-    bar.high,
-    bar.low,
-    bar.ema5,
-    bar.ema12,
-    bar.ema34,
-    bar.ema50,
-  ]).filter(Number.isFinite);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const y = (value) => padding.top + ((max - value) / range) * plotHeight;
-  const x = (index) => padding.left + (index / (bars.length - 1)) * plotWidth;
-  const spacing = plotWidth / Math.max(1, bars.length - 1);
-  const bodyWidth = Math.max(2, Math.min(5, spacing * 0.62));
-  const candles = bars.map((bar, index) => {
-    const candleX = x(index);
-    const openY = y(bar.open);
-    const closeY = y(bar.close);
-    return {
-      key: `${bar.time || index}`,
-      x: candleX,
-      high: y(bar.high),
-      low: y(bar.low),
-      bodyX: candleX - bodyWidth / 2,
-      bodyY: Math.min(openY, closeY),
-      bodyWidth,
-      bodyHeight: Math.max(1.5, Math.abs(openY - closeY)),
-      up: bar.close >= bar.open,
-    };
-  });
-  const pointsFor = (key) => bars
-    .map((bar, index) => Number.isFinite(bar[key]) ? [x(index), y(bar[key])] : null)
-    .filter(Boolean);
-  const pathFor = (points) => points.map(([px, py], index) => `${index ? "L" : "M"}${px.toFixed(2)} ${py.toFixed(2)}`).join(" ");
-  const cloudFor = (topKey, bottomKey) => {
-    const top = pointsFor(topKey);
-    const bottom = pointsFor(bottomKey);
-    if (top.length < 2 || bottom.length < 2) return "";
-    return `${pathFor(top)} ${bottom.reverse().map(([px, py]) => `L${px.toFixed(2)} ${py.toFixed(2)}`).join(" ")} Z`;
+function tradingViewEmbedUrl(symbol) {
+  const config = {
+    autosize: true,
+    symbol,
+    interval: "5",
+    range: "1D",
+    timezone: "America/Chicago",
+    theme: "dark",
+    style: "1",
+    locale: "en",
+    backgroundColor: "#080d14",
+    gridColor: "rgba(148, 163, 184, 0.12)",
+    hide_top_toolbar: true,
+    hide_side_toolbar: true,
+    hide_legend: true,
+    allow_symbol_change: true,
+    calendar: false,
+    details: false,
+    hotlist: false,
+    hide_volume: true,
+    save_image: false,
+    extended_hours: true,
+    show_extended_hours: true,
+    withdateranges: false,
+    support_host: "https://www.tradingview.com",
+    width: "100%",
+    height: "100%",
   };
-  const grid = [0.2, 0.4, 0.6, 0.8].map((ratio, index) => ({
-    key: `h-${index}`,
-    className: "chart-grid-line",
-    x1: padding.left,
-    x2: width - padding.right,
-    y1: padding.top + plotHeight * ratio,
-    y2: padding.top + plotHeight * ratio,
-  }));
-  const verticalGrid = [0.25, 0.5, 0.75].map((ratio, index) => ({
-    key: `v-${index}`,
-    className: "chart-grid-line",
-    x1: padding.left + plotWidth * ratio,
-    x2: padding.left + plotWidth * ratio,
-    y1: padding.top,
-    y2: height - padding.bottom,
-  }));
-  const latest = bars[bars.length - 1];
-  return {
-    candles,
-    fastCloud: cloudFor("ema5", "ema12"),
-    slowCloud: cloudFor("ema34", "ema50"),
-    grid: [...grid, ...verticalGrid],
-    paths: ["ema5", "ema12", "ema34", "ema50"].map((key) => ({ key, d: pathFor(pointsFor(key)) })),
-    priceLabels: [
-      { key: "last", y: y(latest.close), text: latest.close.toFixed(2) },
-    ],
-  };
-}
-
-function chunkArray(items, size) {
-  const chunks = [];
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
-  }
-  return chunks;
+  return `${TRADINGVIEW_WIDGET_URL}?locale=en#${encodeURIComponent(JSON.stringify(config))}`;
 }
 
 function MtfPage({
