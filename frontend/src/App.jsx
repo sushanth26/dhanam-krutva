@@ -11,6 +11,7 @@ import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, flattenAccounts, form
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
 const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 60 * 1000;
+const INSIDER_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
 const MAX_NOTIFICATIONS = 20;
 const MAX_ALERT_LOG = 500;
 const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
@@ -23,6 +24,7 @@ const AUTO_TRADE_KEY = "dhanam-auto-trade";
 const AUTO_TRADE_EXECUTIONS_KEY = "dhanam-auto-trade-executions";
 const BOS_STATE_KEY = "dhanam-bos-state";
 const INSIDER_SEEN_KEY = "dhanam-insider-seen-records";
+const INSIDER_BASELINE_SENTINEL = "__INSIDER_BASELINE__";
 const MAX_AUTO_TRADE_EXECUTIONS = 500;
 const MAX_INSIDER_SEEN_RECORDS = 1000;
 const WATCHLIST_REFRESH_CONCURRENCY = 1;
@@ -590,13 +592,14 @@ function saveInsiderSeenRecords(keys) {
 }
 
 function insiderRecordKey(record) {
+  if (record?.recordId) return String(record.recordId).trim().toUpperCase();
   return [
+    record?.accessionNumber,
     record?.ticker,
-    record?.filingDate,
+    record?.transactionDate || record?.filingDate,
     record?.insider,
-    record?.role,
     record?.shares,
-    Math.round(Number(record?.value || 0)),
+    Number(record?.price || 0).toFixed(4),
   ].map((value) => String(value || "").trim().toUpperCase()).join(":");
 }
 
@@ -611,9 +614,10 @@ function insiderNotificationDetails(records) {
     ? `New insider buy: ${topRecord.ticker || "QQQ"}`
     : `${count} new insider buys`;
   const body = count === 1
-    ? `${topRecord.insider || "An insider"} bought ${topRecord.ticker || "a Nasdaq-100 stock"} filed ${topRecord.filingDate || "today"}.`
-    : `${symbolText}${extraText} have new Nasdaq insider buy filings.`;
+    ? `${topRecord.insider || "An insider"} bought ${topRecord.ticker || "a Nasdaq-100 stock"} on ${topRecord.transactionDate || "the reported date"}; filed ${topRecord.filedAt || topRecord.filingDate || "now"}.`
+    : `${symbolText}${extraText} have new SEC open-market purchase filings.`;
   return {
+    kind: "insider",
     title,
     body,
     badgeCount: count,
@@ -1128,6 +1132,7 @@ export default function App() {
     trades: false,
   });
   const passiveMarketTimer = useRef(null);
+  const insiderRefreshTimer = useRef(null);
   const initialMarketLoadStarted = useRef(false);
   const lastMtfSignature = useRef(initialTabState(loadWatchlists(), null));
   const lastMtfRows = useRef(initialTabState(loadWatchlists(), {}));
@@ -1698,13 +1703,21 @@ export default function App() {
   }
 
   function handleInsiderData(payload) {
-    const records = Array.isArray(payload?.records) ? payload.records : [];
+    if (payload?.secPending) return;
+    const records = Array.isArray(payload?.alertRecords)
+      ? payload.alertRecords
+      : Array.isArray(payload?.records)
+        ? payload.records
+        : [];
     const nextKeys = records.map(insiderRecordKey).filter(Boolean);
-    if (!nextKeys.length) return;
 
     const previousKeys = new Set(insiderSeenRecordsRef.current);
     const unseenRecords = records.filter((record) => !previousKeys.has(insiderRecordKey(record)));
-    insiderSeenRecordsRef.current = saveInsiderSeenRecords([...nextKeys, ...insiderSeenRecordsRef.current]);
+    insiderSeenRecordsRef.current = saveInsiderSeenRecords([
+      INSIDER_BASELINE_SENTINEL,
+      ...nextKeys,
+      ...insiderSeenRecordsRef.current,
+    ]);
     if (!previousKeys.size || !unseenRecords.length) return;
 
     const notification = insiderNotificationDetails(unseenRecords);
@@ -2280,7 +2293,7 @@ export default function App() {
         addNotification({
           title: "Push notifications enabled",
           message: nextState.webPushConfigured && nextState.subscribed
-            ? "Railway can send MTF push alerts."
+            ? "Railway can send MTF and insider push alerts."
             : "Device notifications are enabled. Add VAPID keys for closed-app push alerts.",
           kind: "system",
         });
@@ -2360,6 +2373,19 @@ export default function App() {
         if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false, force: true });
       }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
     }
+    if (!insiderRefreshTimer.current) {
+      checkRecentInsiderFilings();
+      insiderRefreshTimer.current = setInterval(checkRecentInsiderFilings, INSIDER_REFRESH_INTERVAL_MS);
+    }
+  }
+
+  async function checkRecentInsiderFilings() {
+    try {
+      const payload = await getJson("/api/insiders/qqq/recent");
+      handleInsiderData(payload);
+    } catch {
+      // The next polling cycle retries transient SEC failures.
+    }
   }
 
   async function confirmAccountsAndStart() {
@@ -2379,6 +2405,7 @@ export default function App() {
     confirmAccountsAndStart();
     return () => {
       if (passiveMarketTimer.current) clearInterval(passiveMarketTimer.current);
+      if (insiderRefreshTimer.current) clearInterval(insiderRefreshTimer.current);
     };
   }, []);
 
@@ -2392,21 +2419,22 @@ export default function App() {
     if (!("serviceWorker" in navigator)) return undefined;
     function handleServiceWorkerMessage(event) {
       if (event.data?.type !== "MTF_PUSH_UPDATE") return;
-      const targetSymbol = event.data.payload?.targetSymbol || event.data.payload?.target_symbol;
-      if (targetSymbol) focusMtfSymbol(targetSymbol);
+      const payload = event.data.payload || {};
+      const targetSymbol = payload.targetSymbol || payload.target_symbol;
+      if (targetSymbol && payload.kind !== "insider") focusMtfSymbol(targetSymbol);
       addNotification({
-        title: event.data.payload?.title || "Push alert received",
-        message: event.data.payload?.body || "MTF push update received.",
+        title: payload.title || "Push alert received",
+        message: payload.body || "Push update received.",
         kind: "push",
       });
       appendAlertLog([
         notificationHistoryEntry({
-          title: event.data.payload?.title || "Push alert received",
-          message: event.data.payload?.body || "MTF push update received.",
+          title: payload.title || "Push alert received",
+          message: payload.body || "Push update received.",
           kind: "push",
           symbol: targetSymbol,
           source: "service-worker",
-          payload: event.data.payload || null,
+          payload,
         }),
       ]);
       if (accountsConfirmedRef.current) {

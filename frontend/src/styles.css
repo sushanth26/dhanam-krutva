@@ -8454,7 +8454,7 @@ select {
 
 .insider-table {
   border-collapse: collapse;
-  min-width: 1040px;
+  min-width: 1180px;
   width: 100%;
 }
 
@@ -8603,6 +8603,63 @@ select {
   color: #fcd34d !important;
 }
 
+.insider-price-cell {
+  color: #f8fafc !important;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.insider-source-link {
+  color: #bfdbfe;
+  display: inline-block;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.insider-source-link:hover {
+  color: #dbeafe;
+  text-decoration: underline;
+}
+
+.insider-performance {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  display: inline-flex !important;
+  font-size: 11px !important;
+  font-weight: 900;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.insider-performance small {
+  color: inherit;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.insider-performance.green {
+  background: rgba(34, 197, 94, 0.16);
+  border-color: rgba(74, 222, 128, 0.4);
+  color: #86efac !important;
+}
+
+.insider-performance.red {
+  background: rgba(244, 63, 94, 0.16);
+  border-color: rgba(251, 113, 133, 0.4);
+  color: #fda4af !important;
+}
+
+.insider-performance.unknown {
+  background: rgba(100, 116, 139, 0.14);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: #94a3b8 !important;
+}
+
 .insider-empty {
   color: #8b9aad !important;
   height: 120px;
@@ -8684,11 +8741,12 @@ select {
     align-self: start;
     color: #cbd5e1;
     font-weight: 900;
-    grid-row: 1 / span 4;
+    grid-row: 1 / span 9;
     padding-top: 2px;
   }
 
-  .insider-table tr:not(.insider-stock-row) td:nth-child(2) {
+  .insider-table tr:not(.insider-stock-row) td:nth-child(n + 2) {
+    grid-column: 2;
     min-width: 0;
   }
 
