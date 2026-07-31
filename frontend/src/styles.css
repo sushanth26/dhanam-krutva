@@ -5663,6 +5663,44 @@ select {
   display: block;
 }
 
+.watchlist-chart-sections {
+  display: grid;
+  gap: 10px;
+}
+
+.watchlist-chart-section {
+  display: grid;
+  gap: 6px;
+}
+
+.watchlist-chart-heading {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.watchlist-chart-heading h2 {
+  color: #f8fafc;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.watchlist-chart-heading span {
+  align-items: center;
+  background: #111c2a;
+  border: 1px solid #26384d;
+  border-radius: 999px;
+  color: #cbd5e1;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  height: 20px;
+  justify-content: center;
+  min-width: 24px;
+  padding: 0 7px;
+}
+
 .tradingview-chart-grid {
   display: grid;
   gap: 6px;
@@ -5677,6 +5715,21 @@ select {
   min-height: 270px;
   overflow: hidden;
   position: relative;
+}
+
+.chart-open-hit-area {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  inset: 0;
+  min-height: 0;
+  padding: 0;
+  position: absolute;
+  z-index: 3;
+}
+
+.chart-open-hit-area:hover {
+  background: rgba(15, 23, 42, 0.08);
 }
 
 .tradingview-chart-label {
@@ -5701,6 +5754,71 @@ select {
   border: 0;
   height: 270px;
   min-height: 270px;
+  width: 100%;
+}
+
+.chart-modal-backdrop {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 18px;
+  position: fixed;
+  z-index: 1000;
+}
+
+.chart-modal {
+  background: #080d14;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: min(860px, calc(100vh - 36px));
+  overflow: hidden;
+  width: min(1500px, calc(100vw - 36px));
+}
+
+.chart-modal-toolbar {
+  align-items: center;
+  background: #0b121d;
+  border-bottom: 1px solid #1f2f45;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 8px 10px;
+}
+
+.chart-modal-toolbar strong {
+  color: #f8fafc;
+  display: block;
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.chart-modal-toolbar span {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.chart-modal-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.chart-modal-actions button {
+  min-height: 32px;
+}
+
+.chart-modal-frame {
+  border: 0;
+  height: 100%;
   width: 100%;
 }
 
@@ -5738,6 +5856,28 @@ select {
   .tradingview-widget-frame {
     height: 260px;
     min-height: 260px;
+  }
+
+  .chart-modal-backdrop {
+    padding: 8px;
+  }
+
+  .chart-modal {
+    height: calc(100vh - 16px);
+    width: calc(100vw - 16px);
+  }
+
+  .chart-modal-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .chart-modal-actions {
+    justify-content: stretch;
+  }
+
+  .chart-modal-actions button {
+    flex: 1 1 auto;
   }
 
   .daily-list-editor {

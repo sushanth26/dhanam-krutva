@@ -2638,14 +2638,57 @@ export default function App() {
 }
 
 function ChartsPage({ watchlists }) {
-  const symbols = useMemo(() => uniqueSortedSymbolsFromWatchlists(watchlists), [watchlists]);
+  const chartGroups = useMemo(() => chartGroupsFromWatchlists(watchlists), [watchlists]);
+  const chartItems = useMemo(
+    () => chartGroups.flatMap((group) => group.symbols.map((symbol) => ({ groupId: group.id, groupName: group.name, symbol }))),
+    [chartGroups]
+  );
+  const [activeChartIndex, setActiveChartIndex] = useState(null);
+  const activeChart = activeChartIndex == null ? null : chartItems[activeChartIndex];
+
+  useEffect(() => {
+    if (activeChartIndex != null && activeChartIndex >= chartItems.length) {
+      setActiveChartIndex(chartItems.length ? chartItems.length - 1 : null);
+    }
+  }, [activeChartIndex, chartItems.length]);
+
+  function showPreviousChart() {
+    setActiveChartIndex((index) => {
+      if (index == null || !chartItems.length) return index;
+      return (index - 1 + chartItems.length) % chartItems.length;
+    });
+  }
+
+  function showNextChart() {
+    setActiveChartIndex((index) => {
+      if (index == null || !chartItems.length) return index;
+      return (index + 1) % chartItems.length;
+    });
+  }
 
   return (
     <section className="charts-page" aria-label="Watchlist TradingView charts">
-      {symbols.length ? (
-        <div className="tradingview-chart-grid">
-          {symbols.map((symbol) => (
-            <TradingViewChart key={symbol} symbol={symbol} />
+      {chartGroups.length ? (
+        <div className="watchlist-chart-sections">
+          {chartGroups.map((group) => (
+            <section className="watchlist-chart-section" key={group.id} aria-label={`${group.name} charts`}>
+              <div className="watchlist-chart-heading">
+                <h2>{group.name}</h2>
+                <span>{group.symbols.length}</span>
+              </div>
+              <div className="tradingview-chart-grid">
+                {group.symbols.map((symbol) => {
+                  const chartIndex = chartItems.findIndex((item) => item.groupId === group.id && item.symbol === symbol);
+                  return (
+                    <TradingViewChart
+                      key={`${group.id}-${symbol}`}
+                      onOpen={() => setActiveChartIndex(chartIndex)}
+                      symbol={symbol}
+                    />
+                  );
+                })}
+              </div>
+            </section>
           ))}
         </div>
       ) : (
@@ -2654,11 +2697,34 @@ function ChartsPage({ watchlists }) {
           <span>Add tickers to a watchlist, then they will appear here.</span>
         </div>
       )}
+      {activeChart ? (
+        <ChartModal
+          chart={activeChart}
+          current={activeChartIndex + 1}
+          onClose={() => setActiveChartIndex(null)}
+          onNext={showNextChart}
+          onPrevious={showPreviousChart}
+          total={chartItems.length}
+        />
+      ) : null}
     </section>
   );
 }
 
-function TradingViewChart({ symbol }) {
+function chartGroupsFromWatchlists(watchlists) {
+  return watchlists
+    .map((watchlist, index) => {
+      const symbols = normalizeSymbols(watchlist.symbols || []);
+      return {
+        id: watchlist.id || `watchlist-${index}`,
+        name: watchlist.name || "Watchlist",
+        symbols,
+      };
+    })
+    .filter((group) => group.symbols.length);
+}
+
+function TradingViewChart({ onOpen, symbol }) {
   const chartUrl = tradingViewEmbedUrl(symbol);
 
   return (
@@ -2670,7 +2736,48 @@ function TradingViewChart({ symbol }) {
         src={chartUrl}
         allowFullScreen
       />
+      <button
+        type="button"
+        className="chart-open-hit-area"
+        onClick={onOpen}
+        aria-label={`Open ${symbol} chart`}
+      />
     </article>
+  );
+}
+
+function ChartModal({ chart, current, onClose, onNext, onPrevious, total }) {
+  const chartUrl = tradingViewEmbedUrl(chart.symbol);
+
+  return (
+    <div className="chart-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="chart-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${chart.symbol} enlarged chart`}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="chart-modal-toolbar">
+          <div>
+            <strong>{chart.symbol}</strong>
+            <span>{chart.groupName}</span>
+          </div>
+          <div className="chart-modal-actions">
+            <button type="button" className="secondary-button" onClick={onPrevious}>Previous</button>
+            <span>{current} / {total}</span>
+            <button type="button" className="secondary-button" onClick={onNext}>Next</button>
+            <button type="button" className="secondary-button" onClick={onClose} aria-label="Close chart">Close</button>
+          </div>
+        </div>
+        <iframe
+          className="chart-modal-frame"
+          title={`${chart.symbol} enlarged chart`}
+          src={chartUrl}
+          allowFullScreen
+        />
+      </section>
+    </div>
   );
 }
 
