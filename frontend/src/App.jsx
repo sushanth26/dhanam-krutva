@@ -2805,6 +2805,10 @@ function tradingViewEmbedUrl(symbol) {
     extended_hours: true,
     show_extended_hours: true,
     withdateranges: false,
+    overrides: {
+      "backgrounds.preMarket.color": "rgba(148, 163, 184, 0.18)",
+      "backgrounds.postMarket.color": "rgba(148, 163, 184, 0.12)",
+    },
     support_host: "https://www.tradingview.com",
     width: "100%",
     height: "100%",
