@@ -5675,29 +5675,36 @@ select {
 
 .watchlist-chart-heading {
   align-items: center;
+  background: #132033;
+  border: 1px solid #315170;
+  border-left: 4px solid #38bdf8;
+  border-radius: 4px;
   display: flex;
   gap: 8px;
-  min-height: 22px;
+  justify-content: space-between;
+  min-height: 34px;
+  padding: 0 10px;
 }
 
 .watchlist-chart-heading h2 {
-  color: #f8fafc;
-  font-size: 14px;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 900;
   line-height: 1;
 }
 
 .watchlist-chart-heading span {
   align-items: center;
-  background: #111c2a;
-  border: 1px solid #26384d;
+  background: #38bdf8;
+  border: 1px solid #7dd3fc;
   border-radius: 999px;
-  color: #cbd5e1;
+  color: #04111d;
   display: inline-flex;
   font-size: 11px;
   font-weight: 900;
-  height: 20px;
+  height: 22px;
   justify-content: center;
-  min-width: 24px;
+  min-width: 28px;
   padding: 0 7px;
 }
 
