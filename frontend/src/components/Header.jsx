@@ -105,13 +105,13 @@ export function Header({
             </button>
             <button
               type="button"
-              className={`account-menu-button secondary-button ${activePage === "charts" ? "active" : ""}`}
+              className={`account-menu-button secondary-button ${activePage === "sectors" ? "active" : ""}`}
               disabled={pageLoading}
-              onClick={() => onNavigate("charts")}
-              aria-label="Open watchlist charts"
-              title="Charts"
+              onClick={() => onNavigate("sectors")}
+              aria-label="Open sector movers"
+              title="Sectors"
             >
-              <span>Charts</span>
+              <span>Sectors</span>
             </button>
             <button
               type="button"

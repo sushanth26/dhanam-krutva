@@ -33,11 +33,13 @@ const ALL_WATCHLISTS_TAB_ID = "__all-watchlists";
 const OG_WATCHLIST_ID = "og";
 const SPY_SYMBOL = "SPY";
 const TRADINGVIEW_WIDGET_URL = "https://www.tradingview-widget.com/embed-widget/advanced-chart/";
+const CHART_GROUP_COLORS = ["#f59e0b", "#38bdf8", "#22c55e", "#f43f5e", "#a78bfa", "#14b8a6"];
 const OG_SYMBOLS = [
   "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
   "ASTS", "AMD", "ARM", "AVGO", "DELL", "INTC", "APP", "LLY",
   "APLD", "CIFR", "CRWV", "HUT", "IREN", "NBIS", "WULF",
 ];
+const SECTOR_SYMBOLS = ["SOXL", "XLV", "CIBR", "XLF", "XLK"];
 
 function loadDailySymbols() {
   try {
@@ -1111,6 +1113,7 @@ export default function App() {
     if (window.location.hash === "#alerts") return "alerts";
     if (window.location.hash === "#charts") return "charts";
     if (window.location.hash === "#mtfs") return "mtfs";
+    if (window.location.hash === "#sectors") return "sectors";
     if (window.location.hash === "#insiders") return "insiders";
     if (window.location.hash === "#watchlist") return "watchlist";
     return "mtfs";
@@ -1122,6 +1125,8 @@ export default function App() {
   const [autoTrade, setAutoTrade] = useState(loadAutoTradeSettings);
   const [watchlistTab, setWatchlistTab] = useState(OG_WATCHLIST_ID);
   const [homeView, setHomeView] = useState("spy");
+  const [sectorGroups, setSectorGroups] = useState([]);
+  const [sectorUpdatedText, setSectorUpdatedText] = useState("Sector polling stopped");
   const [symbolInputs, setSymbolInputs] = useState({});
   const [newMtfRows, setNewMtfRows] = useState({});
   const [focusedMtfSymbol, setFocusedMtfSymbol] = useState("");
@@ -1531,6 +1536,36 @@ export default function App() {
     setSpyUpdatedText(`SPY updated ${new Date().toLocaleTimeString()} from ${payload.source || "webull"}`);
   }
 
+  async function refreshSectorPrices({ force = false, showLoading = true } = {}) {
+    if (!accountsConfirmedRef.current) return;
+    if (showLoading) setLoadingKey("prices", true);
+    const settings = riskSettingsRef.current;
+    const query = new URLSearchParams({
+      symbols: SECTOR_SYMBOLS.join(","),
+      risk_amount: String(settings.riskAmount),
+      stop_mode: settings.stopMode,
+      fixed_stop_buffer: String(settings.fixedStopBuffer),
+      limit: "4",
+    });
+    if (force) query.set("force", "true");
+    try {
+      const payload = await getJson(`/api/webull/sector-movers?${query.toString()}`);
+      setSectorGroups(payload.groups || []);
+      if (!payload.ok) {
+        const errorText = livePriceErrorText(payload);
+        setSectorUpdatedText(errorText.status);
+        setLiveAlert(errorText.alert);
+        return;
+      }
+      setSectorUpdatedText(`Updated ${new Date().toLocaleTimeString()} from ${payload.source || "webull"}`);
+    } catch (error) {
+      setSectorUpdatedText("Sector polling failed");
+      setLiveAlert(error.message);
+    } finally {
+      if (showLoading) setLoadingKey("prices", false);
+    }
+  }
+
   function livePriceErrorText(payload) {
     const firstError = payload.errors?.map((item) => item.error).find(Boolean);
     const guardUntil = firstError?.webull_guard_blocked_until;
@@ -1770,13 +1805,15 @@ export default function App() {
       ? "#alerts"
       : nextPage === "mtfs"
         ? "#mtfs"
-        : nextPage === "insiders"
-          ? "#insiders"
-          : nextPage === "charts"
-            ? "#charts"
-            : nextPage === "watchlist"
-              ? "#watchlist"
-              : "";
+        : nextPage === "sectors"
+          ? "#sectors"
+          : nextPage === "insiders"
+            ? "#insiders"
+            : nextPage === "charts"
+              ? "#charts"
+              : nextPage === "watchlist"
+                ? "#watchlist"
+                : "";
     window.history.replaceState(null, "", hash || window.location.pathname);
   }
 
@@ -2216,6 +2253,7 @@ export default function App() {
     if (!accountsConfirmedRef.current) return;
     await refreshWatchlists({ showLoading });
     await refreshAllPrices({ showLoading, force });
+    await refreshSectorPrices({ showLoading: false, force });
   }
 
   function selectHomeView(view) {
@@ -2597,6 +2635,13 @@ export default function App() {
             onBuy={buyMtfQuote}
             onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
           />
+        ) : activePage === "sectors" ? (
+          <SectorsPage
+            groups={sectorGroups}
+            updatedText={sectorUpdatedText}
+            loading={loading.prices}
+            onRefresh={() => refreshSectorPrices({ force: true })}
+          />
         ) : activePage === "insiders" ? (
           <InsiderBuyingPage onDataLoaded={handleInsiderData} />
         ) : activePage === "charts" ? (
@@ -2637,16 +2682,163 @@ export default function App() {
   );
 }
 
+function SectorsPage({ groups, updatedText, loading, onRefresh }) {
+  const allRows = groups.flatMap((group) => group.rows || []);
+  const longCount = groups.filter((group) => group.direction === "Long").length;
+  const shortCount = groups.filter((group) => group.direction === "Short").length;
+
+  return (
+    <section className="sectors-page" aria-label="Sector ETF movers">
+      <div className="scanner-hero sectors-hero">
+        <div>
+          <span className="muted">SOXL · XLV · CIBR · XLF · XLK</span>
+          <h2>Sectors</h2>
+        </div>
+        <div className="live-price-actions">
+          <button type="button" onClick={onRefresh} disabled={loading}>
+            {loading ? "Refreshing" : "Refresh"}
+          </button>
+        </div>
+      </div>
+      <div className="scanner-metric-grid sectors-metric-grid">
+        <ScannerMetric label="ETFs long" value={longCount} tone="long" />
+        <ScannerMetric label="ETF shorts" value={shortCount} tone="short" />
+        <ScannerMetric label="Stock setups" value={allRows.length} tone="risk" />
+      </div>
+      <div className="sector-group-grid">
+        {groups.length ? groups.map((group) => (
+          <section key={group.etf} className={`price-bucket sectors-movers-bucket sector-direction-${String(group.direction || "neutral").toLowerCase()}`}>
+            <div className="bucket-heading">
+              <div className="bucket-title">
+                <h3>
+                  {group.etf}
+                  <small className={`sector-direction-pill ${String(group.direction || "neutral").toLowerCase()}`}>{group.direction || "Neutral"}</small>
+                </h3>
+                <p>{group.name} · ETF {formatSignedPercent(group.etf_move_pct)} · {updatedText}</p>
+              </div>
+              <span>{(group.rows || []).length}</span>
+            </div>
+            <div className="live-price-table-wrap">
+              <table className="live-price-table sectors-table">
+                <thead>
+                  <tr>
+                    <th>Stock</th>
+                    <th>Side</th>
+                    <th>Last</th>
+                    <th>Prev</th>
+                    <th>Move</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(group.rows || []).length ? group.rows.map((row) => (
+                    <tr key={`${group.etf}-${row.symbol}`} className={`stock-row sector-${moveTone(row.move_pct)}`}>
+                      <td data-label="Stock"><strong>{row.symbol}</strong></td>
+                      <td data-label="Side"><span className={`direction-pill ${String(row.action || "Wait").toLowerCase()}`}>{row.action || "Wait"}</span></td>
+                      <td data-label="Last" className="price-cell">{formatPrice(row.price)}</td>
+                      <td data-label="Prev Close" className="price-cell">{formatPrice(row.previous_close)}</td>
+                      <td data-label="Move" className={`price-cell sector-move-cell ${moveTone(row.move_pct)}`}>{formatSignedPercent(row.move_pct)}</td>
+                    </tr>
+                  )) : (
+                    <tr className="scanner-empty-row"><td colSpan="5">No underlying movers loaded.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )) : (
+          <section className="price-bucket sectors-movers-bucket">
+            <div className="bucket-heading">
+              <div className="bucket-title">
+                <h3>Underlying Movers</h3>
+                <p>{updatedText}</p>
+              </div>
+              <span>0</span>
+            </div>
+            <div className="live-price-table-wrap">
+              <table className="live-price-table sectors-table">
+                <tbody>
+                  <tr className="scanner-empty-row"><td>No sector prices loaded yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function moveTone(value) {
+  const numeric = Number(value);
+  if (numeric > 0) return "up";
+  if (numeric < 0) return "down";
+  return "flat";
+}
+
+function formatSignedPercent(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "-";
+  const sign = numeric > 0 ? "+" : "";
+  return `${sign}${numeric.toFixed(2)}%`;
+}
+
 function ChartsPage({ watchlists }) {
-  const symbols = useMemo(() => uniqueSortedSymbolsFromWatchlists(watchlists), [watchlists]);
+  const chartGroups = useMemo(() => chartGroupsFromWatchlists(watchlists), [watchlists]);
+  const chartItems = useMemo(
+    () => chartGroups.flatMap((group) => group.symbols.map((symbol) => ({
+      color: group.color,
+      groupId: group.id,
+      groupName: group.name,
+      symbol,
+    }))),
+    [chartGroups]
+  );
+  const [activeChartIndex, setActiveChartIndex] = useState(null);
+  const activeChart = activeChartIndex == null ? null : chartItems[activeChartIndex];
+
+  useEffect(() => {
+    if (activeChartIndex != null && activeChartIndex >= chartItems.length) {
+      setActiveChartIndex(chartItems.length ? chartItems.length - 1 : null);
+    }
+  }, [activeChartIndex, chartItems.length]);
+
+  function showPreviousChart() {
+    setActiveChartIndex((index) => {
+      if (index == null || !chartItems.length) return index;
+      return (index - 1 + chartItems.length) % chartItems.length;
+    });
+  }
+
+  function showNextChart() {
+    setActiveChartIndex((index) => {
+      if (index == null || !chartItems.length) return index;
+      return (index + 1) % chartItems.length;
+    });
+  }
 
   return (
     <section className="charts-page" aria-label="Watchlist TradingView charts">
-      {symbols.length ? (
-        <div className="tradingview-chart-grid">
-          {symbols.map((symbol) => (
-            <TradingViewChart key={symbol} symbol={symbol} />
-          ))}
+      {chartGroups.length ? (
+        <div className="watchlist-chart-board">
+          <div className="watchlist-chart-legend" aria-label="Watchlist chart groups">
+            {chartGroups.map((group) => (
+              <span key={group.id} style={{ "--watchlist-color": group.color }}>
+                <b>{group.name}</b>
+                <em>{group.symbols.length}</em>
+              </span>
+            ))}
+          </div>
+          <div className="tradingview-chart-grid">
+            {chartItems.map((item, chartIndex) => (
+              <TradingViewChart
+                color={item.color}
+                groupName={item.groupName}
+                key={`${item.groupId}-${item.symbol}`}
+                onOpen={() => setActiveChartIndex(chartIndex)}
+                symbol={item.symbol}
+              />
+            ))}
+          </div>
         </div>
       ) : (
         <div className="charts-empty-state">
@@ -2654,23 +2846,96 @@ function ChartsPage({ watchlists }) {
           <span>Add tickers to a watchlist, then they will appear here.</span>
         </div>
       )}
+      {activeChart ? (
+        <ChartModal
+          chart={activeChart}
+          current={activeChartIndex + 1}
+          key={`${activeChart.groupId}-${activeChart.symbol}`}
+          onClose={() => setActiveChartIndex(null)}
+          onNext={showNextChart}
+          onPrevious={showPreviousChart}
+          total={chartItems.length}
+        />
+      ) : null}
     </section>
   );
 }
 
-function TradingViewChart({ symbol }) {
+function chartGroupsFromWatchlists(watchlists) {
+  return watchlists
+    .map((watchlist, index) => {
+      const symbols = normalizeSymbols(watchlist.symbols || []);
+      return {
+        color: CHART_GROUP_COLORS[index % CHART_GROUP_COLORS.length],
+        id: watchlist.id || `watchlist-${index}`,
+        name: watchlist.name || "Watchlist",
+        symbols,
+      };
+    })
+    .filter((group) => group.symbols.length);
+}
+
+function TradingViewChart({ color, groupName, onOpen, symbol }) {
   const chartUrl = tradingViewEmbedUrl(symbol);
 
   return (
-    <article className="tradingview-chart-card" aria-label={`${symbol} TradingView chart`}>
+    <article
+      className="tradingview-chart-card"
+      style={{ "--watchlist-color": color }}
+      aria-label={`${symbol} TradingView chart`}
+    >
       <div className="tradingview-chart-label">{symbol}</div>
+      <div className="tradingview-watchlist-label">{groupName}</div>
       <iframe
         className="tradingview-widget-frame"
         title={`${symbol} chart`}
         src={chartUrl}
         allowFullScreen
       />
+      <button
+        type="button"
+        className="chart-open-hit-area"
+        onClick={onOpen}
+        aria-label={`Open ${symbol} chart`}
+      />
     </article>
+  );
+}
+
+function ChartModal({ chart, current, onClose, onNext, onPrevious, total }) {
+  const chartUrl = tradingViewEmbedUrl(chart.symbol);
+
+  return (
+    <div className="chart-modal-backdrop" role="presentation" onClick={onClose} onMouseDown={onClose}>
+      <section
+        className="chart-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${chart.symbol} enlarged chart`}
+        onClick={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="chart-modal-toolbar">
+          <div>
+            <strong>{chart.symbol}</strong>
+            <span>{chart.groupName}</span>
+          </div>
+          <div className="chart-modal-actions">
+            <button type="button" className="secondary-button" onClick={onPrevious}>Previous</button>
+            <span>{current} / {total}</span>
+            <button type="button" className="secondary-button" onClick={onNext}>Next</button>
+            <button type="button" className="secondary-button" onClick={onClose} aria-label="Close chart">Close</button>
+          </div>
+        </div>
+        <iframe
+          key={`${chart.groupId}-${chart.symbol}`}
+          className="chart-modal-frame"
+          title={`${chart.symbol} enlarged chart`}
+          src={chartUrl}
+          allowFullScreen
+        />
+      </section>
+    </div>
   );
 }
 
@@ -2698,6 +2963,10 @@ function tradingViewEmbedUrl(symbol) {
     extended_hours: true,
     show_extended_hours: true,
     withdateranges: false,
+    overrides: {
+      "backgrounds.preMarket.color": "rgba(148, 163, 184, 0.18)",
+      "backgrounds.postMarket.color": "rgba(148, 163, 184, 0.12)",
+    },
     support_host: "https://www.tradingview.com",
     width: "100%",
     height: "100%",

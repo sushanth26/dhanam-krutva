@@ -4,6 +4,7 @@ from app.market_data import (
     LIVE_WATCHLIST,
     aggregate_by_minutes,
     batch_history_bars_chunked,
+    build_sector_movers,
     build_live_prices,
     daily_volatility,
     ema_cloud_context,
@@ -158,6 +159,93 @@ def test_build_live_prices_exposes_latest_10m_close_for_scanner_breakouts():
     assert quote["scanner_price"] == quote["latest_10m_close"]
     assert quote["scanner_price"] < quote["previous_day"]["low"]
     assert quote["scanner_price_source"] == "latest_10m_candle_close"
+
+
+def test_build_sector_movers_uses_etf_direction_for_top_underlyings():
+    moves = {
+        "SOXL": 2.5,
+        "NVDA": 4.0,
+        "AVGO": 1.5,
+        "AMD": -1.0,
+        "QCOM": 3.0,
+        "MU": 0.5,
+        "MRVL": 2.0,
+        "SNDK": 3.5,
+        "AMAT": 1.0,
+        "LRCX": -2.0,
+        "KLAC": 0.2,
+        "TSM": 2.8,
+        "ASML": 0.8,
+        "INTC": -0.4,
+        "XLF": -1.2,
+        "JPM": -0.4,
+        "V": 0.2,
+        "MA": -2.0,
+        "BAC": -1.5,
+        "WFC": -0.8,
+        "GS": 1.0,
+        "MS": -3.0,
+        "AXP": -1.1,
+        "SPGI": 0.3,
+        "C": -2.4,
+        "BLK": -0.7,
+        "PGR": -1.8,
+        "XLK": 1.5,
+    }
+
+    class FakeWebull:
+        def market_snapshot(self, symbols, category, extend_hour_required=False, overnight_required=False):
+            assert extend_hour_required is True
+            assert overnight_required is False
+            return {
+                "ok": True,
+                "data": [
+                    {
+                        "symbol": symbol,
+                        "last_price": 100 + moves.get(symbol, 0),
+                        "change_ratio": moves.get(symbol, 0) / 100,
+                    }
+                    for symbol in symbols
+                ],
+            }
+
+    payload = build_sector_movers(FakeWebull(), "SOXL,XLF,XLK", limit=4)
+
+    soxl, xlf, xlk = payload["groups"]
+    assert soxl["direction"] == "Long"
+    assert [row["symbol"] for row in soxl["rows"]] == ["NVDA", "SNDK", "QCOM", "TSM"]
+    assert all(row["action"] == "Long" for row in soxl["rows"])
+    assert xlf["direction"] == "Short"
+    assert [row["symbol"] for row in xlf["rows"]] == ["MS", "C", "MA", "PGR"]
+    assert all(row["action"] == "Short" for row in xlf["rows"])
+    assert xlk["direction"] == "Long"
+    assert not {row["symbol"] for row in xlk["rows"]} & {row["symbol"] for row in soxl["rows"]}
+
+
+def test_build_sector_movers_skips_invalid_snapshot_symbols():
+    class FakeWebull:
+        def market_snapshot(self, symbols, category, extend_hour_required=False, overnight_required=False):
+            assert extend_hour_required is True
+            assert overnight_required is False
+            if symbols == ["BRK-B"] or (len(symbols) > 1 and "BRK-B" in symbols):
+                return {
+                    "ok": False,
+                    "error_code": "INVALID_SYMBOL",
+                    "error": "The symbols does not exist in the category. [BRK-B].",
+                }
+            return {
+                "ok": True,
+                "data": [
+                    {"symbol": symbol, "last_price": 99, "change_ratio": -0.01}
+                    for symbol in symbols
+                ],
+            }
+
+    payload = build_sector_movers(FakeWebull(), "XLF", limit=1)
+
+    assert payload["ok"] is True
+    assert payload["skipped_symbols"] == {"XLF": ["BRK-B"]}
+    assert payload["groups"][0]["direction"] == "Short"
 
 
 def test_aggregate_by_minutes_rolls_5m_bars_into_10m_buckets():
