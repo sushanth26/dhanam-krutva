@@ -39,6 +39,7 @@ const OG_SYMBOLS = [
   "ASTS", "AMD", "ARM", "AVGO", "DELL", "INTC", "APP", "LLY",
   "APLD", "CIFR", "CRWV", "HUT", "IREN", "NBIS", "WULF",
 ];
+const SECTOR_SYMBOLS = ["SOXL", "XLV", "CIBR", "XLF", "XLK"];
 
 function loadDailySymbols() {
   try {
@@ -1112,6 +1113,7 @@ export default function App() {
     if (window.location.hash === "#alerts") return "alerts";
     if (window.location.hash === "#charts") return "charts";
     if (window.location.hash === "#mtfs") return "mtfs";
+    if (window.location.hash === "#sectors") return "sectors";
     if (window.location.hash === "#insiders") return "insiders";
     if (window.location.hash === "#watchlist") return "watchlist";
     return "mtfs";
@@ -1123,6 +1125,8 @@ export default function App() {
   const [autoTrade, setAutoTrade] = useState(loadAutoTradeSettings);
   const [watchlistTab, setWatchlistTab] = useState(OG_WATCHLIST_ID);
   const [homeView, setHomeView] = useState("spy");
+  const [sectorGroups, setSectorGroups] = useState([]);
+  const [sectorUpdatedText, setSectorUpdatedText] = useState("Sector polling stopped");
   const [symbolInputs, setSymbolInputs] = useState({});
   const [newMtfRows, setNewMtfRows] = useState({});
   const [focusedMtfSymbol, setFocusedMtfSymbol] = useState("");
@@ -1532,6 +1536,36 @@ export default function App() {
     setSpyUpdatedText(`SPY updated ${new Date().toLocaleTimeString()} from ${payload.source || "webull"}`);
   }
 
+  async function refreshSectorPrices({ force = false, showLoading = true } = {}) {
+    if (!accountsConfirmedRef.current) return;
+    if (showLoading) setLoadingKey("prices", true);
+    const settings = riskSettingsRef.current;
+    const query = new URLSearchParams({
+      symbols: SECTOR_SYMBOLS.join(","),
+      risk_amount: String(settings.riskAmount),
+      stop_mode: settings.stopMode,
+      fixed_stop_buffer: String(settings.fixedStopBuffer),
+      limit: "4",
+    });
+    if (force) query.set("force", "true");
+    try {
+      const payload = await getJson(`/api/webull/sector-movers?${query.toString()}`);
+      setSectorGroups(payload.groups || []);
+      if (!payload.ok) {
+        const errorText = livePriceErrorText(payload);
+        setSectorUpdatedText(errorText.status);
+        setLiveAlert(errorText.alert);
+        return;
+      }
+      setSectorUpdatedText(`Updated ${new Date().toLocaleTimeString()} from ${payload.source || "webull"}`);
+    } catch (error) {
+      setSectorUpdatedText("Sector polling failed");
+      setLiveAlert(error.message);
+    } finally {
+      if (showLoading) setLoadingKey("prices", false);
+    }
+  }
+
   function livePriceErrorText(payload) {
     const firstError = payload.errors?.map((item) => item.error).find(Boolean);
     const guardUntil = firstError?.webull_guard_blocked_until;
@@ -1771,13 +1805,15 @@ export default function App() {
       ? "#alerts"
       : nextPage === "mtfs"
         ? "#mtfs"
-        : nextPage === "insiders"
-          ? "#insiders"
-          : nextPage === "charts"
-            ? "#charts"
-            : nextPage === "watchlist"
-              ? "#watchlist"
-              : "";
+        : nextPage === "sectors"
+          ? "#sectors"
+          : nextPage === "insiders"
+            ? "#insiders"
+            : nextPage === "charts"
+              ? "#charts"
+              : nextPage === "watchlist"
+                ? "#watchlist"
+                : "";
     window.history.replaceState(null, "", hash || window.location.pathname);
   }
 
@@ -2217,6 +2253,7 @@ export default function App() {
     if (!accountsConfirmedRef.current) return;
     await refreshWatchlists({ showLoading });
     await refreshAllPrices({ showLoading, force });
+    await refreshSectorPrices({ showLoading: false, force });
   }
 
   function selectHomeView(view) {
@@ -2598,6 +2635,13 @@ export default function App() {
             onBuy={buyMtfQuote}
             onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
           />
+        ) : activePage === "sectors" ? (
+          <SectorsPage
+            groups={sectorGroups}
+            updatedText={sectorUpdatedText}
+            loading={loading.prices}
+            onRefresh={() => refreshSectorPrices({ force: true })}
+          />
         ) : activePage === "insiders" ? (
           <InsiderBuyingPage onDataLoaded={handleInsiderData} />
         ) : activePage === "charts" ? (
@@ -2636,6 +2680,106 @@ export default function App() {
       </main>
     </>
   );
+}
+
+function SectorsPage({ groups, updatedText, loading, onRefresh }) {
+  const allRows = groups.flatMap((group) => group.rows || []);
+  const longCount = groups.filter((group) => group.direction === "Long").length;
+  const shortCount = groups.filter((group) => group.direction === "Short").length;
+
+  return (
+    <section className="sectors-page" aria-label="Sector ETF movers">
+      <div className="scanner-hero sectors-hero">
+        <div>
+          <span className="muted">SOXL · XLV · CIBR · XLF · XLK</span>
+          <h2>Sectors</h2>
+        </div>
+        <div className="live-price-actions">
+          <button type="button" onClick={onRefresh} disabled={loading}>
+            {loading ? "Refreshing" : "Refresh"}
+          </button>
+        </div>
+      </div>
+      <div className="scanner-metric-grid sectors-metric-grid">
+        <ScannerMetric label="ETFs long" value={longCount} tone="long" />
+        <ScannerMetric label="ETF shorts" value={shortCount} tone="short" />
+        <ScannerMetric label="Stock setups" value={allRows.length} tone="risk" />
+      </div>
+      <div className="sector-group-grid">
+        {groups.length ? groups.map((group) => (
+          <section key={group.etf} className={`price-bucket sectors-movers-bucket sector-direction-${String(group.direction || "neutral").toLowerCase()}`}>
+            <div className="bucket-heading">
+              <div className="bucket-title">
+                <h3>
+                  {group.etf}
+                  <small className={`sector-direction-pill ${String(group.direction || "neutral").toLowerCase()}`}>{group.direction || "Neutral"}</small>
+                </h3>
+                <p>{group.name} · ETF {formatSignedPercent(group.etf_move_pct)} · {updatedText}</p>
+              </div>
+              <span>{(group.rows || []).length}</span>
+            </div>
+            <div className="live-price-table-wrap">
+              <table className="live-price-table sectors-table">
+                <thead>
+                  <tr>
+                    <th>Stock</th>
+                    <th>Side</th>
+                    <th>Last</th>
+                    <th>Prev</th>
+                    <th>Move</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(group.rows || []).length ? group.rows.map((row) => (
+                    <tr key={`${group.etf}-${row.symbol}`} className={`stock-row sector-${moveTone(row.move_pct)}`}>
+                      <td data-label="Stock"><strong>{row.symbol}</strong></td>
+                      <td data-label="Side"><span className={`direction-pill ${String(row.action || "Wait").toLowerCase()}`}>{row.action || "Wait"}</span></td>
+                      <td data-label="Last" className="price-cell">{formatPrice(row.price)}</td>
+                      <td data-label="Prev Close" className="price-cell">{formatPrice(row.previous_close)}</td>
+                      <td data-label="Move" className={`price-cell sector-move-cell ${moveTone(row.move_pct)}`}>{formatSignedPercent(row.move_pct)}</td>
+                    </tr>
+                  )) : (
+                    <tr className="scanner-empty-row"><td colSpan="5">No underlying movers loaded.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )) : (
+          <section className="price-bucket sectors-movers-bucket">
+            <div className="bucket-heading">
+              <div className="bucket-title">
+                <h3>Underlying Movers</h3>
+                <p>{updatedText}</p>
+              </div>
+              <span>0</span>
+            </div>
+            <div className="live-price-table-wrap">
+              <table className="live-price-table sectors-table">
+                <tbody>
+                  <tr className="scanner-empty-row"><td>No sector prices loaded yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function moveTone(value) {
+  const numeric = Number(value);
+  if (numeric > 0) return "up";
+  if (numeric < 0) return "down";
+  return "flat";
+}
+
+function formatSignedPercent(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "-";
+  const sign = numeric > 0 ? "+" : "";
+  return `${sign}${numeric.toFixed(2)}%`;
 }
 
 function ChartsPage({ quotesByTab, watchlists }) {
