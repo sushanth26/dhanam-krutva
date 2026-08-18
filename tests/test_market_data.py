@@ -250,6 +250,36 @@ def test_build_sector_movers_skips_invalid_snapshot_symbols():
     assert payload["groups"][0]["direction"] == "Short"
 
 
+def test_build_sector_movers_prefers_premarket_snapshot_fields():
+    class FakeWebull:
+        def market_snapshot(self, symbols, category, extend_hour_required=False, overnight_required=False):
+            assert extend_hour_required is True
+            assert overnight_required is False
+            return {
+                "ok": True,
+                "data": [
+                    {
+                        "symbol": symbol,
+                        "last_price": 100,
+                        "change_ratio": -0.01,
+                        "pPrice": 101,
+                        "pChRatio": 0.01,
+                    }
+                    for symbol in symbols
+                ],
+            }
+
+    payload = build_sector_movers(FakeWebull(), "SOXL", limit=1)
+    group = payload["groups"][0]
+    row = group["rows"][0]
+
+    assert group["direction"] == "Long"
+    assert group["etf_move_pct"] == 1
+    assert row["price"] == 101
+    assert row["previous_close"] == 100
+    assert row["move_pct"] == 1
+
+
 def test_aggregate_by_minutes_rolls_5m_bars_into_10m_buckets():
     candles = [candle(0, 10), candle(1, 11), candle(2, 12), candle(3, 13)]
 

@@ -350,18 +350,113 @@ def sector_snapshot_quotes(data: Any) -> list[dict[str, Any]]:
     quotes = []
     for item in find_snapshot_list(data):
         symbol = str(item.get("symbol") or item.get("ticker") or item.get("code") or "").upper()
-        price = snapshot_price(item)
-        move_pct = snapshot_change_ratio(item)
-        previous_close = previous_close_from_snapshot(price, move_pct)
+        price = sector_snapshot_price(item)
+        change = sector_snapshot_change(item)
+        move_pct = sector_snapshot_change_ratio(item)
+        previous_close = sector_previous_close(item, price, change, move_pct)
         quotes.append({
             "symbol": symbol,
             "price": price,
             "scanner_price": price,
-            "change": snapshot_change(item),
+            "change": change,
             "change_ratio": move_pct,
             "previous_day": {"close": previous_close} if previous_close is not None else {},
         })
     return quotes
+
+
+def sector_snapshot_price(snapshot: dict[str, Any] | None) -> float | None:
+    extended_price = snapshot_number_deep(
+        snapshot,
+        "pPrice",
+        "prePrice",
+        "pre_market_price",
+        "premarket_price",
+        "preMarketPrice",
+        "premarketPrice",
+        "preLastPrice",
+        "extend_price",
+        "extendPrice",
+        "extended_price",
+        "extendedPrice",
+        "extended_hours_price",
+        "extendedHoursPrice",
+        "afterHoursPrice",
+        "postMarketPrice",
+        "aPrice",
+    )
+    return extended_price if extended_price is not None else snapshot_price(snapshot)
+
+
+def sector_snapshot_change(snapshot: dict[str, Any] | None) -> float | None:
+    extended_change = snapshot_number_deep(
+        snapshot,
+        "pChange",
+        "preChange",
+        "pre_market_change",
+        "premarket_change",
+        "preMarketChange",
+        "premarketChange",
+        "extend_change",
+        "extendChange",
+        "extended_change",
+        "extendedChange",
+        "extended_hours_change",
+        "extendedHoursChange",
+        "afterHoursChange",
+        "postMarketChange",
+        "aChange",
+    )
+    return extended_change if extended_change is not None else snapshot_change(snapshot)
+
+
+def sector_snapshot_change_ratio(snapshot: dict[str, Any] | None) -> float | None:
+    extended_ratio = snapshot_number_deep(
+        snapshot,
+        "pChRatio",
+        "pChangeRatio",
+        "preChRatio",
+        "preChangeRatio",
+        "pre_market_change_ratio",
+        "premarket_change_ratio",
+        "preMarketChangeRatio",
+        "premarketChangeRatio",
+        "extend_change_ratio",
+        "extendChangeRatio",
+        "extended_change_ratio",
+        "extendedChangeRatio",
+        "extended_hours_change_ratio",
+        "extendedHoursChangeRatio",
+        "afterHoursChangeRatio",
+        "postMarketChangeRatio",
+        "aChRatio",
+        "aChangeRatio",
+    )
+    return extended_ratio if extended_ratio is not None else snapshot_change_ratio(snapshot)
+
+
+def sector_previous_close(
+    snapshot: dict[str, Any] | None,
+    price: float | None,
+    change: float | None,
+    move_ratio: float | None,
+) -> float | None:
+    previous_close = snapshot_number_deep(
+        snapshot,
+        "previous_close",
+        "previousClose",
+        "prev_close",
+        "prevClose",
+        "preClose",
+        "pre_close",
+        "previous_day_close",
+        "previousDayClose",
+    )
+    if previous_close is not None:
+        return round(previous_close, 4)
+    if price is not None and change is not None:
+        return round(price - change, 4)
+    return previous_close_from_snapshot(price, move_ratio)
 
 
 def previous_close_from_snapshot(price: float | None, move_ratio: float | None) -> float | None:
@@ -752,6 +847,23 @@ def snapshot_number(snapshot: dict[str, Any] | None, *keys: str) -> float | None
             return float(str(value).replace(",", ""))
         except ValueError:
             continue
+    return None
+
+
+def snapshot_number_deep(snapshot: Any, *keys: str) -> float | None:
+    if isinstance(snapshot, dict):
+        value = snapshot_number(snapshot, *keys)
+        if value is not None:
+            return value
+        for nested in snapshot.values():
+            value = snapshot_number_deep(nested, *keys)
+            if value is not None:
+                return value
+    elif isinstance(snapshot, list):
+        for nested in snapshot:
+            value = snapshot_number_deep(nested, *keys)
+            if value is not None:
+                return value
     return None
 
 
