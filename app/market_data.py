@@ -15,6 +15,54 @@ LIVE_WATCHLIST = [
     "ASTS", "AMD", "ARM", "AVGO", "DELL", "INTC", "APP", "LLY",
     "APLD", "CIFR", "CRWV", "HUT", "IREN", "NBIS", "WULF",
 ]
+SECTOR_ETF_UNDERLYINGS = {
+    "SOXL": [
+        "NVDA", "AMD", "AVGO", "MU", "INTC", "AMAT", "TSM", "MRVL", "KLAC", "LRCX",
+        "ADI", "TXN", "MPWR", "QCOM", "ASML", "ARM", "NXPI", "MCHP", "ON", "GFS",
+        "TER", "COHR", "QRVO", "SWKS", "LSCC", "ALAB", "SNDK", "LITE", "WDC",
+    ],
+    "XLV": [
+        "LLY", "JNJ", "ABBV", "UNH", "MRK", "AMGN", "TMO", "ABT", "GILD", "PFE",
+        "ISRG", "BMY", "VRTX", "DHR", "CVS", "MDT", "SYK", "MCK", "ELV", "REGN",
+        "BSX", "CI", "HCA", "COR", "CAH", "EW", "BDX", "HUM", "IDXX", "A",
+        "WAT", "IQV", "VEEV", "DXCM", "GEHC", "RMD", "CNC", "BIIB", "ZTS", "MTD",
+        "LH", "DGX", "WST", "STE", "MRNA", "INCY", "ZBH", "VTRS", "COO", "BAX",
+        "CRL", "SOLV", "RVTY", "ALGN", "TECH", "PODD", "UHS", "HSIC", "DVA",
+    ],
+    "CIBR": [
+        "PANW", "CRWD", "FTNT", "CSCO", "AVGO", "NET", "ZS", "OKTA", "RBRK", "FFIV",
+        "AKAM", "ANET", "GEN", "NTAP", "FROG", "DT", "LDOS", "MSFT", "CHKP", "DDOG",
+        "INFY", "ACN", "GOOGL", "IBM", "ESTC", "BAH", "S", "QLYS", "BB", "CVLT",
+        "SAIC", "VRNS", "OTEX", "FSLY", "TENB", "NTCT", "ATEN", "ZD", "RDWR",
+    ],
+    "XLF": [
+        "JPM", "BRK-B", "V", "MA", "BAC", "GS", "WFC", "MS", "C", "AXP",
+        "SCHW", "BLK", "COF", "SPGI", "CB", "PGR", "BNY", "BX", "PNC", "USB",
+        "CME", "MRSH", "ICE", "KKR", "TRV", "AON", "HOOD", "MCO", "ALL", "TFC",
+        "APO", "AJG", "AFL", "PYPL", "STT", "MET", "FITB", "AMP", "XYZ", "PRU",
+        "NDAQ", "MSCI", "IBKR", "AIG", "HIG", "MTB", "HBAN", "NTRS", "ACGL", "COIN",
+        "CFG", "RJF", "WTW", "CBOE", "ARES", "FISV", "CPAY", "SYF", "RF", "CINF",
+        "TROW", "PFG", "FIS", "GPN", "KEY", "WRB", "BRO", "L", "EG", "IVZ",
+        "GL", "AIZ", "JKHY", "BEN", "FDS", "ERIE",
+    ],
+    "XLK": [
+        "NVDA", "AAPL", "MSFT", "AVGO", "AMD", "MU", "INTC", "CSCO", "LRCX", "AMAT",
+        "PLTR", "PANW", "KLAC", "ORCL", "TXN", "SNDK", "CRWD", "IBM", "STX", "APH",
+        "ANET", "MRVL", "ADI", "WDC", "QCOM", "CRM", "DELL", "GLW", "NOW", "ACN",
+        "ADBE", "FTNT", "INTU", "CDNS", "DDOG", "SNPS", "HPE", "MSI", "LITE", "MPWR",
+        "TER", "COHR", "TEL", "KEYS", "CIEN", "NXPI", "ADSK", "FLEX", "MCHP", "NTAP",
+        "WDAY", "ROP", "JBL", "ON", "TDY", "Q", "CTSH", "HPQ", "FICO", "FSLR",
+        "VRSN", "FFIV", "SMCI", "AKAM", "ZBRA", "CDW", "PTC", "GEN", "TYL", "TRMB",
+        "GDDY", "IT", "SWKS",
+    ],
+}
+SECTOR_ETF_NAMES = {
+    "SOXL": "Semiconductors",
+    "XLV": "Healthcare",
+    "CIBR": "Cybersecurity",
+    "XLF": "Financials",
+    "XLK": "Technology",
+}
 INTRADAY_EMA_SESSIONS = ["PRE", "RTH", "ATH"]
 WEBULL_BATCH_BAR_LIMIT = 20
 MARKET_TIMEZONE = ZoneInfo("America/New_York")
@@ -174,6 +222,236 @@ def build_live_prices(
     }
 
 
+def build_sector_movers(
+    webull: WebullService,
+    symbols: str = ",".join(SECTOR_ETF_UNDERLYINGS.keys()),
+    limit: int = 4,
+    risk_amount: float = A_PLUS_PLUS_MAX_RISK,
+    stop_mode: str = A_PLUS_PLUS_STOP_MODE_FIXED,
+    fixed_stop_buffer: float = A_PLUS_PLUS_STOP_BUFFER,
+) -> dict[str, Any]:
+    selected_etfs = [symbol for symbol in parse_symbols(symbols) if symbol in SECTOR_ETF_UNDERLYINGS]
+    if not selected_etfs:
+        selected_etfs = list(SECTOR_ETF_UNDERLYINGS)
+
+    groups = []
+    errors = []
+    skipped_symbols_by_etf = {}
+    used_mover_symbols = set()
+    all_symbols = unique_symbols([
+        symbol
+        for etf in selected_etfs
+        for symbol in [etf, *SECTOR_ETF_UNDERLYINGS[etf]]
+    ])
+    snapshot_payload = build_sector_snapshot_quotes(webull, all_symbols)
+    quotes_by_symbol = {
+        str(quote.get("symbol") or "").upper(): quote
+        for quote in snapshot_payload.get("quotes", [])
+    }
+    skipped_symbols = set(snapshot_payload.get("skipped_symbols", []))
+    for etf in selected_etfs:
+        etf_quote = quotes_by_symbol.get(etf)
+        etf_move_pct = quote_move_percent(etf_quote)
+        direction = quote_trade_direction(etf_move_pct)
+        candidate_movers = [
+            sector_mover_row(quote, etf, direction, etf_move_pct)
+            for symbol in SECTOR_ETF_UNDERLYINGS[etf]
+            if (quote := quotes_by_symbol.get(symbol))
+        ]
+        candidate_movers = [row for row in candidate_movers if row]
+        movers = [
+            row
+            for row in sorted(candidate_movers, key=lambda row: sector_mover_sort_key(row, direction))
+            if row["symbol"] not in used_mover_symbols
+        ][:limit]
+        used_mover_symbols.update(row["symbol"] for row in movers)
+        groups.append({
+            "etf": etf,
+            "name": SECTOR_ETF_NAMES.get(etf, etf),
+            "direction": direction,
+            "etf_move_pct": etf_move_pct,
+            "etf_price": number_or_none(etf_quote, "scanner_price", "price"),
+            "rows": movers,
+            "underlying_count": len(SECTOR_ETF_UNDERLYINGS[etf]),
+            "skipped_symbols": [symbol for symbol in SECTOR_ETF_UNDERLYINGS[etf] if symbol in skipped_symbols],
+        })
+        if groups[-1]["skipped_symbols"]:
+            skipped_symbols_by_etf[etf] = groups[-1]["skipped_symbols"]
+    if snapshot_payload.get("errors"):
+        errors.extend(snapshot_payload["errors"])
+
+    return {
+        "ok": not errors,
+        "source": "webull",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "limit": limit,
+        "groups": groups,
+        "errors": errors,
+        "skipped_symbols": skipped_symbols_by_etf,
+}
+
+
+def build_sector_snapshot_quotes(webull: WebullService, symbols: list[str]) -> dict[str, Any]:
+    quotes_by_symbol: dict[str, dict[str, Any]] = {}
+    errors = []
+    skipped_symbols = []
+    for chunk in symbol_chunks(unique_symbols(symbols), 25):
+        payload = build_sector_snapshot_chunk(webull, chunk)
+        for quote in payload.get("quotes", []):
+            symbol = str(quote.get("symbol") or "").upper()
+            if symbol and symbol not in quotes_by_symbol:
+                quotes_by_symbol[symbol] = quote
+        skipped_symbols.extend(payload.get("skipped_symbols", []))
+        if payload.get("errors"):
+            errors.append({"symbols": chunk, "errors": payload["errors"]})
+    return {
+        "ok": not errors,
+        "quotes": list(quotes_by_symbol.values()),
+        "errors": errors,
+        "skipped_symbols": skipped_symbols,
+    }
+
+
+def build_sector_snapshot_chunk(webull: WebullService, symbols: list[str]) -> dict[str, Any]:
+    response = webull.market_snapshot(
+        symbols,
+        Category.US_STOCK.name,
+        extend_hour_required=True,
+        overnight_required=False,
+    )
+    payload = {
+        "ok": bool(response.get("ok")),
+        "quotes": sector_snapshot_quotes(response.get("data")),
+        "errors": [] if response.get("ok") else [{"source": "snapshot", "error": response}],
+    }
+    if payload.get("ok"):
+        return {**payload, "skipped_symbols": []}
+    if invalid_symbol_errors(payload) and len(symbols) > 1:
+        midpoint = max(1, len(symbols) // 2)
+        left = build_sector_snapshot_chunk(webull, symbols[:midpoint])
+        right = build_sector_snapshot_chunk(webull, symbols[midpoint:])
+        return {
+            "ok": bool(left.get("ok") and right.get("ok")),
+            "quotes": [*left.get("quotes", []), *right.get("quotes", [])],
+            "errors": [*left.get("errors", []), *right.get("errors", [])],
+            "skipped_symbols": [*left.get("skipped_symbols", []), *right.get("skipped_symbols", [])],
+        }
+    if invalid_symbol_errors(payload) and len(symbols) == 1:
+        return {
+            "ok": True,
+            "quotes": [],
+            "errors": [],
+            "skipped_symbols": symbols,
+        }
+    return {**payload, "skipped_symbols": []}
+
+
+def sector_snapshot_quotes(data: Any) -> list[dict[str, Any]]:
+    quotes = []
+    for item in find_snapshot_list(data):
+        symbol = str(item.get("symbol") or item.get("ticker") or item.get("code") or "").upper()
+        price = snapshot_price(item)
+        move_pct = snapshot_change_ratio(item)
+        previous_close = previous_close_from_snapshot(price, move_pct)
+        quotes.append({
+            "symbol": symbol,
+            "price": price,
+            "scanner_price": price,
+            "change": snapshot_change(item),
+            "change_ratio": move_pct,
+            "previous_day": {"close": previous_close} if previous_close is not None else {},
+        })
+    return quotes
+
+
+def previous_close_from_snapshot(price: float | None, move_ratio: float | None) -> float | None:
+    if price is None or move_ratio is None:
+        return None
+    ratio = move_ratio / 100 if abs(move_ratio) > 1 else move_ratio
+    denominator = 1 + ratio
+    if denominator <= 0:
+        return None
+    return round(price / denominator, 4)
+
+
+def invalid_symbol_errors(payload: dict[str, Any]) -> bool:
+    return any(
+        (item.get("error") or {}).get("error_code") == "INVALID_SYMBOL"
+        for item in payload.get("errors", [])
+        if isinstance(item, dict)
+    )
+
+
+def unique_symbols(symbols: list[str]) -> list[str]:
+    output = []
+    seen = set()
+    for symbol in symbols:
+        normalized = str(symbol or "").strip().upper()
+        if normalized and normalized not in seen:
+            output.append(normalized)
+            seen.add(normalized)
+    return output
+
+
+def quote_trade_direction(move_pct: float | None) -> str:
+    if move_pct is None:
+        return "Neutral"
+    if move_pct > 0:
+        return "Long"
+    if move_pct < 0:
+        return "Short"
+    return "Neutral"
+
+
+def sector_mover_row(quote: dict[str, Any], etf: str, direction: str, etf_move_pct: float | None) -> dict[str, Any] | None:
+    symbol = str(quote.get("symbol") or "").upper()
+    price = number_or_none(quote, "scanner_price", "price")
+    if not symbol or price is None:
+        return None
+    return {
+        "symbol": symbol,
+        "etf": etf,
+        "action": direction,
+        "price": price,
+        "previous_close": number_or_none(quote.get("previous_day"), "close"),
+        "move_pct": quote_move_percent(quote),
+        "etf_move_pct": etf_move_pct,
+        "trend": cloud_status(quote.get("ema_10m") or {}, ["5", "12"], ["34", "50"]),
+        "structure": (quote.get("structure_10m") or {}).get("status", "Unknown"),
+        "cloud_bias": (quote.get("ema_10m_cloud") or {}).get("bias", ""),
+        "latest_10m_time": quote.get("latest_10m_time"),
+    }
+
+
+def quote_move_percent(quote: dict[str, Any] | None) -> float | None:
+    if not quote:
+        return None
+    price = number_or_none(quote, "scanner_price", "price")
+    previous_close = number_or_none(quote.get("previous_day"), "close")
+    if price is not None and previous_close is not None and previous_close > 0:
+        return ((price - previous_close) / previous_close) * 100
+    snapshot_move = number_or_none(quote, "change_ratio")
+    if snapshot_move is None:
+        return None
+    return snapshot_move * 100 if abs(snapshot_move) <= 1 else snapshot_move
+
+
+def sector_mover_sort_key(row: dict[str, Any], direction: str) -> tuple[float, str]:
+    move = row.get("move_pct")
+    if move is None:
+        return (float("inf"), row.get("symbol", ""))
+    if direction == "Long":
+        return (-move, row.get("symbol", ""))
+    if direction == "Short":
+        return (move, row.get("symbol", ""))
+    return (-abs(move), row.get("symbol", ""))
+
+
+def number_or_none(item: dict[str, Any] | None, *keys: str) -> float | None:
+    value = snapshot_number(item, *keys)
+    return round(value, 4) if value is not None else None
+
+
 def previous_daily_range(candles: list[dict[str, Any]]) -> dict[str, Any] | None:
     today = datetime.now(MARKET_TIMEZONE).date().isoformat()
     completed = [
@@ -189,12 +467,13 @@ def previous_daily_range(candles: list[dict[str, Any]]) -> dict[str, Any] | None
     if not completed:
         return None
     candle = completed[-1]
-    return {
+    previous_day = {
         "date": candle.get("session_date"),
         "high": round(candle["high"], 4),
         "low": round(candle["low"], 4),
         "close": round(candle["close"], 4),
     }
+    return previous_day
 
 
 def premarket_range(candles: list[dict[str, Any]]) -> dict[str, Any] | None:

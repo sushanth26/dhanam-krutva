@@ -7,7 +7,7 @@ from webull.data.common.category import Category
 
 from app.config import get_settings
 from app.dependencies import service
-from app.market_data import LIVE_WATCHLIST, build_live_prices
+from app.market_data import LIVE_WATCHLIST, build_live_prices, build_sector_movers
 from app.watchlists import WatchlistStore
 from app.webull_service import WebullConfigurationError
 
@@ -46,6 +46,36 @@ def webull_live_prices(
         payload = build_live_prices(
             service(),
             symbols,
+            risk_amount=risk_amount,
+            stop_mode=stop_mode,
+            fixed_stop_buffer=fixed_stop_buffer,
+        )
+        if payload.get("ok"):
+            _live_price_cache[cache_key] = (time.time(), payload)
+        return payload
+    except WebullConfigurationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/sector-movers")
+def webull_sector_movers(
+    symbols: str = Query(default="SOXL,XLV,CIBR,XLF,XLK"),
+    limit: int = Query(default=4, ge=1, le=10),
+    risk_amount: float = Query(default=100, ge=1, le=10000),
+    stop_mode: str = Query(default="fixed", pattern="^(fixed|auto)$"),
+    fixed_stop_buffer: float = Query(default=1, ge=0.05, le=25),
+    force: bool = Query(default=False),
+):
+    try:
+        cache_key = (f"sector:{symbols.upper()}:{limit}", risk_amount, stop_mode, fixed_stop_buffer)
+        if not force:
+            cached_at, cached_payload = _live_price_cache.get(cache_key, (0, {}))
+            if cached_payload and time.time() - cached_at < LIVE_PRICE_CACHE_TTL_SECONDS:
+                return {**cached_payload, "cache": "hit"}
+        payload = build_sector_movers(
+            service(),
+            symbols,
+            limit=limit,
             risk_amount=risk_amount,
             stop_mode=stop_mode,
             fixed_stop_buffer=fixed_stop_buffer,

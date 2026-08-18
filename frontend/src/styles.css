@@ -4155,6 +4155,227 @@ select {
   display: none;
 }
 
+.sectors-page {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sector-group-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  min-width: 0;
+}
+
+.sectors-hero {
+  align-items: center;
+}
+
+.sectors-metric-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sectors-movers-bucket,
+.sectors-movers-bucket .bucket-title {
+  min-width: 0;
+}
+
+.sectors-movers-bucket .bucket-heading {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sectors-movers-bucket .bucket-heading h3 {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sectors-movers-bucket .bucket-heading p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sectors-table {
+  min-width: 0;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.sectors-movers-bucket .live-price-table-wrap {
+  overflow-x: hidden;
+}
+
+.sectors-table th,
+.sectors-table td {
+  overflow: hidden;
+  padding: 8px 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sectors-table th:nth-child(1),
+.sectors-table td:nth-child(1) {
+  width: 17%;
+}
+
+.sectors-table th:nth-child(2),
+.sectors-table td:nth-child(2) {
+  width: 16%;
+}
+
+.sectors-table th:nth-child(3),
+.sectors-table td:nth-child(3) {
+  width: 22%;
+}
+
+.sectors-table th:nth-child(4),
+.sectors-table td:nth-child(4) {
+  width: 23%;
+}
+
+.sectors-table th:nth-child(5),
+.sectors-table td:nth-child(5) {
+  width: 22%;
+}
+
+.sectors-table th:nth-child(n + 2),
+.sectors-table td:nth-child(n + 2) {
+  text-align: right;
+}
+
+.sectors-table tr.sector-up td {
+  background: rgba(34, 197, 94, 0.09);
+}
+
+.sectors-table tr.sector-down td {
+  background: rgba(248, 113, 113, 0.09);
+}
+
+.sectors-table tr.sector-flat td {
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.sectors-table td:first-child strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sectors-table .direction-pill {
+  font-size: 10px;
+  justify-content: center;
+  min-height: 24px;
+  min-width: 0;
+  padding: 0 5px;
+  width: 100%;
+}
+
+.sector-move-cell {
+  font-weight: 900;
+}
+
+.sector-move-cell.up {
+  color: #86efac;
+}
+
+.sector-move-cell.down {
+  color: #fca5a5;
+}
+
+.sector-direction-pill {
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 900;
+  min-height: 22px;
+  padding: 0 8px;
+  vertical-align: middle;
+}
+
+.sector-direction-pill.long {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.42);
+  color: #86efac;
+}
+
+.sector-direction-pill.short {
+  background: rgba(248, 113, 113, 0.16);
+  border-color: rgba(248, 113, 113, 0.48);
+  color: #fca5a5;
+}
+
+.sector-direction-pill.neutral {
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+}
+
+@media (max-width: 560px) {
+  .sectors-page {
+    gap: 10px;
+  }
+
+  .sectors-hero {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .sectors-hero .live-price-actions,
+  .sectors-hero .live-price-actions button {
+    width: 100%;
+  }
+
+  .sectors-metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sectors-metric-grid .scanner-metric {
+    padding: 8px 6px;
+  }
+
+  .sectors-metric-grid .scanner-metric span {
+    font-size: 9px;
+  }
+
+  .sectors-metric-grid .scanner-metric strong {
+    font-size: 14px;
+  }
+
+  .sectors-movers-bucket .bucket-heading {
+    align-items: center;
+    padding: 8px;
+  }
+
+  .sectors-movers-bucket .bucket-heading h3 {
+    font-size: 13px;
+  }
+
+  .sector-direction-pill {
+    font-size: 9px;
+    min-height: 20px;
+    padding: 0 6px;
+  }
+
+  .sectors-table th,
+  .sectors-table td {
+    font-size: 10px;
+    padding: 7px 3px;
+  }
+
+  .sectors-table .direction-pill {
+    font-size: 9px;
+    min-height: 22px;
+    padding: 0 3px;
+  }
+}
+
 .scanner-sort-button {
   align-items: center;
   background: transparent;

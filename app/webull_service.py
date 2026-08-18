@@ -145,13 +145,19 @@ class WebullService:
             )
         )
 
-    def market_snapshot(self, symbols: str | list[str], category: str) -> dict[str, Any]:
+    def market_snapshot(
+        self,
+        symbols: str | list[str],
+        category: str,
+        extend_hour_required: bool = False,
+        overnight_required: bool = False,
+    ) -> dict[str, Any]:
         return self._call(
             lambda: self._market_data_client().market_data.get_snapshot(
                 symbols=symbols,
                 category=category,
-                extend_hour_required=False,
-                overnight_required=False,
+                extend_hour_required=extend_hour_required,
+                overnight_required=overnight_required,
             )
         )
 
