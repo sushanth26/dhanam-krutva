@@ -4155,6 +4155,227 @@ select {
   display: none;
 }
 
+.sectors-page {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sector-group-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  min-width: 0;
+}
+
+.sectors-hero {
+  align-items: center;
+}
+
+.sectors-metric-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sectors-movers-bucket,
+.sectors-movers-bucket .bucket-title {
+  min-width: 0;
+}
+
+.sectors-movers-bucket .bucket-heading {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sectors-movers-bucket .bucket-heading h3 {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sectors-movers-bucket .bucket-heading p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sectors-table {
+  min-width: 0;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.sectors-movers-bucket .live-price-table-wrap {
+  overflow-x: hidden;
+}
+
+.sectors-table th,
+.sectors-table td {
+  overflow: hidden;
+  padding: 8px 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sectors-table th:nth-child(1),
+.sectors-table td:nth-child(1) {
+  width: 17%;
+}
+
+.sectors-table th:nth-child(2),
+.sectors-table td:nth-child(2) {
+  width: 16%;
+}
+
+.sectors-table th:nth-child(3),
+.sectors-table td:nth-child(3) {
+  width: 22%;
+}
+
+.sectors-table th:nth-child(4),
+.sectors-table td:nth-child(4) {
+  width: 23%;
+}
+
+.sectors-table th:nth-child(5),
+.sectors-table td:nth-child(5) {
+  width: 22%;
+}
+
+.sectors-table th:nth-child(n + 2),
+.sectors-table td:nth-child(n + 2) {
+  text-align: right;
+}
+
+.sectors-table tr.sector-up td {
+  background: rgba(34, 197, 94, 0.09);
+}
+
+.sectors-table tr.sector-down td {
+  background: rgba(248, 113, 113, 0.09);
+}
+
+.sectors-table tr.sector-flat td {
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.sectors-table td:first-child strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sectors-table .direction-pill {
+  font-size: 10px;
+  justify-content: center;
+  min-height: 24px;
+  min-width: 0;
+  padding: 0 5px;
+  width: 100%;
+}
+
+.sector-move-cell {
+  font-weight: 900;
+}
+
+.sector-move-cell.up {
+  color: #86efac;
+}
+
+.sector-move-cell.down {
+  color: #fca5a5;
+}
+
+.sector-direction-pill {
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 900;
+  min-height: 22px;
+  padding: 0 8px;
+  vertical-align: middle;
+}
+
+.sector-direction-pill.long {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.42);
+  color: #86efac;
+}
+
+.sector-direction-pill.short {
+  background: rgba(248, 113, 113, 0.16);
+  border-color: rgba(248, 113, 113, 0.48);
+  color: #fca5a5;
+}
+
+.sector-direction-pill.neutral {
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+}
+
+@media (max-width: 560px) {
+  .sectors-page {
+    gap: 10px;
+  }
+
+  .sectors-hero {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .sectors-hero .live-price-actions,
+  .sectors-hero .live-price-actions button {
+    width: 100%;
+  }
+
+  .sectors-metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sectors-metric-grid .scanner-metric {
+    padding: 8px 6px;
+  }
+
+  .sectors-metric-grid .scanner-metric span {
+    font-size: 9px;
+  }
+
+  .sectors-metric-grid .scanner-metric strong {
+    font-size: 14px;
+  }
+
+  .sectors-movers-bucket .bucket-heading {
+    align-items: center;
+    padding: 8px;
+  }
+
+  .sectors-movers-bucket .bucket-heading h3 {
+    font-size: 13px;
+  }
+
+  .sector-direction-pill {
+    font-size: 9px;
+    min-height: 20px;
+    padding: 0 6px;
+  }
+
+  .sectors-table th,
+  .sectors-table td {
+    font-size: 10px;
+    padding: 7px 3px;
+  }
+
+  .sectors-table .direction-pill {
+    font-size: 9px;
+    min-height: 22px;
+    padding: 0 3px;
+  }
+}
+
 .scanner-sort-button {
   align-items: center;
   background: transparent;
@@ -5663,20 +5884,85 @@ select {
   display: block;
 }
 
+.watchlist-chart-board {
+  display: grid;
+  gap: 6px;
+}
+
+.watchlist-chart-legend {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.watchlist-chart-legend span {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid var(--watchlist-color);
+  border-left: 4px solid var(--watchlist-color);
+  border-radius: 4px;
+  color: #f8fafc;
+  display: inline-flex;
+  gap: 7px;
+  min-height: 24px;
+  padding: 0 8px;
+}
+
+.watchlist-chart-legend b {
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.watchlist-chart-legend em {
+  align-items: center;
+  background: var(--watchlist-color);
+  border-radius: 999px;
+  color: #06111f;
+  display: inline-flex;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 900;
+  height: 18px;
+  justify-content: center;
+  min-width: 20px;
+  padding: 0 6px;
+}
+
 .tradingview-chart-grid {
   display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(clamp(170px, 13vw, 260px), 1fr));
 }
 
 .tradingview-chart-card {
   background: #080d14;
   border: 0;
+  border-left: 3px solid var(--watchlist-color);
   border-radius: 0;
   display: block;
-  min-height: 430px;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.24);
+  height: clamp(175px, calc((100vh - 160px) / 3), 270px);
+  min-height: 0;
   overflow: hidden;
   position: relative;
+}
+
+.chart-open-hit-area {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  inset: 0;
+  min-height: 0;
+  padding: 0;
+  position: absolute;
+  z-index: 3;
+}
+
+.chart-open-hit-area:hover {
+  background: rgba(15, 23, 42, 0.08);
 }
 
 .tradingview-chart-label {
@@ -5686,21 +5972,107 @@ select {
   border-radius: 4px;
   color: #f8fafc;
   display: inline-flex;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 900;
-  left: 8px;
-  min-height: 24px;
-  padding: 0 8px;
+  left: 5px;
+  min-height: 18px;
+  padding: 0 6px;
   pointer-events: none;
   position: absolute;
-  top: 8px;
+  top: 5px;
+  z-index: 2;
+}
+
+.tradingview-watchlist-label {
+  align-items: center;
+  background: var(--watchlist-color);
+  border-radius: 4px;
+  color: #06111f;
+  display: inline-flex;
+  font-size: 9px;
+  font-weight: 900;
+  max-width: 46%;
+  min-height: 18px;
+  overflow: hidden;
+  padding: 0 6px;
+  pointer-events: none;
+  position: absolute;
+  right: 5px;
+  text-overflow: ellipsis;
+  top: 5px;
+  white-space: nowrap;
   z-index: 2;
 }
 
 .tradingview-widget-frame {
   border: 0;
-  height: 430px;
-  min-height: 430px;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+}
+
+.chart-modal-backdrop {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 18px;
+  position: fixed;
+  z-index: 1000;
+}
+
+.chart-modal {
+  background: #080d14;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: min(860px, calc(100vh - 36px));
+  overflow: hidden;
+  width: min(1500px, calc(100vw - 36px));
+}
+
+.chart-modal-toolbar {
+  align-items: center;
+  background: #0b121d;
+  border-bottom: 1px solid #1f2f45;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 8px 10px;
+}
+
+.chart-modal-toolbar strong {
+  color: #f8fafc;
+  display: block;
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.chart-modal-toolbar span {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.chart-modal-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.chart-modal-actions button {
+  min-height: 32px;
+}
+
+.chart-modal-frame {
+  border: 0;
+  height: 100%;
   width: 100%;
 }
 
@@ -5732,12 +6104,34 @@ select {
   }
 
   .tradingview-chart-card {
-    min-height: 360px;
+    min-height: 260px;
   }
 
   .tradingview-widget-frame {
-    height: 360px;
-    min-height: 360px;
+    height: 260px;
+    min-height: 260px;
+  }
+
+  .chart-modal-backdrop {
+    padding: 8px;
+  }
+
+  .chart-modal {
+    height: calc(100vh - 16px);
+    width: calc(100vw - 16px);
+  }
+
+  .chart-modal-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .chart-modal-actions {
+    justify-content: stretch;
+  }
+
+  .chart-modal-actions button {
+    flex: 1 1 auto;
   }
 
   .daily-list-editor {
