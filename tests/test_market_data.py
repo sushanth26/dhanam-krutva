@@ -280,6 +280,34 @@ def test_build_sector_movers_prefers_premarket_snapshot_fields():
     assert row["move_pct"] == 1
 
 
+def test_build_sector_movers_tags_distance_to_5_12_cloud():
+    class FakeWebull:
+        def market_snapshot(self, symbols, category, extend_hour_required=False, overnight_required=False):
+            return {
+                "ok": True,
+                "data": [
+                    {"symbol": symbol, "last_price": 100, "change_ratio": 0.01}
+                    for symbol in symbols
+                ],
+            }
+
+        def batch_history_bars(self, symbols, category, timespan, count, real_time_required=True, trading_sessions=None):
+            bars = [candle(index, 100) for index in range(30)]
+            return {
+                "ok": True,
+                "data": {"result": [{"symbol": symbol, "result": bars} for symbol in symbols]},
+            }
+
+    payload = build_sector_movers(FakeWebull(), "SOXL", limit=1)
+    cloud = payload["groups"][0]["rows"][0]["cloud_5_12"]
+
+    assert cloud["status"] == "Inside"
+    assert cloud["side"] == "inside"
+    assert cloud["distance_pct"] == 0
+    assert cloud["low"] == 100
+    assert cloud["high"] == 100
+
+
 def test_aggregate_by_minutes_rolls_5m_bars_into_10m_buckets():
     candles = [candle(0, 10), candle(1, 11), candle(2, 12), candle(3, 13)]
 

@@ -279,6 +279,7 @@ def build_sector_movers(
             skipped_symbols_by_etf[etf] = groups[-1]["skipped_symbols"]
     if snapshot_payload.get("errors"):
         errors.extend(snapshot_payload["errors"])
+    cloud_payload = enrich_sector_mover_clouds(webull, groups)
 
     return {
         "ok": not errors,
@@ -287,8 +288,37 @@ def build_sector_movers(
         "limit": limit,
         "groups": groups,
         "errors": errors,
+        "cloud_errors": cloud_payload.get("errors", []),
         "skipped_symbols": skipped_symbols_by_etf,
 }
+
+
+def enrich_sector_mover_clouds(webull: WebullService, groups: list[dict[str, Any]]) -> dict[str, Any]:
+    symbols = unique_symbols([
+        row["symbol"]
+        for group in groups
+        for row in group.get("rows", [])
+        if row.get("symbol")
+    ])
+    if not symbols or not hasattr(webull, "batch_history_bars"):
+        return {"ok": True, "errors": []}
+    response = batch_history_bars_chunked(
+        webull,
+        symbols,
+        Category.US_STOCK.name,
+        Timespan.M5.name,
+        count="120",
+        real_time_required=None,
+        trading_sessions=INTRADAY_EMA_SESSIONS,
+    )
+    if not response.get("ok"):
+        return {"ok": False, "errors": [{"source": "sector-clouds", "error": response}]}
+    bars_by_symbol = batch_bar_map(response.get("data"))
+    for group in groups:
+        for row in group.get("rows", []):
+            candles = aggregate_by_minutes(normalize_bars(bars_by_symbol.get(row["symbol"])), 10)
+            row["cloud_5_12"] = sector_cloud_distance(row.get("price"), candles)
+    return {"ok": True, "errors": []}
 
 
 def build_sector_snapshot_quotes(webull: WebullService, symbols: list[str]) -> dict[str, Any]:
@@ -514,7 +544,50 @@ def sector_mover_row(quote: dict[str, Any], etf: str, direction: str, etf_move_p
         "trend": cloud_status(quote.get("ema_10m") or {}, ["5", "12"], ["34", "50"]),
         "structure": (quote.get("structure_10m") or {}).get("status", "Unknown"),
         "cloud_bias": (quote.get("ema_10m_cloud") or {}).get("bias", ""),
+        "cloud_5_12": quote.get("cloud_5_12") or sector_cloud_from_quote(quote, price),
         "latest_10m_time": quote.get("latest_10m_time"),
+    }
+
+
+def sector_cloud_from_quote(quote: dict[str, Any], price: float | None) -> dict[str, Any] | None:
+    ema_10m = quote.get("ema_10m") or {}
+    ema5 = number_or_none(ema_10m, "5")
+    ema12 = number_or_none(ema_10m, "12")
+    if ema5 is None or ema12 is None:
+        return None
+    return sector_cloud_tag(price, ema5, ema12)
+
+
+def sector_cloud_distance(price: float | None, ten_minute_candles: list[dict[str, Any]]) -> dict[str, Any] | None:
+    ema_10m = ema_values(ten_minute_candles, [5, 12])
+    return sector_cloud_from_quote({"ema_10m": ema_10m}, price)
+
+
+def sector_cloud_tag(price: float | None, ema5: float, ema12: float) -> dict[str, Any] | None:
+    if price is None:
+        return None
+    cloud_low = min(ema5, ema12)
+    cloud_high = max(ema5, ema12)
+    if cloud_low <= price <= cloud_high:
+        distance = 0
+        status = "Inside"
+        side = "inside"
+    elif price > cloud_high:
+        distance = price - cloud_high
+        status = "Above"
+        side = "above"
+    else:
+        distance = cloud_low - price
+        status = "Below"
+        side = "below"
+    distance_pct = (distance / price) * 100 if price else None
+    return {
+        "status": status,
+        "side": side,
+        "distance": round(distance, 4),
+        "distance_pct": round(distance_pct, 2) if distance_pct is not None else None,
+        "low": round(cloud_low, 4),
+        "high": round(cloud_high, 4),
     }
 
 

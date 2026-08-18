@@ -2727,6 +2727,7 @@ function SectorsPage({ groups, updatedText, loading, onRefresh }) {
                     <th>Last</th>
                     <th>Prev</th>
                     <th>Move</th>
+                    <th>5/12</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2737,9 +2738,10 @@ function SectorsPage({ groups, updatedText, loading, onRefresh }) {
                       <td data-label="Last" className="price-cell">{formatPrice(row.price)}</td>
                       <td data-label="Prev Close" className="price-cell">{formatPrice(row.previous_close)}</td>
                       <td data-label="Move" className={`price-cell sector-move-cell ${moveTone(row.move_pct)}`}>{formatSignedPercent(row.move_pct)}</td>
+                      <td data-label="5/12 Cloud"><SectorCloudTag cloud={row.cloud_5_12} /></td>
                     </tr>
                   )) : (
-                    <tr className="scanner-empty-row"><td colSpan="5">No underlying movers loaded.</td></tr>
+                    <tr className="scanner-empty-row"><td colSpan="6">No underlying movers loaded.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -2765,6 +2767,24 @@ function SectorsPage({ groups, updatedText, loading, onRefresh }) {
         )}
       </div>
     </section>
+  );
+}
+
+function SectorCloudTag({ cloud }) {
+  if (!cloud) return <span className="sector-cloud-tag unknown">-</span>;
+  const distancePct = Number(cloud.distance_pct);
+  const label = cloud.status === "Inside"
+    ? "In"
+    : Number.isFinite(distancePct)
+      ? `${distancePct.toFixed(1)}%`
+      : cloud.status || "-";
+  return (
+    <span
+      className={`sector-cloud-tag ${String(cloud.side || cloud.status || "unknown").toLowerCase()}`}
+      title={`5/12 cloud ${formatPrice(cloud.low)}-${formatPrice(cloud.high)}`}
+    >
+      {label}
+    </span>
   );
 }
 
