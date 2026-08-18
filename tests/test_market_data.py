@@ -280,7 +280,7 @@ def test_build_sector_movers_prefers_premarket_snapshot_fields():
     assert row["move_pct"] == 1
 
 
-def test_build_sector_movers_tags_distance_to_5_12_cloud():
+def test_build_sector_movers_tags_dollar_distance_to_8_ema():
     class FakeWebull:
         def market_snapshot(self, symbols, category, extend_hour_required=False, overnight_required=False):
             return {
@@ -299,13 +299,14 @@ def test_build_sector_movers_tags_distance_to_5_12_cloud():
             }
 
     payload = build_sector_movers(FakeWebull(), "SOXL", limit=1)
-    cloud = payload["groups"][0]["rows"][0]["cloud_5_12"]
+    distance = payload["groups"][0]["rows"][0]["ema_8_distance"]
 
-    assert cloud["status"] == "Inside"
-    assert cloud["side"] == "inside"
-    assert cloud["distance_pct"] == 0
-    assert cloud["low"] == 100
-    assert cloud["high"] == 100
+    assert distance["status"] == "At"
+    assert distance["side"] == "at"
+    assert distance["distance"] == 0
+    assert distance["distance_pct"] == 0
+    assert distance["ema"] == 100
+    assert distance["period"] == 8
 
 
 def test_aggregate_by_minutes_rolls_5m_bars_into_10m_buckets():
