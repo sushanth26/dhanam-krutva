@@ -2773,13 +2773,21 @@ function SectorsPage({ groups, updatedText, loading, onRefresh }) {
 function SectorEmaTag({ distance }) {
   if (!distance) return <span className="sector-ema-tag unknown">-</span>;
   const dollars = Number(distance.distance);
+  const distancePct = Math.abs(Number(distance.distance_pct));
+  const proximity = !Number.isFinite(distancePct)
+    ? "unknown"
+    : distancePct <= 0.35
+      ? "near"
+      : distancePct <= 1
+        ? "mid"
+        : "far";
   const label = Number.isFinite(dollars)
     ? `${dollars > 0 ? "+" : ""}$${Math.abs(dollars).toFixed(2)}`
     : "-";
   return (
     <span
-      className={`sector-ema-tag ${String(distance.side || distance.status || "unknown").toLowerCase()}`}
-      title={`8 EMA ${formatPrice(distance.ema)}`}
+      className={`sector-ema-tag ${proximity}`}
+      title={`8 EMA ${formatPrice(distance.ema)} · ${distance.status || ""}`}
     >
       {label}
     </span>
