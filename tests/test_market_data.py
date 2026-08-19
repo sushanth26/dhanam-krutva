@@ -203,6 +203,21 @@ def test_build_sector_movers_shows_both_sides_irrespective_of_etf_direction():
         "COF": -1.7,
         "XLK": 1.5,
     }
+    ema_distances = {
+        "QCOM": 0.05,
+        "TSM": 0.1,
+        "SNDK": 0.2,
+        "NVDA": 0.3,
+        "AMD": -0.05,
+        "INTC": -0.1,
+        "LRCX": -0.2,
+        "COF": -0.05,
+        "MA": -0.1,
+        "MS": -0.2,
+        "C": -0.3,
+        "GS": 0.05,
+        "V": 0.2,
+    }
 
     class FakeWebull:
         def market_snapshot(self, symbols, category, extend_hour_required=False, overnight_required=False):
@@ -220,17 +235,32 @@ def test_build_sector_movers_shows_both_sides_irrespective_of_etf_direction():
                 ],
             }
 
+        def batch_history_bars(self, symbols, category, timespan, count, real_time_required=True, trading_sessions=None):
+            result = []
+            for symbol in symbols:
+                price = 100 + moves.get(symbol, 0)
+                if timespan == "D":
+                    bars = [
+                        {"session_date": "2000-01-01", "open": 100, "high": 101, "low": 99, "close": 100},
+                        {"session_date": "2000-01-02", "open": 100, "high": 101, "low": 99, "close": 100},
+                    ]
+                else:
+                    distance = ema_distances.get(symbol, 10)
+                    bars = [candle(index, price - distance) for index in range(30)]
+                result.append({"symbol": symbol, "result": bars})
+            return {"ok": True, "data": {"result": result}}
+
     payload = build_sector_movers(FakeWebull(), "SOXL,XLF,XLK", limit=4)
 
     soxl, xlf, xlk = payload["groups"]
     assert soxl["direction"] == "Long"
-    assert [row["symbol"] for row in soxl["rows"]] == ["NVDA", "SNDK", "QCOM", "TSM", "LRCX", "AMD", "INTC"]
+    assert [row["symbol"] for row in soxl["rows"]] == ["QCOM", "TSM", "SNDK", "NVDA", "AMD", "INTC", "LRCX"]
     assert "COHR" not in [row["symbol"] for row in soxl["rows"]]
     assert [row["action"] for row in soxl["rows"]] == ["Long", "Long", "Long", "Long", "Short", "Short", "Short"]
     assert soxl["long_count"] == 4
     assert soxl["short_count"] == 3
     assert xlf["direction"] == "Short"
-    assert [row["symbol"] for row in xlf["rows"]] == ["MS", "C", "MA", "COF", "GS", "V"]
+    assert [row["symbol"] for row in xlf["rows"]] == ["COF", "MA", "MS", "C", "GS", "V"]
     assert [row["action"] for row in xlf["rows"]] == ["Short", "Short", "Short", "Short", "Long", "Long"]
     assert xlf["long_count"] == 2
     assert xlf["short_count"] == 4
@@ -343,7 +373,13 @@ def test_build_sector_movers_tags_dollar_distance_to_8_ema():
             }
 
         def batch_history_bars(self, symbols, category, timespan, count, real_time_required=True, trading_sessions=None):
-            bars = [candle(index, 100) for index in range(30)]
+            if timespan == "D":
+                bars = [
+                    {"session_date": "2000-01-01", "open": 99, "high": 100, "low": 98, "close": 99},
+                    {"session_date": "2000-01-02", "open": 99, "high": 100, "low": 98, "close": 99},
+                ]
+            else:
+                bars = [candle(index, 100) for index in range(30)]
             return {
                 "ok": True,
                 "data": {"result": [{"symbol": symbol, "result": bars} for symbol in symbols]},

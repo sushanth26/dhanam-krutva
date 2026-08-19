@@ -271,6 +271,7 @@ def build_sector_movers(
         for quote in snapshot_payload.get("quotes", [])
     }
     skipped_symbols = set(snapshot_payload.get("skipped_symbols", []))
+    candidate_groups = []
     for etf in selected_etfs:
         etf_quote = quotes_by_symbol.get(etf)
         etf_move_pct = quote_move_percent(etf_quote)
@@ -282,6 +283,26 @@ def build_sector_movers(
             if symbol in liquid_underlyings and (quote := quotes_by_symbol.get(symbol))
         ]
         candidate_movers = [row for row in candidate_movers if row]
+        candidate_groups.append({
+            "etf": etf,
+            "etf_quote": etf_quote,
+            "direction": direction,
+            "etf_move_pct": etf_move_pct,
+            "liquid_underlyings": liquid_underlyings,
+            "candidate_movers": candidate_movers,
+        })
+    enrichment_payload = enrich_sector_mover_rows(
+        webull,
+        [{"rows": group["candidate_movers"]} for group in candidate_groups],
+    )
+
+    for candidate_group in candidate_groups:
+        etf = candidate_group["etf"]
+        etf_quote = candidate_group["etf_quote"]
+        direction = candidate_group["direction"]
+        etf_move_pct = candidate_group["etf_move_pct"]
+        liquid_underlyings = candidate_group["liquid_underlyings"]
+        candidate_movers = candidate_group["candidate_movers"]
         side_order = sector_side_order(direction)
         movers = [
             row
@@ -306,7 +327,6 @@ def build_sector_movers(
             skipped_symbols_by_etf[etf] = groups[-1]["skipped_symbols"]
     if snapshot_payload.get("errors"):
         errors.extend(snapshot_payload["errors"])
-    enrichment_payload = enrich_sector_mover_rows(webull, groups)
 
     return {
         "ok": not errors,
@@ -696,6 +716,9 @@ def sector_side_order(direction: str) -> list[str]:
 
 
 def sector_mover_sort_key(row: dict[str, Any], side: str) -> tuple[float, str]:
+    proximity = sector_ema_proximity(row)
+    if proximity is not None:
+        return (proximity, row.get("symbol", ""))
     move = row.get("move_pct")
     if move is None:
         return (float("inf"), row.get("symbol", ""))
@@ -704,6 +727,17 @@ def sector_mover_sort_key(row: dict[str, Any], side: str) -> tuple[float, str]:
     if side == "Short":
         return (move, row.get("symbol", ""))
     return (-abs(move), row.get("symbol", ""))
+
+
+def sector_ema_proximity(row: dict[str, Any]) -> float | None:
+    distance = row.get("ema_8_distance") or {}
+    distance_pct = snapshot_number(distance, "distance_pct")
+    if distance_pct is not None:
+        return abs(distance_pct)
+    dollars = snapshot_number(distance, "distance")
+    if dollars is not None:
+        return abs(dollars)
+    return None
 
 
 def number_or_none(item: dict[str, Any] | None, *keys: str) -> float | None:
