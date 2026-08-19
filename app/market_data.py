@@ -279,7 +279,7 @@ def build_sector_movers(
             skipped_symbols_by_etf[etf] = groups[-1]["skipped_symbols"]
     if snapshot_payload.get("errors"):
         errors.extend(snapshot_payload["errors"])
-    ema_payload = enrich_sector_mover_ema_distances(webull, groups)
+    enrichment_payload = enrich_sector_mover_rows(webull, groups)
 
     return {
         "ok": not errors,
@@ -288,12 +288,12 @@ def build_sector_movers(
         "limit": limit,
         "groups": groups,
         "errors": errors,
-        "ema_errors": ema_payload.get("errors", []),
+        "enrichment_errors": enrichment_payload.get("errors", []),
         "skipped_symbols": skipped_symbols_by_etf,
 }
 
 
-def enrich_sector_mover_ema_distances(webull: WebullService, groups: list[dict[str, Any]]) -> dict[str, Any]:
+def enrich_sector_mover_rows(webull: WebullService, groups: list[dict[str, Any]]) -> dict[str, Any]:
     symbols = unique_symbols([
         row["symbol"]
         for group in groups
@@ -302,7 +302,8 @@ def enrich_sector_mover_ema_distances(webull: WebullService, groups: list[dict[s
     ])
     if not symbols or not hasattr(webull, "batch_history_bars"):
         return {"ok": True, "errors": []}
-    response = batch_history_bars_chunked(
+    errors = []
+    m5_response = batch_history_bars_chunked(
         webull,
         symbols,
         Category.US_STOCK.name,
@@ -311,14 +312,32 @@ def enrich_sector_mover_ema_distances(webull: WebullService, groups: list[dict[s
         real_time_required=None,
         trading_sessions=INTRADAY_EMA_SESSIONS,
     )
-    if not response.get("ok"):
-        return {"ok": False, "errors": [{"source": "sector-ema-distance", "error": response}]}
-    bars_by_symbol = batch_bar_map(response.get("data"))
+    daily_response = batch_history_bars_chunked(
+        webull,
+        symbols,
+        Category.US_STOCK.name,
+        Timespan.D.name,
+        count="10",
+        real_time_required=None,
+    )
+    if not m5_response.get("ok"):
+        errors.append({"source": "sector-ema-distance", "error": m5_response})
+    if not daily_response.get("ok"):
+        errors.append({"source": "sector-previous-close", "error": daily_response})
+    m5_bars_by_symbol = batch_bar_map(m5_response.get("data")) if m5_response.get("ok") else {}
+    daily_bars_by_symbol = batch_bar_map(daily_response.get("data")) if daily_response.get("ok") else {}
     for group in groups:
         for row in group.get("rows", []):
-            candles = aggregate_by_minutes(normalize_bars(bars_by_symbol.get(row["symbol"])), 10)
-            row["ema_8_distance"] = sector_ema_distance(row.get("price"), candles, 8)
-    return {"ok": True, "errors": []}
+            symbol = row["symbol"]
+            if symbol in daily_bars_by_symbol:
+                previous_day = previous_daily_range(normalize_bars(daily_bars_by_symbol.get(symbol)))
+                if previous_day and previous_day.get("close") is not None:
+                    row["previous_close"] = previous_day["close"]
+                    row["move_pct"] = row_move_percent(row.get("price"), row["previous_close"])
+            if symbol in m5_bars_by_symbol:
+                candles = aggregate_by_minutes(normalize_bars(m5_bars_by_symbol.get(symbol)), 10)
+                row["ema_8_distance"] = sector_ema_distance(row.get("price"), candles, 8)
+    return {"ok": not errors, "errors": errors}
 
 
 def build_sector_snapshot_quotes(webull: WebullService, symbols: list[str]) -> dict[str, Any]:
@@ -591,12 +610,19 @@ def quote_move_percent(quote: dict[str, Any] | None) -> float | None:
         return None
     price = number_or_none(quote, "scanner_price", "price")
     previous_close = number_or_none(quote.get("previous_day"), "close")
-    if price is not None and previous_close is not None and previous_close > 0:
-        return ((price - previous_close) / previous_close) * 100
+    explicit_move = row_move_percent(price, previous_close)
+    if explicit_move is not None:
+        return explicit_move
     snapshot_move = number_or_none(quote, "change_ratio")
     if snapshot_move is None:
         return None
     return snapshot_move * 100 if abs(snapshot_move) <= 1 else snapshot_move
+
+
+def row_move_percent(price: float | None, previous_close: float | None) -> float | None:
+    if price is not None and previous_close is not None and previous_close > 0:
+        return ((price - previous_close) / previous_close) * 100
+    return None
 
 
 def sector_mover_sort_key(row: dict[str, Any], direction: str) -> tuple[float, str]:

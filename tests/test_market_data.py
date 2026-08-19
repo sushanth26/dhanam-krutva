@@ -280,6 +280,42 @@ def test_build_sector_movers_prefers_premarket_snapshot_fields():
     assert row["move_pct"] == 1
 
 
+def test_build_sector_movers_uses_latest_daily_close_for_prev_column():
+    class FakeWebull:
+        def market_snapshot(self, symbols, category, extend_hour_required=False, overnight_required=False):
+            return {
+                "ok": True,
+                "data": [
+                    {
+                        "symbol": symbol,
+                        "last_price": 110,
+                        "change": 1,
+                        "change_ratio": 0.01,
+                    }
+                    for symbol in symbols
+                ],
+            }
+
+        def batch_history_bars(self, symbols, category, timespan, count, real_time_required=True, trading_sessions=None):
+            if timespan == "D":
+                bars = [
+                    {"session_date": "2000-01-01", "open": 100, "high": 104, "low": 98, "close": 99},
+                    {"session_date": "2000-01-02", "open": 103, "high": 109, "low": 101, "close": 105},
+                ]
+            else:
+                bars = [candle(index, 110) for index in range(30)]
+            return {
+                "ok": True,
+                "data": {"result": [{"symbol": symbol, "result": bars} for symbol in symbols]},
+            }
+
+    payload = build_sector_movers(FakeWebull(), "SOXL", limit=1)
+    row = payload["groups"][0]["rows"][0]
+
+    assert row["previous_close"] == 105
+    assert round(row["move_pct"], 2) == 4.76
+
+
 def test_build_sector_movers_tags_dollar_distance_to_8_ema():
     class FakeWebull:
         def market_snapshot(self, symbols, category, extend_hour_required=False, overnight_required=False):
