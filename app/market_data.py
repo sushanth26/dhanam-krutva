@@ -283,10 +283,9 @@ def build_sector_movers(
         ]
         candidate_movers = [row for row in candidate_movers if row]
         movers = [
-            row
-            for row in sorted(candidate_movers, key=lambda row: sector_mover_sort_key(row, direction))
-            if row["symbol"] not in used_mover_symbols
-        ][:limit]
+            *select_sector_side_movers(candidate_movers, "Long", used_mover_symbols, limit),
+            *select_sector_side_movers(candidate_movers, "Short", used_mover_symbols, limit),
+        ]
         used_mover_symbols.update(row["symbol"] for row in movers)
         groups.append({
             "etf": etf,
@@ -295,6 +294,8 @@ def build_sector_movers(
             "etf_move_pct": etf_move_pct,
             "etf_price": number_or_none(etf_quote, "scanner_price", "price"),
             "rows": movers,
+            "long_count": sum(1 for row in movers if row.get("action") == "Long"),
+            "short_count": sum(1 for row in movers if row.get("action") == "Short"),
             "underlying_count": len(SECTOR_ETF_UNDERLYINGS[etf]),
             "liquid_underlying_count": len(liquid_underlyings),
             "skipped_symbols": [symbol for symbol in SECTOR_ETF_UNDERLYINGS[etf] if symbol in skipped_symbols],
@@ -358,9 +359,12 @@ def enrich_sector_mover_rows(webull: WebullService, groups: list[dict[str, Any]]
                 if previous_day and previous_day.get("close") is not None:
                     row["previous_close"] = previous_day["close"]
                     row["move_pct"] = row_move_percent(row.get("price"), row["previous_close"])
+                    row["action"] = quote_trade_direction(row.get("move_pct"))
             if symbol in m5_bars_by_symbol:
                 candles = aggregate_by_minutes(normalize_bars(m5_bars_by_symbol.get(symbol)), 10)
                 row["ema_8_distance"] = sector_ema_distance(row.get("price"), candles, 8)
+        group["long_count"] = sum(1 for row in group.get("rows", []) if row.get("action") == "Long")
+        group["short_count"] = sum(1 for row in group.get("rows", []) if row.get("action") == "Short")
     return {"ok": not errors, "errors": errors}
 
 
@@ -587,18 +591,20 @@ def quote_trade_direction(move_pct: float | None) -> str:
     return "Neutral"
 
 
-def sector_mover_row(quote: dict[str, Any], etf: str, direction: str, etf_move_pct: float | None) -> dict[str, Any] | None:
+def sector_mover_row(quote: dict[str, Any], etf: str, etf_direction: str, etf_move_pct: float | None) -> dict[str, Any] | None:
     symbol = str(quote.get("symbol") or "").upper()
     price = number_or_none(quote, "scanner_price", "price")
     if not symbol or price is None:
         return None
+    move_pct = quote_move_percent(quote)
     return {
         "symbol": symbol,
         "etf": etf,
-        "action": direction,
+        "action": quote_trade_direction(move_pct),
+        "etf_direction": etf_direction,
         "price": price,
         "previous_close": number_or_none(quote.get("previous_day"), "close"),
-        "move_pct": quote_move_percent(quote),
+        "move_pct": move_pct,
         "etf_move_pct": etf_move_pct,
         "trend": cloud_status(quote.get("ema_10m") or {}, ["5", "12"], ["34", "50"]),
         "structure": (quote.get("structure_10m") or {}).get("status", "Unknown"),
@@ -665,13 +671,29 @@ def row_move_percent(price: float | None, previous_close: float | None) -> float
     return None
 
 
-def sector_mover_sort_key(row: dict[str, Any], direction: str) -> tuple[float, str]:
+def select_sector_side_movers(
+    candidate_movers: list[dict[str, Any]],
+    side: str,
+    used_mover_symbols: set[str],
+    limit: int,
+) -> list[dict[str, Any]]:
+    movers = []
+    for row in sorted(candidate_movers, key=lambda item: sector_mover_sort_key(item, side)):
+        if row.get("action") != side or row["symbol"] in used_mover_symbols:
+            continue
+        movers.append(row)
+        if len(movers) >= limit:
+            break
+    return movers
+
+
+def sector_mover_sort_key(row: dict[str, Any], side: str) -> tuple[float, str]:
     move = row.get("move_pct")
     if move is None:
         return (float("inf"), row.get("symbol", ""))
-    if direction == "Long":
+    if side == "Long":
         return (-move, row.get("symbol", ""))
-    if direction == "Short":
+    if side == "Short":
         return (move, row.get("symbol", ""))
     return (-abs(move), row.get("symbol", ""))
 

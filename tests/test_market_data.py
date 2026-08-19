@@ -170,7 +170,7 @@ def test_build_live_prices_exposes_latest_10m_close_for_scanner_breakouts():
     assert quote["scanner_price_source"] == "latest_10m_candle_close"
 
 
-def test_build_sector_movers_uses_etf_direction_for_top_underlyings():
+def test_build_sector_movers_shows_both_sides_irrespective_of_etf_direction():
     moves = {
         "SOXL": 2.5,
         "NVDA": 4.0,
@@ -224,12 +224,16 @@ def test_build_sector_movers_uses_etf_direction_for_top_underlyings():
 
     soxl, xlf, xlk = payload["groups"]
     assert soxl["direction"] == "Long"
-    assert [row["symbol"] for row in soxl["rows"]] == ["NVDA", "SNDK", "QCOM", "TSM"]
+    assert [row["symbol"] for row in soxl["rows"]] == ["NVDA", "SNDK", "QCOM", "TSM", "LRCX", "AMD", "INTC"]
     assert "COHR" not in [row["symbol"] for row in soxl["rows"]]
-    assert all(row["action"] == "Long" for row in soxl["rows"])
+    assert [row["action"] for row in soxl["rows"]] == ["Long", "Long", "Long", "Long", "Short", "Short", "Short"]
+    assert soxl["long_count"] == 4
+    assert soxl["short_count"] == 3
     assert xlf["direction"] == "Short"
-    assert [row["symbol"] for row in xlf["rows"]] == ["MS", "C", "MA", "COF"]
-    assert all(row["action"] == "Short" for row in xlf["rows"])
+    assert [row["symbol"] for row in xlf["rows"]] == ["GS", "V", "MS", "C", "MA", "COF"]
+    assert [row["action"] for row in xlf["rows"]] == ["Long", "Long", "Short", "Short", "Short", "Short"]
+    assert xlf["long_count"] == 2
+    assert xlf["short_count"] == 4
     assert xlk["direction"] == "Long"
     assert not {row["symbol"] for row in xlk["rows"]} & {row["symbol"] for row in soxl["rows"]}
 
