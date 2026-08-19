@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from app.market_data import (
     LIVE_WATCHLIST,
     MARKET_TIMEZONE,
+    SECTOR_LIQUID_UNDERLYINGS,
     aggregate_by_minutes,
     batch_history_bars_chunked,
     build_sector_movers,
@@ -59,6 +60,12 @@ def hourly_history(close: float, count: int = 60, start: datetime | None = None)
 def daily_history(close: float, count: int = 60, start: datetime | None = None) -> list[dict]:
     first_stamp = start or datetime(2026, 5, 1, 16, 0)
     return [bar_at(first_stamp + timedelta(days=index), close) for index in range(count)]
+
+
+def test_sector_liquid_underlyings_include_core_high_volume_names():
+    liquid_symbols = set().union(*SECTOR_LIQUID_UNDERLYINGS.values())
+
+    assert {"MRVL", "META", "QCOM", "SNDK", "LLY", "UNH", "GS", "JPM", "CRWD", "PANW"} <= liquid_symbols
 
 
 def test_parse_symbols_normalizes_and_filters_empty_entries():
@@ -173,6 +180,7 @@ def test_build_sector_movers_uses_etf_direction_for_top_underlyings():
         "MU": 0.5,
         "MRVL": 2.0,
         "SNDK": 3.5,
+        "COHR": 9.0,
         "AMAT": 1.0,
         "LRCX": -2.0,
         "KLAC": 0.2,
@@ -192,6 +200,7 @@ def test_build_sector_movers_uses_etf_direction_for_top_underlyings():
         "C": -2.4,
         "BLK": -0.7,
         "PGR": -1.8,
+        "COF": -1.7,
         "XLK": 1.5,
     }
 
@@ -216,9 +225,10 @@ def test_build_sector_movers_uses_etf_direction_for_top_underlyings():
     soxl, xlf, xlk = payload["groups"]
     assert soxl["direction"] == "Long"
     assert [row["symbol"] for row in soxl["rows"]] == ["NVDA", "SNDK", "QCOM", "TSM"]
+    assert "COHR" not in [row["symbol"] for row in soxl["rows"]]
     assert all(row["action"] == "Long" for row in soxl["rows"])
     assert xlf["direction"] == "Short"
-    assert [row["symbol"] for row in xlf["rows"]] == ["MS", "C", "MA", "PGR"]
+    assert [row["symbol"] for row in xlf["rows"]] == ["MS", "C", "MA", "COF"]
     assert all(row["action"] == "Short" for row in xlf["rows"])
     assert xlk["direction"] == "Long"
     assert not {row["symbol"] for row in xlk["rows"]} & {row["symbol"] for row in soxl["rows"]}

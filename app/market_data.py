@@ -63,6 +63,28 @@ SECTOR_ETF_NAMES = {
     "XLF": "Financials",
     "XLK": "Technology",
 }
+SECTOR_LIQUID_UNDERLYINGS = {
+    "SOXL": {
+        "NVDA", "AMD", "AVGO", "MU", "INTC", "AMAT", "TSM", "MRVL", "KLAC", "LRCX",
+        "QCOM", "ASML", "ARM", "SNDK",
+    },
+    "XLV": {
+        "LLY", "UNH", "JNJ", "ABBV", "MRK", "PFE", "TMO", "ABT", "AMGN", "GILD",
+        "ISRG", "BMY", "CVS", "MDT", "REGN", "MRNA",
+    },
+    "CIBR": {
+        "CRWD", "PANW", "FTNT", "CSCO", "AVGO", "NET", "ZS", "OKTA", "DDOG",
+        "MSFT", "GOOGL", "IBM",
+    },
+    "XLF": {
+        "JPM", "GS", "BAC", "WFC", "MS", "C", "V", "MA", "AXP", "SCHW",
+        "BLK", "COF", "BX", "HOOD", "PYPL", "COIN",
+    },
+    "XLK": {
+        "NVDA", "AAPL", "MSFT", "AVGO", "AMD", "MU", "INTC", "CSCO", "ORCL",
+        "PLTR", "PANW", "CRWD", "CRM", "DELL", "QCOM", "MRVL", "SNDK", "META",
+    },
+}
 INTRADAY_EMA_SESSIONS = ["PRE", "RTH", "ATH"]
 WEBULL_BATCH_BAR_LIMIT = 20
 MARKET_TIMEZONE = ZoneInfo("America/New_York")
@@ -253,10 +275,11 @@ def build_sector_movers(
         etf_quote = quotes_by_symbol.get(etf)
         etf_move_pct = quote_move_percent(etf_quote)
         direction = quote_trade_direction(etf_move_pct)
+        liquid_underlyings = SECTOR_LIQUID_UNDERLYINGS.get(etf, set(SECTOR_ETF_UNDERLYINGS[etf]))
         candidate_movers = [
             sector_mover_row(quote, etf, direction, etf_move_pct)
             for symbol in SECTOR_ETF_UNDERLYINGS[etf]
-            if (quote := quotes_by_symbol.get(symbol))
+            if symbol in liquid_underlyings and (quote := quotes_by_symbol.get(symbol))
         ]
         candidate_movers = [row for row in candidate_movers if row]
         movers = [
@@ -273,6 +296,7 @@ def build_sector_movers(
             "etf_price": number_or_none(etf_quote, "scanner_price", "price"),
             "rows": movers,
             "underlying_count": len(SECTOR_ETF_UNDERLYINGS[etf]),
+            "liquid_underlying_count": len(liquid_underlyings),
             "skipped_symbols": [symbol for symbol in SECTOR_ETF_UNDERLYINGS[etf] if symbol in skipped_symbols],
         })
         if groups[-1]["skipped_symbols"]:
