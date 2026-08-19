@@ -415,10 +415,21 @@ def sector_snapshot_quotes(data: Any) -> list[dict[str, Any]]:
 
 
 def sector_snapshot_price(snapshot: dict[str, Any] | None) -> float | None:
-    extended_price = snapshot_number_deep(
+    price = snapshot_price(snapshot)
+    if price is not None:
+        return price
+    return snapshot_number_deep(
         snapshot,
-        "pPrice",
-        "prePrice",
+        "extend_hour_last_price",
+        "extendHourLastPrice",
+        "extended_hour_last_price",
+        "extendedHourLastPrice",
+        "extended_hours_last_price",
+        "extendedHoursLastPrice",
+        "extend_hour_price",
+        "extendHourPrice",
+        "extended_hours_price",
+        "extendedHoursPrice",
         "pre_market_price",
         "premarket_price",
         "preMarketPrice",
@@ -428,19 +439,23 @@ def sector_snapshot_price(snapshot: dict[str, Any] | None) -> float | None:
         "extendPrice",
         "extended_price",
         "extendedPrice",
-        "extended_hours_price",
-        "extendedHoursPrice",
         "afterHoursPrice",
         "postMarketPrice",
-        "aPrice",
     )
-    return extended_price if extended_price is not None else snapshot_price(snapshot)
 
 
 def sector_snapshot_change(snapshot: dict[str, Any] | None) -> float | None:
-    extended_change = snapshot_number_deep(
+    change = snapshot_change(snapshot)
+    if change is not None:
+        return change
+    return snapshot_number_deep(
         snapshot,
-        "pChange",
+        "extend_hour_change",
+        "extendHourChange",
+        "extended_hour_change",
+        "extendedHourChange",
+        "extended_hours_change",
+        "extendedHoursChange",
         "preChange",
         "pre_market_change",
         "premarket_change",
@@ -450,20 +465,23 @@ def sector_snapshot_change(snapshot: dict[str, Any] | None) -> float | None:
         "extendChange",
         "extended_change",
         "extendedChange",
-        "extended_hours_change",
-        "extendedHoursChange",
         "afterHoursChange",
         "postMarketChange",
-        "aChange",
     )
-    return extended_change if extended_change is not None else snapshot_change(snapshot)
 
 
 def sector_snapshot_change_ratio(snapshot: dict[str, Any] | None) -> float | None:
-    extended_ratio = snapshot_number_deep(
+    ratio = snapshot_change_ratio(snapshot)
+    if ratio is not None:
+        return ratio
+    return snapshot_number_deep(
         snapshot,
-        "pChRatio",
-        "pChangeRatio",
+        "extend_hour_change_ratio",
+        "extendHourChangeRatio",
+        "extended_hour_change_ratio",
+        "extendedHourChangeRatio",
+        "extended_hours_change_ratio",
+        "extendedHoursChangeRatio",
         "preChRatio",
         "preChangeRatio",
         "pre_market_change_ratio",
@@ -474,14 +492,9 @@ def sector_snapshot_change_ratio(snapshot: dict[str, Any] | None) -> float | Non
         "extendChangeRatio",
         "extended_change_ratio",
         "extendedChangeRatio",
-        "extended_hours_change_ratio",
-        "extendedHoursChangeRatio",
         "afterHoursChangeRatio",
         "postMarketChangeRatio",
-        "aChRatio",
-        "aChangeRatio",
     )
-    return extended_ratio if extended_ratio is not None else snapshot_change_ratio(snapshot)
 
 
 def sector_previous_close(
@@ -503,9 +516,12 @@ def sector_previous_close(
     )
     if previous_close is not None:
         return round(previous_close, 4)
+    ratio_close = previous_close_from_snapshot(price, move_ratio)
+    if ratio_close is not None:
+        return ratio_close
     if price is not None and change is not None:
         return round(price - change, 4)
-    return previous_close_from_snapshot(price, move_ratio)
+    return None
 
 
 def previous_close_from_snapshot(price: float | None, move_ratio: float | None) -> float | None:

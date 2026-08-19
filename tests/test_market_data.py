@@ -250,7 +250,7 @@ def test_build_sector_movers_skips_invalid_snapshot_symbols():
     assert payload["groups"][0]["direction"] == "Short"
 
 
-def test_build_sector_movers_prefers_premarket_snapshot_fields():
+def test_build_sector_movers_uses_primary_snapshot_fields_when_extended_fields_exist():
     class FakeWebull:
         def market_snapshot(self, symbols, category, extend_hour_required=False, overnight_required=False):
             assert extend_hour_required is True
@@ -262,8 +262,9 @@ def test_build_sector_movers_prefers_premarket_snapshot_fields():
                         "symbol": symbol,
                         "last_price": 100,
                         "change_ratio": -0.01,
-                        "pPrice": 101,
-                        "pChRatio": 0.01,
+                        "extend_hour_last_price": 101,
+                        "extend_hour_change": 1,
+                        "extend_hour_change_ratio": 0.01,
                     }
                     for symbol in symbols
                 ],
@@ -273,11 +274,11 @@ def test_build_sector_movers_prefers_premarket_snapshot_fields():
     group = payload["groups"][0]
     row = group["rows"][0]
 
-    assert group["direction"] == "Long"
-    assert group["etf_move_pct"] == 1
-    assert row["price"] == 101
-    assert row["previous_close"] == 100
-    assert row["move_pct"] == 1
+    assert group["direction"] == "Short"
+    assert round(group["etf_move_pct"], 2) == -1
+    assert row["price"] == 100
+    assert round(row["previous_close"], 4) == 101.0101
+    assert round(row["move_pct"], 2) == -1
 
 
 def test_build_sector_movers_uses_latest_daily_close_for_prev_column():
