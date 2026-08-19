@@ -282,9 +282,11 @@ def build_sector_movers(
             if symbol in liquid_underlyings and (quote := quotes_by_symbol.get(symbol))
         ]
         candidate_movers = [row for row in candidate_movers if row]
+        side_order = sector_side_order(direction)
         movers = [
-            *select_sector_side_movers(candidate_movers, "Long", used_mover_symbols, limit),
-            *select_sector_side_movers(candidate_movers, "Short", used_mover_symbols, limit),
+            row
+            for side in side_order
+            for row in select_sector_side_movers(candidate_movers, side, used_mover_symbols, limit)
         ]
         used_mover_symbols.update(row["symbol"] for row in movers)
         groups.append({
@@ -685,6 +687,12 @@ def select_sector_side_movers(
         if len(movers) >= limit:
             break
     return movers
+
+
+def sector_side_order(direction: str) -> list[str]:
+    if direction == "Short":
+        return ["Short", "Long"]
+    return ["Long", "Short"]
 
 
 def sector_mover_sort_key(row: dict[str, Any], side: str) -> tuple[float, str]:

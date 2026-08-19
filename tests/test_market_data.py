@@ -230,8 +230,8 @@ def test_build_sector_movers_shows_both_sides_irrespective_of_etf_direction():
     assert soxl["long_count"] == 4
     assert soxl["short_count"] == 3
     assert xlf["direction"] == "Short"
-    assert [row["symbol"] for row in xlf["rows"]] == ["GS", "V", "MS", "C", "MA", "COF"]
-    assert [row["action"] for row in xlf["rows"]] == ["Long", "Long", "Short", "Short", "Short", "Short"]
+    assert [row["symbol"] for row in xlf["rows"]] == ["MS", "C", "MA", "COF", "GS", "V"]
+    assert [row["action"] for row in xlf["rows"]] == ["Short", "Short", "Short", "Short", "Long", "Long"]
     assert xlf["long_count"] == 2
     assert xlf["short_count"] == 4
     assert xlk["direction"] == "Long"
