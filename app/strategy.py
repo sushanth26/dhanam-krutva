@@ -251,6 +251,8 @@ def find_bar_list(data: Any) -> list[Any]:
 
 def parse_bar(bar: Any) -> dict[str, Any] | None:
     if isinstance(bar, dict):
+        raw_time = bar.get("time") or bar.get("timestamp") or bar.get("t")
+        raw_session_date = bar.get("session_date") or bar.get("trade_date") or bar.get("date")
         open_price = pick_number(bar, "open", "o")
         high = pick_number(bar, "high", "h")
         low = pick_number(bar, "low", "l")
@@ -259,9 +261,9 @@ def parse_bar(bar: Any) -> dict[str, Any] | None:
         if None in (open_price, high, low, close):
             return None
         return {
-            "time": bar.get("time") or bar.get("timestamp") or bar.get("t"),
-            "sort_time": parse_time(bar.get("time") or bar.get("timestamp") or bar.get("t")),
-            "session_date": session_date(bar.get("time") or bar.get("timestamp") or bar.get("t")),
+            "time": raw_time or raw_session_date,
+            "sort_time": parse_time(raw_time) or str(raw_session_date or ""),
+            "session_date": session_date(raw_time) or (str(raw_session_date) if raw_session_date else None),
             "open": open_price,
             "high": high,
             "low": low,

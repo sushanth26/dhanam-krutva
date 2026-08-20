@@ -63,6 +63,28 @@ SECTOR_ETF_NAMES = {
     "XLF": "Financials",
     "XLK": "Technology",
 }
+SECTOR_LIQUID_UNDERLYINGS = {
+    "SOXL": {
+        "NVDA", "AMD", "AVGO", "MU", "INTC", "AMAT", "TSM", "MRVL", "KLAC", "LRCX",
+        "QCOM", "ASML", "ARM", "SNDK",
+    },
+    "XLV": {
+        "LLY", "UNH", "JNJ", "ABBV", "MRK", "PFE", "TMO", "ABT", "AMGN", "GILD",
+        "ISRG", "BMY", "CVS", "MDT", "REGN", "MRNA",
+    },
+    "CIBR": {
+        "CRWD", "PANW", "FTNT", "CSCO", "AVGO", "NET", "ZS", "OKTA", "DDOG",
+        "MSFT", "GOOGL", "IBM",
+    },
+    "XLF": {
+        "JPM", "GS", "BAC", "WFC", "MS", "C", "V", "MA", "AXP", "SCHW",
+        "BLK", "COF", "BX", "HOOD", "PYPL", "COIN",
+    },
+    "XLK": {
+        "NVDA", "AAPL", "MSFT", "AVGO", "AMD", "MU", "INTC", "CSCO", "ORCL",
+        "PLTR", "PANW", "CRWD", "CRM", "DELL", "QCOM", "MRVL", "SNDK", "META",
+    },
+}
 INTRADAY_EMA_SESSIONS = ["PRE", "RTH", "ATH"]
 WEBULL_BATCH_BAR_LIMIT = 20
 MARKET_TIMEZONE = ZoneInfo("America/New_York")
@@ -249,21 +271,44 @@ def build_sector_movers(
         for quote in snapshot_payload.get("quotes", [])
     }
     skipped_symbols = set(snapshot_payload.get("skipped_symbols", []))
+    candidate_groups = []
     for etf in selected_etfs:
         etf_quote = quotes_by_symbol.get(etf)
         etf_move_pct = quote_move_percent(etf_quote)
         direction = quote_trade_direction(etf_move_pct)
+        liquid_underlyings = SECTOR_LIQUID_UNDERLYINGS.get(etf, set(SECTOR_ETF_UNDERLYINGS[etf]))
         candidate_movers = [
             sector_mover_row(quote, etf, direction, etf_move_pct)
             for symbol in SECTOR_ETF_UNDERLYINGS[etf]
-            if (quote := quotes_by_symbol.get(symbol))
+            if symbol in liquid_underlyings and (quote := quotes_by_symbol.get(symbol))
         ]
         candidate_movers = [row for row in candidate_movers if row]
+        candidate_groups.append({
+            "etf": etf,
+            "etf_quote": etf_quote,
+            "direction": direction,
+            "etf_move_pct": etf_move_pct,
+            "liquid_underlyings": liquid_underlyings,
+            "candidate_movers": candidate_movers,
+        })
+    enrichment_payload = enrich_sector_mover_rows(
+        webull,
+        [{"rows": group["candidate_movers"]} for group in candidate_groups],
+    )
+
+    for candidate_group in candidate_groups:
+        etf = candidate_group["etf"]
+        etf_quote = candidate_group["etf_quote"]
+        direction = candidate_group["direction"]
+        etf_move_pct = candidate_group["etf_move_pct"]
+        liquid_underlyings = candidate_group["liquid_underlyings"]
+        candidate_movers = candidate_group["candidate_movers"]
+        side_order = sector_side_order(direction)
         movers = [
             row
-            for row in sorted(candidate_movers, key=lambda row: sector_mover_sort_key(row, direction))
-            if row["symbol"] not in used_mover_symbols
-        ][:limit]
+            for side in side_order
+            for row in select_sector_side_movers(candidate_movers, side, used_mover_symbols, limit)
+        ]
         used_mover_symbols.update(row["symbol"] for row in movers)
         groups.append({
             "etf": etf,
@@ -272,7 +317,10 @@ def build_sector_movers(
             "etf_move_pct": etf_move_pct,
             "etf_price": number_or_none(etf_quote, "scanner_price", "price"),
             "rows": movers,
+            "long_count": sum(1 for row in movers if row.get("action") == "Long"),
+            "short_count": sum(1 for row in movers if row.get("action") == "Short"),
             "underlying_count": len(SECTOR_ETF_UNDERLYINGS[etf]),
+            "liquid_underlying_count": len(liquid_underlyings),
             "skipped_symbols": [symbol for symbol in SECTOR_ETF_UNDERLYINGS[etf] if symbol in skipped_symbols],
         })
         if groups[-1]["skipped_symbols"]:
@@ -287,8 +335,59 @@ def build_sector_movers(
         "limit": limit,
         "groups": groups,
         "errors": errors,
+        "enrichment_errors": enrichment_payload.get("errors", []),
         "skipped_symbols": skipped_symbols_by_etf,
 }
+
+
+def enrich_sector_mover_rows(webull: WebullService, groups: list[dict[str, Any]]) -> dict[str, Any]:
+    symbols = unique_symbols([
+        row["symbol"]
+        for group in groups
+        for row in group.get("rows", [])
+        if row.get("symbol")
+    ])
+    if not symbols or not hasattr(webull, "batch_history_bars"):
+        return {"ok": True, "errors": []}
+    errors = []
+    m5_response = batch_history_bars_chunked(
+        webull,
+        symbols,
+        Category.US_STOCK.name,
+        Timespan.M5.name,
+        count="120",
+        real_time_required=None,
+        trading_sessions=INTRADAY_EMA_SESSIONS,
+    )
+    daily_response = batch_history_bars_chunked(
+        webull,
+        symbols,
+        Category.US_STOCK.name,
+        Timespan.D.name,
+        count="10",
+        real_time_required=None,
+    )
+    if not m5_response.get("ok"):
+        errors.append({"source": "sector-ema-distance", "error": m5_response})
+    if not daily_response.get("ok"):
+        errors.append({"source": "sector-previous-close", "error": daily_response})
+    m5_bars_by_symbol = batch_bar_map(m5_response.get("data")) if m5_response.get("ok") else {}
+    daily_bars_by_symbol = batch_bar_map(daily_response.get("data")) if daily_response.get("ok") else {}
+    for group in groups:
+        for row in group.get("rows", []):
+            symbol = row["symbol"]
+            if symbol in daily_bars_by_symbol:
+                previous_day = previous_daily_range(normalize_bars(daily_bars_by_symbol.get(symbol)))
+                if previous_day and previous_day.get("close") is not None:
+                    row["previous_close"] = previous_day["close"]
+                    row["move_pct"] = row_move_percent(row.get("price"), row["previous_close"])
+                    row["action"] = quote_trade_direction(row.get("move_pct"))
+            if symbol in m5_bars_by_symbol:
+                candles = aggregate_by_minutes(normalize_bars(m5_bars_by_symbol.get(symbol)), 10)
+                row["ema_8_distance"] = sector_ema_distance(row.get("price"), candles, 8)
+        group["long_count"] = sum(1 for row in group.get("rows", []) if row.get("action") == "Long")
+        group["short_count"] = sum(1 for row in group.get("rows", []) if row.get("action") == "Short")
+    return {"ok": not errors, "errors": errors}
 
 
 def build_sector_snapshot_quotes(webull: WebullService, symbols: list[str]) -> dict[str, Any]:
@@ -366,10 +465,21 @@ def sector_snapshot_quotes(data: Any) -> list[dict[str, Any]]:
 
 
 def sector_snapshot_price(snapshot: dict[str, Any] | None) -> float | None:
-    extended_price = snapshot_number_deep(
+    price = snapshot_price(snapshot)
+    if price is not None:
+        return price
+    return snapshot_number_deep(
         snapshot,
-        "pPrice",
-        "prePrice",
+        "extend_hour_last_price",
+        "extendHourLastPrice",
+        "extended_hour_last_price",
+        "extendedHourLastPrice",
+        "extended_hours_last_price",
+        "extendedHoursLastPrice",
+        "extend_hour_price",
+        "extendHourPrice",
+        "extended_hours_price",
+        "extendedHoursPrice",
         "pre_market_price",
         "premarket_price",
         "preMarketPrice",
@@ -379,19 +489,23 @@ def sector_snapshot_price(snapshot: dict[str, Any] | None) -> float | None:
         "extendPrice",
         "extended_price",
         "extendedPrice",
-        "extended_hours_price",
-        "extendedHoursPrice",
         "afterHoursPrice",
         "postMarketPrice",
-        "aPrice",
     )
-    return extended_price if extended_price is not None else snapshot_price(snapshot)
 
 
 def sector_snapshot_change(snapshot: dict[str, Any] | None) -> float | None:
-    extended_change = snapshot_number_deep(
+    change = snapshot_change(snapshot)
+    if change is not None:
+        return change
+    return snapshot_number_deep(
         snapshot,
-        "pChange",
+        "extend_hour_change",
+        "extendHourChange",
+        "extended_hour_change",
+        "extendedHourChange",
+        "extended_hours_change",
+        "extendedHoursChange",
         "preChange",
         "pre_market_change",
         "premarket_change",
@@ -401,20 +515,23 @@ def sector_snapshot_change(snapshot: dict[str, Any] | None) -> float | None:
         "extendChange",
         "extended_change",
         "extendedChange",
-        "extended_hours_change",
-        "extendedHoursChange",
         "afterHoursChange",
         "postMarketChange",
-        "aChange",
     )
-    return extended_change if extended_change is not None else snapshot_change(snapshot)
 
 
 def sector_snapshot_change_ratio(snapshot: dict[str, Any] | None) -> float | None:
-    extended_ratio = snapshot_number_deep(
+    ratio = snapshot_change_ratio(snapshot)
+    if ratio is not None:
+        return ratio
+    return snapshot_number_deep(
         snapshot,
-        "pChRatio",
-        "pChangeRatio",
+        "extend_hour_change_ratio",
+        "extendHourChangeRatio",
+        "extended_hour_change_ratio",
+        "extendedHourChangeRatio",
+        "extended_hours_change_ratio",
+        "extendedHoursChangeRatio",
         "preChRatio",
         "preChangeRatio",
         "pre_market_change_ratio",
@@ -425,14 +542,9 @@ def sector_snapshot_change_ratio(snapshot: dict[str, Any] | None) -> float | Non
         "extendChangeRatio",
         "extended_change_ratio",
         "extendedChangeRatio",
-        "extended_hours_change_ratio",
-        "extendedHoursChangeRatio",
         "afterHoursChangeRatio",
         "postMarketChangeRatio",
-        "aChRatio",
-        "aChangeRatio",
     )
-    return extended_ratio if extended_ratio is not None else snapshot_change_ratio(snapshot)
 
 
 def sector_previous_close(
@@ -454,9 +566,12 @@ def sector_previous_close(
     )
     if previous_close is not None:
         return round(previous_close, 4)
+    ratio_close = previous_close_from_snapshot(price, move_ratio)
+    if ratio_close is not None:
+        return ratio_close
     if price is not None and change is not None:
         return round(price - change, 4)
-    return previous_close_from_snapshot(price, move_ratio)
+    return None
 
 
 def previous_close_from_snapshot(price: float | None, move_ratio: float | None) -> float | None:
@@ -498,23 +613,63 @@ def quote_trade_direction(move_pct: float | None) -> str:
     return "Neutral"
 
 
-def sector_mover_row(quote: dict[str, Any], etf: str, direction: str, etf_move_pct: float | None) -> dict[str, Any] | None:
+def sector_mover_row(quote: dict[str, Any], etf: str, etf_direction: str, etf_move_pct: float | None) -> dict[str, Any] | None:
     symbol = str(quote.get("symbol") or "").upper()
     price = number_or_none(quote, "scanner_price", "price")
     if not symbol or price is None:
         return None
+    move_pct = quote_move_percent(quote)
     return {
         "symbol": symbol,
         "etf": etf,
-        "action": direction,
+        "action": quote_trade_direction(move_pct),
+        "etf_direction": etf_direction,
         "price": price,
         "previous_close": number_or_none(quote.get("previous_day"), "close"),
-        "move_pct": quote_move_percent(quote),
+        "move_pct": move_pct,
         "etf_move_pct": etf_move_pct,
         "trend": cloud_status(quote.get("ema_10m") or {}, ["5", "12"], ["34", "50"]),
         "structure": (quote.get("structure_10m") or {}).get("status", "Unknown"),
         "cloud_bias": (quote.get("ema_10m_cloud") or {}).get("bias", ""),
+        "ema_8_distance": quote.get("ema_8_distance") or sector_ema_distance_from_quote(quote, price, 8),
         "latest_10m_time": quote.get("latest_10m_time"),
+    }
+
+
+def sector_ema_distance_from_quote(quote: dict[str, Any], price: float | None, period: int) -> dict[str, Any] | None:
+    ema_10m = quote.get("ema_10m") or {}
+    ema_value = number_or_none(ema_10m, str(period))
+    if ema_value is None:
+        return None
+    return sector_ema_distance_tag(price, ema_value, period)
+
+
+def sector_ema_distance(price: float | None, ten_minute_candles: list[dict[str, Any]], period: int) -> dict[str, Any] | None:
+    ema_10m = ema_values(ten_minute_candles, [period])
+    return sector_ema_distance_from_quote({"ema_10m": ema_10m}, price, period)
+
+
+def sector_ema_distance_tag(price: float | None, ema_value: float, period: int) -> dict[str, Any] | None:
+    if price is None:
+        return None
+    distance = price - ema_value
+    if distance > 0:
+        status = "Above"
+        side = "above"
+    elif distance < 0:
+        status = "Below"
+        side = "below"
+    else:
+        status = "At"
+        side = "at"
+    distance_pct = (distance / price) * 100 if price else None
+    return {
+        "status": status,
+        "side": side,
+        "distance": round(distance, 4),
+        "distance_pct": round(distance_pct, 2) if distance_pct is not None else None,
+        "ema": round(ema_value, 4),
+        "period": period,
     }
 
 
@@ -523,23 +678,66 @@ def quote_move_percent(quote: dict[str, Any] | None) -> float | None:
         return None
     price = number_or_none(quote, "scanner_price", "price")
     previous_close = number_or_none(quote.get("previous_day"), "close")
-    if price is not None and previous_close is not None and previous_close > 0:
-        return ((price - previous_close) / previous_close) * 100
+    explicit_move = row_move_percent(price, previous_close)
+    if explicit_move is not None:
+        return explicit_move
     snapshot_move = number_or_none(quote, "change_ratio")
     if snapshot_move is None:
         return None
     return snapshot_move * 100 if abs(snapshot_move) <= 1 else snapshot_move
 
 
-def sector_mover_sort_key(row: dict[str, Any], direction: str) -> tuple[float, str]:
+def row_move_percent(price: float | None, previous_close: float | None) -> float | None:
+    if price is not None and previous_close is not None and previous_close > 0:
+        return ((price - previous_close) / previous_close) * 100
+    return None
+
+
+def select_sector_side_movers(
+    candidate_movers: list[dict[str, Any]],
+    side: str,
+    used_mover_symbols: set[str],
+    limit: int,
+) -> list[dict[str, Any]]:
+    movers = []
+    for row in sorted(candidate_movers, key=lambda item: sector_mover_sort_key(item, side)):
+        if row.get("action") != side or row["symbol"] in used_mover_symbols:
+            continue
+        movers.append(row)
+        if len(movers) >= limit:
+            break
+    return movers
+
+
+def sector_side_order(direction: str) -> list[str]:
+    if direction == "Short":
+        return ["Short", "Long"]
+    return ["Long", "Short"]
+
+
+def sector_mover_sort_key(row: dict[str, Any], side: str) -> tuple[float, str]:
+    proximity = sector_ema_proximity(row)
+    if proximity is not None:
+        return (proximity, row.get("symbol", ""))
     move = row.get("move_pct")
     if move is None:
         return (float("inf"), row.get("symbol", ""))
-    if direction == "Long":
+    if side == "Long":
         return (-move, row.get("symbol", ""))
-    if direction == "Short":
+    if side == "Short":
         return (move, row.get("symbol", ""))
     return (-abs(move), row.get("symbol", ""))
+
+
+def sector_ema_proximity(row: dict[str, Any]) -> float | None:
+    distance = row.get("ema_8_distance") or {}
+    distance_pct = snapshot_number(distance, "distance_pct")
+    if distance_pct is not None:
+        return abs(distance_pct)
+    dollars = snapshot_number(distance, "distance")
+    if dollars is not None:
+        return abs(dollars)
+    return None
 
 
 def number_or_none(item: dict[str, Any] | None, *keys: str) -> float | None:
