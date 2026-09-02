@@ -24,6 +24,7 @@ export function Header({
   alertLogCount,
   settingsBadge,
   settingsControls,
+  visibleTabs = {},
 }) {
   const accountAnchorRef = useRef(null);
   const notificationAnchorRef = useRef(null);
@@ -83,57 +84,79 @@ export function Header({
         </div>
         <div className="top-actions">
           <nav className="primary-nav" aria-label="Main views">
-            <button
-              type="button"
-              className={`account-menu-button secondary-button ${activePage === "mtfs" || activePage === "home" ? "active" : ""}`}
-              disabled={pageLoading}
-              onClick={() => onNavigate("mtfs")}
-              aria-label="Open MTF signals"
-              title="MTF Signals"
-            >
-              <span>MTFs</span>
-            </button>
-            <button
-              type="button"
-              className={`account-menu-button secondary-button ${activePage === "watchlist" ? "active" : ""}`}
-              disabled={pageLoading}
-              onClick={() => onNavigate("watchlist")}
-              aria-label="Open watchlist tables"
-              title="Watchlist"
-            >
-              <span>Watchlist</span>
-            </button>
-            <button
-              type="button"
-              className={`account-menu-button secondary-button ${activePage === "sectors" ? "active" : ""}`}
-              disabled={pageLoading}
-              onClick={() => onNavigate("sectors")}
-              aria-label="Open sector movers"
-              title="Sectors"
-            >
-              <span>Sectors</span>
-            </button>
-            <button
-              type="button"
-              className={`account-menu-button secondary-button ${activePage === "insiders" ? "active" : ""}`}
-              disabled={pageLoading}
-              onClick={() => onNavigate("insiders")}
-              aria-label="Open insider buying"
-              title="Insider Buying"
-            >
-              <span>Insiders</span>
-            </button>
-            <button
-              type="button"
-              className={`account-menu-button secondary-button ${activePage === "alerts" ? "active" : ""}`}
-              disabled={pageLoading}
-              onClick={() => onNavigate("alerts")}
-              aria-label="Open alerts history"
-              title="Alerts"
-            >
-              <span>Alerts</span>
-              <b>{alertLogCount || 0}</b>
-            </button>
+            {visibleTabs.mtfs !== false ? (
+              <button
+                type="button"
+                className={`account-menu-button secondary-button ${activePage === "mtfs" || activePage === "home" ? "active" : ""}`}
+                disabled={pageLoading}
+                onClick={() => onNavigate("mtfs")}
+                aria-label="Open MTF signals"
+                title="MTF Signals"
+              >
+                <span>MTFs</span>
+              </button>
+            ) : null}
+            {visibleTabs.watchlist !== false ? (
+              <button
+                type="button"
+                className={`account-menu-button secondary-button ${activePage === "watchlist" ? "active" : ""}`}
+                disabled={pageLoading}
+                onClick={() => onNavigate("watchlist")}
+                aria-label="Open watchlist tables"
+                title="Watchlist"
+              >
+                <span>Watchlist</span>
+              </button>
+            ) : null}
+            {visibleTabs.sectors !== false ? (
+              <button
+                type="button"
+                className={`account-menu-button secondary-button ${activePage === "sectors" ? "active" : ""}`}
+                disabled={pageLoading}
+                onClick={() => onNavigate("sectors")}
+                aria-label="Open sector movers"
+                title="Sectors"
+              >
+                <span>Sectors</span>
+              </button>
+            ) : null}
+            {visibleTabs.insiders !== false ? (
+              <button
+                type="button"
+                className={`account-menu-button secondary-button ${activePage === "insiders" ? "active" : ""}`}
+                disabled={pageLoading}
+                onClick={() => onNavigate("insiders")}
+                aria-label="Open insider buying"
+                title="Insider Buying"
+              >
+                <span>Insiders</span>
+              </button>
+            ) : null}
+            {visibleTabs.alerts !== false ? (
+              <button
+                type="button"
+                className={`account-menu-button secondary-button ${activePage === "alerts" ? "active" : ""}`}
+                disabled={pageLoading}
+                onClick={() => onNavigate("alerts")}
+                aria-label="Open alerts history"
+                title="Alerts"
+              >
+                <span>Alerts</span>
+                <b>{alertLogCount || 0}</b>
+              </button>
+            ) : null}
+            {visibleTabs.charts !== false ? (
+              <button
+                type="button"
+                className={`account-menu-button secondary-button ${activePage === "charts" ? "active" : ""}`}
+                disabled={pageLoading}
+                onClick={() => onNavigate("charts")}
+                aria-label="Open charts"
+                title="Charts"
+              >
+                <span>Charts</span>
+              </button>
+            ) : null}
           </nav>
           <div className={`connection-summary ${accountsConfirmed ? "ready" : "blocked"}`}>
             <div>

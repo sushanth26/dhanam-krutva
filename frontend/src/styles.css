@@ -1608,6 +1608,95 @@ select {
   padding: 10px;
 }
 
+.visible-tabs-panel {
+  background: #f8faf7;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.visible-tabs-heading {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.visible-tabs-heading h3 {
+  color: #184d36;
+  font-size: 14px;
+}
+
+.visible-tabs-heading p {
+  color: #68766c;
+  font-size: 12px;
+  font-weight: 800;
+  margin: 2px 0 0;
+}
+
+.visible-tabs-heading em {
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 999px;
+  color: #68766c;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  padding: 4px 8px;
+}
+
+.visible-tabs-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.visible-tab-toggle {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dbe2d8;
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  min-height: 48px;
+  padding: 8px;
+}
+
+.visible-tab-toggle.enabled {
+  background: #eaf8ef;
+  border-color: #12664f;
+}
+
+.visible-tab-toggle input {
+  accent-color: #12664f;
+  height: 16px;
+  min-height: 16px;
+  padding: 0;
+  width: 16px;
+}
+
+.visible-tab-toggle strong,
+.visible-tab-toggle small {
+  display: block;
+}
+
+.visible-tab-toggle strong {
+  color: #19211f;
+  font-size: 13px;
+}
+
+.visible-tab-toggle small {
+  color: #68766c;
+  font-size: 11px;
+  font-weight: 800;
+  margin-top: 1px;
+}
+
 .auto-trade-panel.enabled {
   background: #eaf8ef;
   border-color: #12664f;
@@ -8574,7 +8663,7 @@ select {
   align-items: start;
   display: grid;
   gap: 20px;
-  grid-template-columns: minmax(280px, 356px) minmax(280px, 356px) minmax(280px, 356px);
+  grid-template-columns: repeat(2, minmax(280px, 420px));
 }
 
 .watchlist-design-page .compact-watchlist-bucket {
@@ -8633,19 +8722,6 @@ select {
 
 .watchlist-design-page .watchlist-bearish .bucket-heading h3::before {
   background: #ff858d;
-}
-
-.watchlist-design-page .watchlist-chop .bucket-heading {
-  background: #22221b;
-  border-top: 2px solid #e9c76a;
-}
-
-.watchlist-design-page .watchlist-chop .bucket-heading h3 {
-  color: #e9c76a;
-}
-
-.watchlist-design-page .watchlist-chop .bucket-heading h3::before {
-  background: #e9c76a;
 }
 
 .watchlist-design-page .compact-watchlist-bucket .bucket-heading span {
@@ -8792,12 +8868,6 @@ select {
   background: #2a1118;
   border-color: #8f2d3a;
   color: #ffb5bd;
-}
-
-.watchlist-design-page .watchlist-chop .symbol-tag {
-  background: #262414;
-  border-color: #7f6721;
-  color: #f1d575;
 }
 
 .watchlist-design-page .symbol-tag-empty {

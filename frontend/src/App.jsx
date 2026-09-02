@@ -17,6 +17,7 @@ const MAX_ALERT_LOG = 500;
 const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
 const WATCHLISTS_KEY = "dhanam-watchlists";
 const SCANNER_WATCHLISTS_KEY = "dhanam-scanner-watchlists";
+const VISIBLE_TABS_KEY = "dhanam-visible-tabs";
 const RISK_SETTINGS_KEY = "dhanam-risk-settings";
 const ALERT_LOG_KEY = "dhanam-alert-log";
 const RETAINED_MTF_QUOTES_KEY = "dhanam-retained-mtf-quotes";
@@ -40,6 +41,14 @@ const OG_SYMBOLS = [
   "APLD", "CIFR", "CRWV", "HUT", "IREN", "NBIS", "WULF",
 ];
 const SECTOR_SYMBOLS = ["SOXL", "XLV", "CIBR", "XLF", "XLK"];
+const APP_TABS = [
+  { id: "mtfs", label: "MTFs", data: "watchlists" },
+  { id: "watchlist", label: "Watchlist", data: "watchlists" },
+  { id: "sectors", label: "Sectors", data: "sectors" },
+  { id: "insiders", label: "Insiders", data: "insiders" },
+  { id: "alerts", label: "Alerts", data: "alerts" },
+  { id: "charts", label: "Charts", data: "watchlists" },
+];
 
 function loadDailySymbols() {
   try {
@@ -85,6 +94,39 @@ function loadScannerWatchlistIds(watchlists) {
 
 function saveScannerWatchlistIds(ids) {
   window.localStorage.setItem(SCANNER_WATCHLISTS_KEY, JSON.stringify(ids));
+}
+
+function loadVisibleTabs() {
+  try {
+    return normalizeVisibleTabs(JSON.parse(window.localStorage.getItem(VISIBLE_TABS_KEY) || "{}"));
+  } catch {
+    return normalizeVisibleTabs({});
+  }
+}
+
+function saveVisibleTabs(tabs) {
+  window.localStorage.setItem(VISIBLE_TABS_KEY, JSON.stringify(normalizeVisibleTabs(tabs)));
+}
+
+function normalizeVisibleTabs(tabs) {
+  const hasSavedChoice = tabs && APP_TABS.some((tab) => Object.prototype.hasOwnProperty.call(tabs, tab.id));
+  const normalized = Object.fromEntries(APP_TABS.map((tab) => [
+    tab.id,
+    hasSavedChoice ? tabs?.[tab.id] !== false : tab.id === "watchlist",
+  ]));
+  if (!APP_TABS.some((tab) => normalized[tab.id])) normalized.watchlist = true;
+  return normalized;
+}
+
+function firstVisibleTab(tabs) {
+  return APP_TABS.find((tab) => tabs?.[tab.id] !== false)?.id || "watchlist";
+}
+
+function routePageFromHash(tabs = loadVisibleTabs()) {
+  const hashPage = window.location.hash.replace(/^#/, "");
+  const page = hashPage === "home" || hashPage === "spy" ? "mtfs" : hashPage;
+  if (APP_TABS.some((tab) => tab.id === page) && tabs[page] !== false) return page;
+  return firstVisibleTab(tabs);
 }
 
 function normalizeWatchlists(watchlists) {
@@ -149,9 +191,7 @@ function compareSymbols(left, right) {
   return String(left || "").localeCompare(String(right || ""), undefined, { numeric: true, sensitivity: "base" });
 }
 
-function fiveTwelveTrendBucket(quote) {
-  const position = emaCloudPosition(quote);
-  if (position.status !== "Inside") return "-";
+function clearTenMinuteEmaTrend(quote) {
   return cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
 }
 
@@ -1109,15 +1149,8 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
   const [alertLog, setAlertLog] = useState(loadAlertLog);
   const [retainedMtfQuotesByTab, setRetainedMtfQuotesByTab] = useState(loadRetainedMtfQuotes);
-  const [activePage, setActivePage] = useState(() => {
-    if (window.location.hash === "#alerts") return "alerts";
-    if (window.location.hash === "#charts") return "charts";
-    if (window.location.hash === "#mtfs") return "mtfs";
-    if (window.location.hash === "#sectors") return "sectors";
-    if (window.location.hash === "#insiders") return "insiders";
-    if (window.location.hash === "#watchlist") return "watchlist";
-    return "mtfs";
-  });
+  const [visibleTabs, setVisibleTabs] = useState(loadVisibleTabs);
+  const [activePage, setActivePage] = useState(() => routePageFromHash());
   const [autoTradeOrders, setAutoTradeOrders] = useState(() => emptyAutoTradeOrders());
   const [autoTradeAlert, setAutoTradeAlert] = useState("");
   const [strategyState, setStrategyState] = useState(loadStrategyState);
@@ -1155,6 +1188,7 @@ export default function App() {
   const selectedAccountIdRef = useRef(selectedAccountId);
   const accountsRef = useRef(accounts);
   const accountsConfirmedRef = useRef(false);
+  const visibleTabsRef = useRef(visibleTabs);
   const watchlistTabRef = useRef(watchlistTab);
   const watchlistsRef = useRef(watchlists);
   const retainedMtfQuotesRef = useRef(retainedMtfQuotesByTab);
@@ -1170,21 +1204,17 @@ export default function App() {
   const updatedText = isAllWatchlistsTab ? allWatchlistSummary : (updatedTextByTab[contextWatchlist?.id] || "");
   const pageLoading = loading.shell || loading.watchlists || loading.prices || loading.notifications || loading.trades;
   const tradingAccountId = useMemo(() => marginTradingAccountId(accounts, selectedAccountId), [accounts, selectedAccountId]);
-
   const trendBuckets = useMemo(() => {
     return quotes.reduce(
       (buckets, quote) => {
-        const trend = isAllWatchlistsTab
-          ? fiveTwelveTrendBucket(quote)
-          : cloudStatus(quote.ema_10m, ["5", "12"], ["34", "50"]);
+        const trend = clearTenMinuteEmaTrend(quote);
         if (trend === "Bullish") buckets.bullish.push(quote);
         else if (trend === "Bearish") buckets.bearish.push(quote);
-        else if (trend === "Chop") buckets.chop.push(quote);
         return buckets;
       },
-      { bullish: [], bearish: [], chop: [] },
+      { bullish: [], bearish: [] },
     );
-  }, [isAllWatchlistsTab, quotes]);
+  }, [quotes]);
   const scannerWatchlists = useMemo(() => {
     const selectedIds = new Set(scannerWatchlistIds);
     return watchlists.filter((watchlist) => selectedIds.has(watchlist.id));
@@ -1324,6 +1354,7 @@ export default function App() {
 
   async function refreshWatchlists({ showLoading = true } = {}) {
     if (!accountsConfirmedRef.current) return null;
+    if (!isTabDataEnabled("watchlists")) return null;
     if (showLoading) setLoadingKey("watchlists", true);
     try {
       const payload = await getJson("/api/webull/watchlists");
@@ -1349,6 +1380,7 @@ export default function App() {
   }
 
   async function loadAlertHistory({ showLoading = false } = {}) {
+    if (!isTabDataEnabled("alerts")) return;
     if (showLoading) setLoadingKey("notifications", true);
     try {
       const payload = await getJson("/api/notifications/history?limit=500");
@@ -1375,6 +1407,7 @@ export default function App() {
       setLiveAlert("Confirm Webull accounts before starting market data refresh.");
       return;
     }
+    if (!isTabDataEnabled("watchlists")) return;
     setLiveAlert("");
     if (showLoading) setLoadingKey("prices", true);
     try {
@@ -1391,6 +1424,7 @@ export default function App() {
       setLiveAlert("Confirm Webull accounts before starting market data refresh.");
       return;
     }
+    if (!isTabDataEnabled("watchlists")) return;
     setLiveAlert("");
     if (showLoading) setLoadingKey("prices", true);
     try {
@@ -1413,6 +1447,7 @@ export default function App() {
       setLiveAlert("Confirm Webull accounts before starting market data refresh.");
       return;
     }
+    if (!isTabDataEnabled("watchlists")) return;
     const watchlist = watchlistsRef.current.find((item) => item.id === id);
     if (!watchlist) return;
     setLiveAlert("");
@@ -1477,6 +1512,7 @@ export default function App() {
 
   async function refreshWatchlistPrices(watchlist, { force = false } = {}) {
     if (!accountsConfirmedRef.current) return;
+    if (!isTabDataEnabled("watchlists")) return;
     if (!watchlist) return;
     const selectedSymbols = watchlist.symbols || [];
     if (!selectedSymbols.length) {
@@ -1516,6 +1552,7 @@ export default function App() {
 
   async function refreshSpyQuote({ force = false } = {}) {
     if (!accountsConfirmedRef.current) return;
+    if (!isTabDataEnabled("watchlists")) return;
     const settings = riskSettingsRef.current;
     const query = new URLSearchParams({
       symbols: SPY_SYMBOL,
@@ -1538,6 +1575,7 @@ export default function App() {
 
   async function refreshSectorPrices({ force = false, showLoading = true } = {}) {
     if (!accountsConfirmedRef.current) return;
+    if (!isTabDataEnabled("sectors")) return;
     if (showLoading) setLoadingKey("prices", true);
     const settings = riskSettingsRef.current;
     const query = new URLSearchParams({
@@ -1786,7 +1824,9 @@ export default function App() {
       const next = normalizeAlertHistoryItems([...freshEntries, ...current]);
       alertLogRef.current = next;
       saveAlertLog(next);
-      postJson("/api/notifications/history", { items: freshEntries }).catch(() => {});
+      if (isTabDataEnabled("alerts")) {
+        postJson("/api/notifications/history", { items: freshEntries }).catch(() => {});
+      }
       return next;
     });
   }
@@ -1799,7 +1839,8 @@ export default function App() {
   }
 
   function navigatePage(page) {
-    const nextPage = page === "home" || page === "spy" ? "mtfs" : page;
+    const requestedPage = page === "home" || page === "spy" ? "mtfs" : page;
+    const nextPage = visibleTabsRef.current[requestedPage] !== false ? requestedPage : firstVisibleTab(visibleTabsRef.current);
     setActivePage(nextPage);
     const hash = nextPage === "alerts"
       ? "#alerts"
@@ -1815,6 +1856,20 @@ export default function App() {
                 ? "#watchlist"
                 : "";
     window.history.replaceState(null, "", hash || window.location.pathname);
+  }
+
+  function isTabDataEnabled(dataKey) {
+    return APP_TABS.some((tab) => tab.data === dataKey && visibleTabsRef.current[tab.id] !== false);
+  }
+
+  function updateVisibleTabs(tabId, enabled) {
+    const normalized = normalizeVisibleTabs({ ...visibleTabsRef.current, [tabId]: enabled });
+    setVisibleTabs(normalized);
+    visibleTabsRef.current = normalized;
+    saveVisibleTabs(normalized);
+    if (normalized[activePage] === false) {
+      navigatePage(firstVisibleTab(normalized));
+    }
   }
 
   function addNotification({ title, message, kind = "update" }) {
@@ -2400,7 +2455,7 @@ export default function App() {
 
     return () => {
       if (!accountsConfirmedRef.current) return;
-      if (!passiveMarketTimer.current) {
+      if (isTabDataEnabled("watchlists") && !passiveMarketTimer.current) {
         passiveMarketTimer.current = setInterval(() => {
           if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false, force: true });
         }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
@@ -2410,18 +2465,19 @@ export default function App() {
 
   function startBackgroundRefresh() {
     if (!accountsConfirmedRef.current) return;
-    if (!passiveMarketTimer.current) {
+    if (isTabDataEnabled("watchlists") && !passiveMarketTimer.current) {
       passiveMarketTimer.current = setInterval(() => {
         if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false, force: true });
       }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
     }
-    if (!insiderRefreshTimer.current) {
+    if (isTabDataEnabled("insiders") && !insiderRefreshTimer.current) {
       checkRecentInsiderFilings();
       insiderRefreshTimer.current = setInterval(checkRecentInsiderFilings, INSIDER_REFRESH_INTERVAL_MS);
     }
   }
 
   async function checkRecentInsiderFilings() {
+    if (!isTabDataEnabled("insiders")) return;
     try {
       const payload = await getJson("/api/insiders/qqq/recent");
       handleInsiderData(payload);
@@ -2481,7 +2537,7 @@ export default function App() {
       ]);
       if (accountsConfirmedRef.current) {
         refreshAppMarketData({ showLoading: false });
-        loadAlertHistory({ showLoading: false });
+        if (isTabDataEnabled("alerts")) loadAlertHistory({ showLoading: false });
       }
     }
 
@@ -2497,6 +2553,23 @@ export default function App() {
       navigatePage("mtfs");
     }
   }, []);
+
+  useEffect(() => {
+    visibleTabsRef.current = visibleTabs;
+    saveVisibleTabs(visibleTabs);
+    if (visibleTabs[activePage] === false) {
+      navigatePage(firstVisibleTab(visibleTabs));
+    }
+    if (!isTabDataEnabled("insiders") && insiderRefreshTimer.current) {
+      clearInterval(insiderRefreshTimer.current);
+      insiderRefreshTimer.current = null;
+    }
+    if (!isTabDataEnabled("watchlists") && passiveMarketTimer.current) {
+      clearInterval(passiveMarketTimer.current);
+      passiveMarketTimer.current = null;
+    }
+    if (accountsConfirmedRef.current) startBackgroundRefresh();
+  }, [activePage, visibleTabs]);
 
   useEffect(() => {
     if (!focusedMtfSymbol || !allTouchedMtfs.some((quote) => quote.symbol === focusedMtfSymbol)) return;
@@ -2597,14 +2670,17 @@ export default function App() {
             autoLongEnabledCount={autoLongEnabledCount}
             disabled={loading.prices}
             enabledStrategyCount={enabledStrategyCount}
+            onVisibleTabChange={updateVisibleTabs}
             onApplyRisk={refreshAllPrices}
             onAutoTradeChange={updateAutoTradeSettings}
             onRiskChange={updateRiskSettings}
             onToggleStrategy={toggleStrategy}
             riskSettings={riskSettings}
             strategyState={strategyState}
+            visibleTabs={visibleTabs}
           />
         )}
+        visibleTabs={visibleTabs}
       />
       {pageLoading ? (
         <div className="loading-blocker" aria-live="polite" aria-busy="true">
@@ -3429,13 +3505,11 @@ function WatchlistWorkspace({
           <>
             <SymbolTagBucket title="Bullish" quotes={trendBuckets.bullish} kind="bullish" />
             <SymbolTagBucket title="Bearish" quotes={trendBuckets.bearish} kind="bearish" />
-            <SymbolTagBucket title="Chop" quotes={trendBuckets.chop} kind="chop" />
           </>
         ) : (
           <>
             <PriceBucket compact title="Bullish" quotes={trendBuckets.bullish} kind="bullish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
             <PriceBucket compact title="Bearish" quotes={trendBuckets.bearish} kind="bearish" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
-            <PriceBucket compact title="Chop" quotes={trendBuckets.chop} kind="chop" onRemoveSymbol={(symbol) => onRemoveSymbol(symbol, contextWatchlist?.id)} />
           </>
         )}
       </div>
@@ -3869,8 +3943,10 @@ function SettingsMenu({
   onAutoTradeChange,
   onRiskChange,
   onToggleStrategy,
+  onVisibleTabChange,
   riskSettings,
   strategyState,
+  visibleTabs,
 }) {
   return (
     <div className="settings-menu-content">
@@ -3888,6 +3964,11 @@ function SettingsMenu({
         onChange={onRiskChange}
         riskSettings={riskSettings}
       />
+      <VisibleTabsPanel
+        disabled={disabled}
+        onChange={onVisibleTabChange}
+        visibleTabs={visibleTabs}
+      />
       <AutoTradePanel
         accountId={accountId}
         autoTrade={autoTrade}
@@ -3897,6 +3978,44 @@ function SettingsMenu({
       <AlertStrategies />
     </div>
   );
+}
+
+function VisibleTabsPanel({ disabled, onChange, visibleTabs }) {
+  return (
+    <section className="visible-tabs-panel" aria-label="Visible tabs">
+      <div className="visible-tabs-heading">
+        <div>
+          <h3>Visible tabs</h3>
+          <p>Only enabled tab data refreshes in the background.</p>
+        </div>
+        <em>{APP_TABS.filter((tab) => visibleTabs?.[tab.id] !== false).length} on</em>
+      </div>
+      <div className="visible-tabs-grid">
+        {APP_TABS.map((tab) => (
+          <label key={tab.id} className={`visible-tab-toggle ${visibleTabs?.[tab.id] !== false ? "enabled" : ""}`}>
+            <input
+              type="checkbox"
+              checked={visibleTabs?.[tab.id] !== false}
+              disabled={disabled}
+              onChange={(event) => onChange(tab.id, event.target.checked)}
+            />
+            <span>
+              <strong>{tab.label}</strong>
+              <small>{tabDataLabel(tab.data)}</small>
+            </span>
+          </label>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function tabDataLabel(data) {
+  if (data === "watchlists") return "Watchlist prices";
+  if (data === "sectors") return "Sector movers";
+  if (data === "insiders") return "Insider feed";
+  if (data === "alerts") return "Alert history";
+  return "App view";
 }
 
 function AutoTradePanel({ accountId, autoTrade, disabled, onChange }) {

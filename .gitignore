@@ -1,5 +1,6 @@
 .env
 .venv/
+.venv-codex-run/
 frontend/node_modules/
 __pycache__/
 *.py[cod]
