@@ -9884,3 +9884,12 @@ select {
     min-height: 38px;
   }
 }
+
+/* Keep each watchlist's MTF list independently scrollable. */
+.mtf-watchlist-sections .live-price-table-wrap {
+  max-height: min(52vh, 540px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
