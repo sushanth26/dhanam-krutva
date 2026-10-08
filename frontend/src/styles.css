@@ -1978,6 +1978,12 @@ select {
   min-width: 0;
 }
 
+.mtf-watchlist-sections {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
 .mtf-desktop-grid {
   display: grid;
   gap: 14px;
@@ -7923,13 +7929,6 @@ select {
   color: #dce5ee;
 }
 
-.global-mtf-panel .global-mtf-table .mtf-price-map-cell,
-.mtf-page .compact-mtf-table .mtf-price-map-cell {
-  min-width: 216px;
-  overflow: visible;
-  width: 216px;
-}
-
 .mtf-price-map {
   align-items: stretch;
   background: #071019;
@@ -9856,10 +9855,6 @@ select {
     grid-template-columns: 52px minmax(0, 1fr);
   }
 
-  .mtf-page .compact-mtf-table th:nth-child(3),
-  .mtf-page .compact-mtf-table .stock-row > td.mtf-price-map-cell {
-    display: none !important;
-  }
 }
 
 @media (max-width: 520px) {
@@ -9874,9 +9869,7 @@ select {
   .mtf-page .compact-mtf-table .mtf-session-band,
   .mtf-page .compact-mtf-table .mtf-session-divider,
   .mtf-page .compact-mtf-table .mtf-event-bar,
-  .mtf-page .compact-mtf-table .mtf-live-marker,
-  .mtf-page .compact-mtf-table th:nth-child(3),
-  .mtf-page .compact-mtf-table .stock-row > td.mtf-price-map-cell {
+  .mtf-page .compact-mtf-table .mtf-live-marker {
     display: none !important;
   }
 

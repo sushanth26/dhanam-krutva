@@ -19,12 +19,10 @@ export function MtfTable({
   const columns = compact ? [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     { key: "mtf", label: "4A-7P", value: (quote) => latestMtfTime(quote) },
-    { key: "map", label: "Map", value: (quote) => mtfPriceMapSortValue(quote) },
   ] : [
     { key: "symbol", label: "Symbol", value: (quote) => quote.symbol || "" },
     ...(showWatchlist ? [{ key: "watchlist", label: "Watchlist", value: (quote) => quote.watchlist_name || "" }] : []),
     { key: "mtf", label: "MTF", value: (quote) => mtfDisplayMatches(quote.mtf_matches).map(({ label }) => label).join(" ") },
-    { key: "map", label: "Map", value: (quote) => mtfPriceMapSortValue(quote) },
     { key: "structure", label: "BOS", value: (quote) => quote.structure_10m?.status || "Unknown" },
     { key: "bias", label: "Bias", value: (quote) => tradeActionForMatches(quote.mtf_matches) || directionalBiasForQuote(quote) },
     { key: "plan", label: "Trade plan", value: (quote) => mtfPlanSortValue(quote) },
@@ -400,7 +398,6 @@ function MtfRow({ buyState, compact, focused, nowPosition, quote, showWatchlist,
         trend={tenMinuteStatus}
       >
         {mtfTags}
-        <td className="mtf-price-map-cell" data-label="Map"><MtfPriceMap quote={quote} compact /></td>
       </BaseRow>
     );
   }
@@ -426,7 +423,6 @@ function MtfRow({ buyState, compact, focused, nowPosition, quote, showWatchlist,
     >
       {watchlistCell}
       {mtfTags}
-      <td className="mtf-price-map-cell" data-label="Map"><MtfPriceMap quote={quote} /></td>
       <td data-label="BOS"><span className={`structure-pill ${structureClass(quote.structure_10m?.status)}`}>{structureLabel(quote.structure_10m?.status)}</span></td>
       <td data-label="Bias"><DirectionPill value={tradeAction || directionalBiasForQuote(quote)} /></td>
       <td className="mtf-plan-cell" data-label="Trade plan">

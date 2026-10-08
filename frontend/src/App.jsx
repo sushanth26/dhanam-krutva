@@ -2708,6 +2708,7 @@ export default function App() {
             buyState={buyState}
             focusedSymbol={focusedMtfSymbol}
             mtfQuotes={allTouchedMtfs}
+            watchlists={watchlists}
             onBuy={buyMtfQuote}
             onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
           />
@@ -2748,6 +2749,7 @@ export default function App() {
             buyState={buyState}
             focusedSymbol={focusedMtfSymbol}
             mtfQuotes={allTouchedMtfs}
+            watchlists={watchlists}
             onBuy={buyMtfQuote}
             onDismissNew={(quote) => dismissNewMtfRow(quote.watchlist_id, quote.symbol)}
           />
@@ -3199,6 +3201,7 @@ function MtfPage({
   buyState,
   focusedSymbol,
   mtfQuotes,
+  watchlists,
   onBuy,
   onDismissNew,
 }) {
@@ -3222,6 +3225,13 @@ function MtfPage({
   }, [mtfQuotes, query, signalFilter]);
   const longCount = mtfQuotes.filter((quote) => mtfPageSignal(quote) === "Long").length;
   const waitCount = mtfQuotes.filter((quote) => !["Long", "Short"].includes(mtfPageSignal(quote))).length;
+  const watchlistSections = useMemo(() => watchlists
+    .map((watchlist) => ({
+      id: watchlist.id,
+      name: watchlist.name,
+      quotes: visibleQuotes.filter((quote) => quote.watchlist_id === watchlist.id),
+    }))
+    .filter((section) => section.quotes.length), [visibleQuotes, watchlists]);
 
   return (
     <section className="mtf-page global-mtf-panel">
@@ -3247,16 +3257,22 @@ function MtfPage({
         </div>
       </div>
 
-      <MtfTable
-        buyState={buyState}
-        compact
-        hideHeading
-        emptyText="No watchlist stocks have touched an MTF today."
-        focusedSymbol={focusedSymbol}
-        onDismissNew={onDismissNew}
-        quotes={visibleQuotes}
-        showWatchlist
-      />
+      {watchlistSections.length ? (
+        <div className="mtf-watchlist-sections">
+          {watchlistSections.map((section) => (
+            <MtfTable
+              key={section.id}
+              buyState={buyState}
+              compact
+              emptyText="No stocks have touched an MTF today."
+              focusedSymbol={focusedSymbol}
+              onDismissNew={onDismissNew}
+              quotes={section.quotes}
+              title={section.name}
+            />
+          ))}
+        </div>
+      ) : <div className="mtf-empty-state">No watchlist stocks have touched an MTF today.</div>}
     </section>
   );
 }
