@@ -59,22 +59,18 @@ function price(value) {
 }
 
 function BounceTable({ title, side, alerts, newIds }) {
-  // Phones show just the names: one per stock, colored by its most recent alert's cloud.
-  const latest = [];
-  for (const alert of alerts) {
-    if (!latest.some((item) => item.symbol === alert.symbol)) latest.push(alert);
-  }
 
   return (
     <section className={`bounces-group ${side}`}>
       <h2>
-        {title} <span>{latest.length}</span>
+        {title} <span>{alerts.length}</span>
       </h2>
       <div className="bounces-names">
-        {latest.length
-          ? latest.map((alert) => (
-            <b key={alert.symbol} className={`${CLOUD_CLASS[alert.cloud]} ${newIds.has(alert.id) ? "is-new" : ""}`}>
-              {alert.symbol}
+        {/* Phones: time + name per alert, colored by cloud */}
+        {alerts.length
+          ? alerts.map((alert) => (
+            <b key={alert.id} className={`${CLOUD_CLASS[alert.cloud]} ${newIds.has(alert.id) ? "is-new" : ""}`}>
+              <small>{alert.time}</small> {alert.symbol}
             </b>
           ))
           : <em>None yet</em>}
