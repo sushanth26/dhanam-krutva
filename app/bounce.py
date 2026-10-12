@@ -4,7 +4,8 @@ Setup: price comes back to a higher-timeframe cloud (1H 34/50, daily 20/21, dail
   Bounce (long): most of the last 6 regular-session 10-min bars closed above the cloud, a candle
   actually reached the cloud (0.05% slack) on this bar or the 2 before it, and this bar closes
   back above the cloud as a green candle. Reject (short) mirrors it.
-Only completed 10-min bars from 9:40 to 15:00 ET. Stop: beyond the far side of the cloud by
+Only completed 10-min bars from 9:40 to 15:00 ET. A separate premarket pass (its own bars,
+4:00-9:30 ET) alerts from 8:30 to the open, labelled "PM"; the regular-session pass ignores it. Stop: beyond the far side of the cloud by
 0.1 x 10-min ATR. S1/S2 and R1/R2: nearest support / resistance levels around the entry, from
 30-min SR channels (LonesomeTheBlue settings), prior-day high / low / close, premarket high / low
 and daily swing highs / lows.
@@ -24,6 +25,8 @@ RTH_OPEN = time(9, 30)
 RTH_CLOSE = time(16, 0)
 FIRST_ALERT = time(9, 40)
 LAST_ALERT = time(15, 0)
+PREMARKET_OPEN = time(4, 0)
+PREMARKET_FIRST_ALERT = time(8, 30)
 TOUCH_BARS = 3
 TOUCH_SLACK = 0.0005
 STOP_PAD_ATR = 0.1
@@ -195,8 +198,19 @@ def daily_swings(days: list[tuple]) -> list[float]:
 def bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, Any]],
                   h1: list[dict[str, Any]], daily: list[dict[str, Any]],
                   now: datetime | None = None) -> list[dict[str, Any]]:
-    """Bounce / reject alerts for the latest session in `ten` (ETH 10-min bars)."""
+    """Bounce / reject alerts for the latest session in `ten` (ETH 10-min bars): premarket + regular."""
     now = (now or datetime.now(ET)).astimezone(ET)
+    premarket = _bounce_alerts(symbol, m5, ten, h1, daily, now, (PREMARKET_OPEN, RTH_OPEN),
+                               (PREMARKET_FIRST_ALERT, RTH_OPEN), "PM ")
+    regular = _bounce_alerts(symbol, m5, ten, h1, daily, now, (RTH_OPEN, RTH_CLOSE), (FIRST_ALERT, LAST_ALERT), "")
+    return premarket + regular
+
+
+def _bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, Any]],
+                   h1: list[dict[str, Any]], daily: list[dict[str, Any]], now: datetime,
+                   bar_window: tuple[time, time], alert_window: tuple[time, time],
+                   label: str) -> list[dict[str, Any]]:
+    """One pass: bars inside `bar_window` (start inclusive), alerts on bars closing inside `alert_window`."""
     bars = []
     for c in ten:
         t = _dt(c)
@@ -205,7 +219,7 @@ def bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, Any
         end = t + timedelta(minutes=10)
         if end > now or (c.get("source_count") or 2) < 2:
             continue  # completed bars only
-        if RTH_OPEN <= t.time() < RTH_CLOSE:
+        if bar_window[0] <= t.time() < bar_window[1]:
             bars.append({"t": t, "end": end, "o": float(c["open"]), "h": float(c["high"]),
                          "l": float(c["low"]), "c": float(c["close"])})
     if len(bars) < 4:
@@ -245,7 +259,7 @@ def bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, Any
     out: list[dict[str, Any]] = []
     last_fired: dict[tuple[str, str], datetime] = {}
     for i, b in enumerate(bars):
-        if b["t"].date() != session or not (FIRST_ALERT <= b["end"].time() <= LAST_ALERT):
+        if b["t"].date() != session or not (alert_window[0] <= b["end"].time() <= alert_window[1]):
             continue
         prior = [x for x in bars[max(0, i - 6): i] if x["t"].date() == session]
         if len(prior) < 3:
@@ -282,7 +296,8 @@ def bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, Any
                     "symbol": symbol,
                     "side": side,
                     "cloud": name,
-                    "alert": f"{'Bounce' if side == 'long' else 'Reject'} {name}",
+                    "alert": f"{label}{'Bounce' if side == 'long' else 'Reject'} {name}",
+                    "premarket": bool(label),
                     "time": b["t"].strftime("%H:%M"),  # candle open, ET (how charts label it)
                     "bar_start": b["t"].isoformat(),
                     "bar_close": b["end"].isoformat(),

@@ -28,6 +28,7 @@ def test_bounce_off_hourly_cloud_alerts_with_entry_stop_and_levels():
     alert = alerts[0]
     assert alert["side"] == "long"
     assert alert["alert"] == "Bounce 1H 34/50"
+    assert alert["premarket"] is False
     assert alert["time"] == "10:50"  # candle open
     assert alert["entry"] == 101.5
     assert alert["stop"] < 100  # beyond the cloud
@@ -46,6 +47,32 @@ def test_open_bar_is_never_alerted():
     ten, hourly, daily = setup_history(session)
     ten.append(bar(session.replace(hour=10, minute=50), 101.2, 101.6, 100.05, 101.5))
     assert bounce_alerts("MU", ten, ten, hourly, daily, now=session.replace(hour=10, minute=55)) == []
+
+
+def test_premarket_bounce_alerts_from_830_with_pm_label():
+    session = datetime(2026, 10, 9, tzinfo=ET)
+    hourly = [bar(session - timedelta(hours=80 - k), 100, 100.5, 99.5, 100) for k in range(70)]
+    daily = [bar(session - timedelta(days=120 - k), 50, 51, 49, 50) for k in range(110)]
+    start = session.replace(hour=7, minute=40)
+    ten = [bar(start + timedelta(minutes=10 * k), 102, 102.4, 101.8, 102.2) for k in range(5)]  # 07:40-08:20
+    ten.append(bar(session.replace(hour=8, minute=30), 101.2, 101.6, 100.05, 101.5))
+
+    alerts = bounce_alerts("MU", ten, ten, hourly, daily, now=session.replace(hour=8, minute=45))
+
+    assert [a["alert"] for a in alerts] == ["PM Bounce 1H 34/50"]
+    assert alerts[0]["premarket"] is True
+    assert alerts[0]["time"] == "08:30"
+
+
+def test_no_premarket_alert_before_830():
+    session = datetime(2026, 10, 9, tzinfo=ET)
+    hourly = [bar(session - timedelta(hours=80 - k), 100, 100.5, 99.5, 100) for k in range(70)]
+    daily = [bar(session - timedelta(days=120 - k), 50, 51, 49, 50) for k in range(110)]
+    start = session.replace(hour=7, minute=20)
+    ten = [bar(start + timedelta(minutes=10 * k), 102, 102.4, 101.8, 102.2) for k in range(5)]  # 07:20-08:00
+    ten.append(bar(session.replace(hour=8, minute=10), 101.2, 101.6, 100.05, 101.5))  # closes 08:20
+
+    assert bounce_alerts("MU", ten, ten, hourly, daily, now=session.replace(hour=8, minute=45)) == []
 
 
 def test_levels_pick_nearest_two_each_side():
