@@ -7652,6 +7652,20 @@ select {
     table-layout: fixed;
   }
 
+  .mtf-shell .mtf-watchlist-sections {
+    align-content: start;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+
+  .mtf-shell .mtf-watchlist-sections .mtf-bucket,
+  .mtf-shell .mtf-watchlist-sections .live-price-table-wrap,
+  .mtf-shell .mtf-watchlist-sections .compact-mtf-table,
+  .mtf-shell .mtf-watchlist-sections .compact-mtf-table tbody {
+    height: auto !important;
+  }
+
   .mtf-shell .compact-mtf-table th,
   .mtf-shell .compact-mtf-table td {
     font-size: 12px;
@@ -9882,5 +9896,121 @@ select {
   .mtf-page .compact-mtf-table .mtf-label-cell {
     align-content: center;
     min-height: 38px;
+  }
+}
+
+/* Bounce / reject alerts: alert, stock, entry, SL, S1 S2 R1 R2 only */
+.bounces-page {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.bounces-error {
+  color: #fca5a5;
+  margin: 0 0 10px;
+}
+
+.bounces-wrap {
+  overflow-x: auto;
+}
+
+.bounces-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bounces-table th,
+.bounces-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #1f2a37;
+  text-align: right;
+}
+
+.bounces-table th {
+  color: #8b9aad;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bounces-table th:first-child,
+.bounces-table th:nth-child(2),
+.bounces-table td.bounces-alert,
+.bounces-table td.bounces-symbol {
+  text-align: left;
+}
+
+.bounces-table tr.long .bounces-alert {
+  color: #4ade80;
+}
+
+.bounces-table tr.short .bounces-alert {
+  color: #f87171;
+}
+
+.bounces-alert span {
+  color: #8b9aad;
+  margin-right: 6px;
+}
+
+.bounces-alert em {
+  display: none;
+  font-style: normal;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.bounces-alert i {
+  display: none;
+  font-style: normal;
+}
+
+.bounces-alert b {
+  font-weight: 500;
+}
+
+.bounces-symbol {
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.bounces-empty {
+  text-align: center !important;
+  color: #8b9aad;
+  padding: 28px 12px !important;
+}
+
+@media (max-width: 640px) {
+  .bounces-table {
+    font-size: 10.5px;
+  }
+
+  .bounces-table th,
+  .bounces-table td {
+    padding: 7px 2px;
+  }
+
+  .bounces-table td.bounces-alert {
+    white-space: normal;
+    min-width: 64px;
+  }
+
+  .bounces-alert span {
+    display: block;
+    margin: 0;
+  }
+
+  .bounces-alert i,
+  .bounces-alert em {
+    display: inline;
+  }
+
+  .bounces-table .bounces-symbol {
+    display: none;
+  }
+
+  .bounces-alert b {
+    display: none;
   }
 }

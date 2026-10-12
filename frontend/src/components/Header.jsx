@@ -84,6 +84,18 @@ export function Header({
         </div>
         <div className="top-actions">
           <nav className="primary-nav" aria-label="Main views">
+            {visibleTabs.bounces !== false ? (
+              <button
+                type="button"
+                className={`account-menu-button secondary-button ${activePage === "bounces" ? "active" : ""}`}
+                disabled={pageLoading}
+                onClick={() => onNavigate("bounces")}
+                aria-label="Open bounce alerts"
+                title="Bounces"
+              >
+                <span>Bounces</span>
+              </button>
+            ) : null}
             {visibleTabs.mtfs !== false ? (
               <button
                 type="button"

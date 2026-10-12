@@ -45,6 +45,7 @@ class Settings:
     insider_push_enabled: bool = True
     insider_push_poll_seconds: int = 120
     insider_seen_file: Path = Path(".insider-filings-seen.json")
+    mtf_touch_push_enabled: bool = False
 
     @property
     def endpoint(self) -> str:
@@ -98,6 +99,7 @@ def get_settings() -> Settings:
         insider_push_enabled=env_bool("INSIDER_PUSH_ENABLED", True),
         insider_push_poll_seconds=max(60, int(os.getenv("INSIDER_PUSH_POLL_SECONDS", "120") or "120")),
         insider_seen_file=Path(os.getenv("INSIDER_SEEN_FILE", "").strip() or default_insider_seen_file()),
+        mtf_touch_push_enabled=env_bool("MTF_TOUCH_PUSH_ENABLED", False),
     )
 
 

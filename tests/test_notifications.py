@@ -323,6 +323,7 @@ def test_push_monitor_sends_only_new_mtf_table_entries(tmp_path, monkeypatch):
         push_subscription_file=tmp_path / "push.json",
         vapid_private_key=None,
         vapid_subject="mailto:test@example.com",
+        mtf_touch_push_enabled=True,
     )
     monitor = MtfPushMonitor(settings)
     sent = []

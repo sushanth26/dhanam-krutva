@@ -1,6 +1,8 @@
 import asyncio
 import json
-from datetime import UTC, datetime
+import threading
+import time as time_module
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -26,6 +28,11 @@ DEFAULT_ALERT_STRATEGIES = {
 }
 
 MTF_TABLE_ALERT_LABELS = {"Hourly 34/50", "Daily 20/21", "Daily 50/55"}
+BOUNCE_FRESH_SECONDS = 15 * 60  # older bounce alerts (e.g. app restarted mid-day) are listed, not pushed
+BOUNCE_CACHE_SECONDS = 45
+
+_bounce_cache: dict[str, Any] = {"at": 0.0, "alerts": [], "updated_at": None}
+_bounce_lock = threading.Lock()
 
 
 class PushSubscriptionStore:
@@ -112,6 +119,7 @@ class MtfPushMonitor:
         self.last_signature: str | None = None
         self.last_mtf_touch_keys: set[str] | None = None
         self.last_bos_state: dict[str, dict[str, Any]] | None = None
+        self.seen_bounce_ids: set[str] = set()
         self.paused_for_manual_retry = False
         self.last_error: str | None = None
         self.last_checked_at: str | None = None
@@ -158,6 +166,7 @@ class MtfPushMonitor:
         self.last_checked_at = utc_now()
         try:
             quotes = build_monitored_quotes(self.settings)
+            new_bounces = self.new_bounce_alerts(remember_bounce_alerts(quotes))
             mtf_quotes = mtf_table_quotes(confirmed_mtf_quotes(quotes))
             signature = mtf_signature(mtf_quotes)
             new_mtf_quotes, next_mtf_touch_keys = new_mtf_touch_quotes(self.last_mtf_touch_keys, mtf_quotes)
@@ -168,8 +177,8 @@ class MtfPushMonitor:
             self.last_error = None
             self.last_error_at = None
             self.last_success_at = utc_now()
-            notifications = []
-            if new_mtf_quotes:
+            notifications = [bounce_notification_payload(alert) for alert in new_bounces]
+            if new_mtf_quotes and getattr(self.settings, "mtf_touch_push_enabled", False):
                 notifications.append(mtf_notification_payload(new_mtf_quotes))
             if not notifications:
                 return None
@@ -185,6 +194,15 @@ class MtfPushMonitor:
             self.last_error = str(exc)
             self.last_error_at = utc_now()
             raise
+
+    def new_bounce_alerts(self, alerts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        cutoff = datetime.now(UTC) - timedelta(seconds=BOUNCE_FRESH_SECONDS)
+        fresh = [
+            alert for alert in alerts
+            if alert["id"] not in self.seen_bounce_ids and datetime.fromisoformat(alert["bar_close"]) >= cutoff
+        ]
+        self.seen_bounce_ids.update(alert["id"] for alert in alerts)
+        return fresh
 
     def status(self) -> dict[str, Any]:
         subscriptions = self.store.all()
@@ -280,6 +298,46 @@ def build_monitored_quotes(settings: Settings) -> list[dict[str, Any]]:
             raise RuntimeError(webull_error_message(first_error or payload))
         quotes.extend(payload.get("quotes", []))
     return quotes
+
+
+def remember_bounce_alerts(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    alerts = sorted(
+        (alert for quote in quotes for alert in quote.get("bounce_alerts") or []),
+        key=lambda alert: alert["bar_close"],
+        reverse=True,
+    )
+    with _bounce_lock:
+        _bounce_cache.update(at=time_module.time(), alerts=alerts, updated_at=utc_now())
+    return alerts
+
+
+def latest_bounce_alerts(settings: Settings) -> dict[str, Any]:
+    """Bounce / reject alerts for the monitored watchlists (shared with the push monitor's last poll)."""
+    with _bounce_lock:
+        if time_module.time() - _bounce_cache["at"] < BOUNCE_CACHE_SECONDS:
+            return {"updated_at": _bounce_cache["updated_at"], "alerts": _bounce_cache["alerts"]}
+    remember_bounce_alerts(build_monitored_quotes(settings))
+    with _bounce_lock:
+        return {"updated_at": _bounce_cache["updated_at"], "alerts": _bounce_cache["alerts"]}
+
+
+def bounce_notification_payload(alert: dict[str, Any]) -> dict[str, Any]:
+    symbol = alert["symbol"]
+    levels = " ".join(
+        f"{label} {format_price(alert.get(key))}"
+        for label, key in (("S1", "s1"), ("S2", "s2"), ("R1", "r1"), ("R2", "r2"))
+        if alert.get(key) is not None
+    )
+    return {
+        "title": f"{symbol} {alert['alert']}",
+        "body": f"Entry {format_price(alert['entry'])} · SL {format_price(alert['stop'])}" + (f" · {levels}" if levels else ""),
+        "badgeCount": 1,
+        "badge_count": 1,
+        "tag": f"bounce-{alert['id']}",
+        "targetSymbol": symbol,
+        "url": "/#bounces",
+        "matches": [{"symbol": symbol, "labels": [alert["alert"]], "details": [alert]}],
+    }
 
 
 def bos_state_from_quotes(quotes: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:

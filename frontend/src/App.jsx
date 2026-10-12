@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AlertStrategies } from "./components/AlertStrategies";
+import { BouncesPage } from "./components/BouncesPage";
 import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
 import { InsiderBuyingPage } from "./components/InsiderBuying";
@@ -42,6 +43,7 @@ const OG_SYMBOLS = [
 ];
 const SECTOR_SYMBOLS = ["SOXL", "XLV", "CIBR", "XLF", "XLK"];
 const APP_TABS = [
+  { id: "bounces", label: "Bounces", data: "bounces" },
   { id: "mtfs", label: "MTFs", data: "watchlists" },
   { id: "watchlist", label: "Watchlist", data: "watchlists" },
   { id: "sectors", label: "Sectors", data: "sectors" },
@@ -112,7 +114,7 @@ function normalizeVisibleTabs(tabs) {
   const hasSavedChoice = tabs && APP_TABS.some((tab) => Object.prototype.hasOwnProperty.call(tabs, tab.id));
   const normalized = Object.fromEntries(APP_TABS.map((tab) => [
     tab.id,
-    hasSavedChoice ? tabs?.[tab.id] !== false : tab.id === "watchlist",
+    hasSavedChoice ? tabs?.[tab.id] !== false : tab.id === "bounces" || tab.id === "watchlist",
   ]));
   if (!APP_TABS.some((tab) => normalized[tab.id])) normalized.watchlist = true;
   return normalized;
@@ -1842,7 +1844,9 @@ export default function App() {
     const requestedPage = page === "home" || page === "spy" ? "mtfs" : page;
     const nextPage = visibleTabsRef.current[requestedPage] !== false ? requestedPage : firstVisibleTab(visibleTabsRef.current);
     setActivePage(nextPage);
-    const hash = nextPage === "alerts"
+    const hash = nextPage === "bounces"
+      ? "#bounces"
+      : nextPage === "alerts"
       ? "#alerts"
       : nextPage === "mtfs"
         ? "#mtfs"
@@ -2693,7 +2697,9 @@ export default function App() {
       <main className={`shell ${activePage === "mtfs" || activePage === "home" ? "mtf-shell" : ""}`}>
         {alert && activePage !== "charts" ? <div className={`alert app-alert ${alertKind}`}>{alert}</div> : null}
 
-        {activePage === "alerts" ? (
+        {activePage === "bounces" ? (
+          <BouncesPage />
+        ) : activePage === "alerts" ? (
           <AlertLogPage
             alertLog={alertLog}
             onClear={clearAlertLog}
