@@ -29,10 +29,11 @@ DEFAULT_ALERT_STRATEGIES = {
 
 MTF_TABLE_ALERT_LABELS = {"Hourly 34/50", "Daily 20/21", "Daily 50/55"}
 BOUNCE_FRESH_SECONDS = 15 * 60  # older bounce alerts (e.g. app restarted mid-day) are listed, not pushed
-BOUNCE_CACHE_SECONDS = 45
+BOUNCE_CACHE_SECONDS = 90
 
 _bounce_cache: dict[str, Any] = {"at": 0.0, "alerts": [], "updated_at": None}
 _bounce_lock = threading.Lock()
+_bounce_fetch_lock = threading.Lock()  # one Webull fetch at a time; concurrent requests share its result
 
 
 class PushSubscriptionStore:
@@ -316,7 +317,22 @@ def latest_bounce_alerts(settings: Settings) -> dict[str, Any]:
     with _bounce_lock:
         if time_module.time() - _bounce_cache["at"] < BOUNCE_CACHE_SECONDS:
             return {"updated_at": _bounce_cache["updated_at"], "alerts": _bounce_cache["alerts"]}
-    remember_bounce_alerts(build_monitored_quotes(settings))
+    with _bounce_fetch_lock:
+        with _bounce_lock:
+            if time_module.time() - _bounce_cache["at"] < BOUNCE_CACHE_SECONDS:
+                return {"updated_at": _bounce_cache["updated_at"], "alerts": _bounce_cache["alerts"]}
+        return _refresh_bounce_alerts(settings)
+
+
+def _refresh_bounce_alerts(settings: Settings) -> dict[str, Any]:
+    try:
+        remember_bounce_alerts(build_monitored_quotes(settings))
+    except RuntimeError as exc:
+        with _bounce_lock:
+            # Webull throttled or erroring: keep the last good list (if any) and don't retry
+            # until the cache window passes, so page refreshes can't pile more calls onto Webull
+            _bounce_cache["at"] = time_module.time()
+            return {"updated_at": _bounce_cache["updated_at"], "alerts": _bounce_cache["alerts"], "error": str(exc)}
     with _bounce_lock:
         return {"updated_at": _bounce_cache["updated_at"], "alerts": _bounce_cache["alerts"]}
 

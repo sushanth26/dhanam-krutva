@@ -4,12 +4,6 @@ import { getJson } from "../lib/api";
 
 const REFRESH_MS = 60 * 1000;
 
-// Candle open time in the viewer's timezone, the way the chart labels the candle.
-function candleTime(alert) {
-  if (!alert.bar_start) return alert.time;
-  return new Date(alert.bar_start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-}
-
 function price(value) {
   return value == null ? "–" : Number(value).toFixed(2);
 }
@@ -25,7 +19,7 @@ export function BouncesPage() {
         const body = await getJson("/api/strategy/bounces");
         if (!alive) return;
         setAlerts(body.alerts || []);
-        setError("");
+        setError(body.error ? `Showing last update (${body.error})` : "");
       } catch (err) {
         if (alive) setError(err.message);
       }
@@ -59,7 +53,7 @@ export function BouncesPage() {
             {alerts.length ? alerts.map((alert) => (
               <tr key={alert.id} className={alert.side}>
                 <td className="bounces-alert">
-                  <span><em>{alert.symbol}</em> {candleTime(alert)}</span>
+                  <span><em>{alert.symbol}</em> {alert.time}</span>
                   <i>{alert.side === "long" ? "▲" : "▼"}</i>
                   <b>{alert.side === "long" ? "Bounce" : "Reject"}</b> {alert.cloud}
                 </td>
