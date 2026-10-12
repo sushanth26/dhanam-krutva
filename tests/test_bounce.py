@@ -28,10 +28,17 @@ def test_bounce_off_hourly_cloud_alerts_with_entry_stop_and_levels():
     alert = alerts[0]
     assert alert["side"] == "long"
     assert alert["alert"] == "Bounce 1H 34/50"
-    assert alert["time"] == "11:00"
+    assert alert["time"] == "10:50"  # candle open
     assert alert["entry"] == 101.5
     assert alert["stop"] < 100  # beyond the cloud
     assert set(alert) >= {"s1", "s2", "r1", "r2"}
+
+
+def test_near_miss_is_not_a_tag():
+    session = datetime(2026, 10, 9, tzinfo=ET)
+    ten, hourly, daily = setup_history(session)
+    ten.append(bar(session.replace(hour=10, minute=50), 101.2, 101.6, 100.4, 101.5))  # never reaches 100
+    assert bounce_alerts("MU", ten, ten, hourly, daily, now=session.replace(hour=11, minute=5)) == []
 
 
 def test_open_bar_is_never_alerted():

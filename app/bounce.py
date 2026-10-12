@@ -1,12 +1,13 @@
 """MTF cloud bounce / reject alerts (ported from Cloud Desk).
 
 Setup: price comes back to a higher-timeframe cloud (1H 34/50, daily 20/21, daily 50/55) and holds.
-  Bounce (long): most of the last 6 regular-session 10-min bars closed above the cloud, the cloud
-  was tagged (or missed by <= 0.25 x 10-min ATR) on this bar or the 2 before it, and this bar closes
+  Bounce (long): most of the last 6 regular-session 10-min bars closed above the cloud, a candle
+  actually reached the cloud (0.05% slack) on this bar or the 2 before it, and this bar closes
   back above the cloud as a green candle. Reject (short) mirrors it.
 Only completed 10-min bars from 9:40 to 15:00 ET. Stop: beyond the far side of the cloud by
 0.1 x 10-min ATR. S1/S2 and R1/R2: nearest support / resistance levels around the entry, from
-30-min SR channels (LonesomeTheBlue settings) plus prior-day and premarket high / low.
+30-min SR channels (LonesomeTheBlue settings), prior-day high / low / close, premarket high / low
+and daily swing highs / lows.
 
 Clouds are computed like the rest of this app (and TradingView with extended hours): the 1H and
 daily EMAs as of each 10-min bar's close, with the still-open hourly / daily bar taking that close.
@@ -24,7 +25,7 @@ RTH_CLOSE = time(16, 0)
 FIRST_ALERT = time(9, 40)
 LAST_ALERT = time(15, 0)
 TOUCH_BARS = 3
-TOL_ATR = 0.25
+TOUCH_SLACK = 0.0005
 STOP_PAD_ATR = 0.1
 REPEAT_MINUTES = 60
 CLOUDS = (("1H 34/50", "h", 34, 50), ("D 20/21", "d", 20, 21), ("D 50/55", "d", 50, 55))
@@ -99,7 +100,7 @@ def _daily_series(daily: list[dict[str, Any]]):
             e.update(float(c["close"]))
         # daily stamps may be midnight UTC (20:00 ET the evening before) or the session itself
         day = (start + timedelta(days=1)).date() if start.hour >= 18 else start.date()
-        out.append((day, {n: (e.v, e.count) for n, e in emas.items()}, c["high"], c["low"]))
+        out.append((day, {n: (e.v, e.count) for n, e in emas.items()}, c["high"], c["low"], c["close"]))
     return out
 
 
@@ -177,6 +178,18 @@ def levels_around(entry: float, chans: list, extra: list[float]) -> dict[str, fl
     return {"s1": s[0], "s2": s[1], "r1": r[0], "r2": r[1]}
 
 
+def daily_swings(days: list[tuple]) -> list[float]:
+    """Daily swing highs / lows (5-bar pivots) from (date, emas, high, low, close) rows."""
+    out = []
+    for k in range(2, len(days) - 2):
+        win = days[k - 2: k + 3]
+        if days[k][2] >= max(d[2] for d in win):
+            out.append(days[k][2])
+        if days[k][3] <= min(d[3] for d in win):
+            out.append(days[k][3])
+    return out
+
+
 # ------------------------------- detection ------------------------------- #
 
 def bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, Any]],
@@ -205,6 +218,8 @@ def bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, Any
     d_state = prev_daily[-1][1] if prev_daily else None
     pdh = prev_daily[-1][2] if prev_daily else None
     pdl = prev_daily[-1][3] if prev_daily else None
+    pdc = prev_daily[-1][4] if prev_daily else None
+    swings = daily_swings(prev_daily[-120:])
     pre = [c for c in m5 if (t := _dt(c)) and t.date() == session and time(4, 0) <= t.time() < RTH_OPEN]
     pmh = max((float(c["high"]) for c in pre), default=None)
     pml = min((float(c["low"]) for c in pre), default=None)
@@ -245,11 +260,11 @@ def bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, Any
                     continue
                 lo, hi = z
                 if side == "long":
-                    tol = max(hi * 0.0005, TOL_ATR * b["atr"])
+                    tol = hi * TOUCH_SLACK
                     came_from = sum(x["c"] > x["clouds"][name][1] for x in prior) * 2 >= len(prior)
                     ok = came_from and min(x["l"] for x in recent) <= hi + tol and b["c"] > hi and b["c"] > b["o"]
                 else:
-                    tol = max(lo * 0.0005, TOL_ATR * b["atr"])
+                    tol = lo * TOUCH_SLACK
                     came_from = sum(x["c"] < x["clouds"][name][0] for x in prior) * 2 >= len(prior)
                     ok = came_from and max(x["h"] for x in recent) >= lo - tol and b["c"] < lo and b["c"] < b["o"]
                 if not ok:
@@ -268,12 +283,13 @@ def bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, Any
                     "side": side,
                     "cloud": name,
                     "alert": f"{'Bounce' if side == 'long' else 'Reject'} {name}",
-                    "time": b["end"].strftime("%H:%M"),
+                    "time": b["t"].strftime("%H:%M"),  # candle open, ET (how charts label it)
+                    "bar_start": b["t"].isoformat(),
                     "bar_close": b["end"].isoformat(),
                     "entry": round(b["c"], 2),
                     "stop": round(stop, 2),
                     **{k2: (round(v, 2) if v is not None else None)
-                       for k2, v in levels_around(b["c"], chans, [pdh, pdl, pmh, pml]).items()},
+                       for k2, v in levels_around(b["c"], chans, [pdh, pdl, pdc, pmh, pml, *swings]).items()},
                 })
                 break  # one cloud per bar per side
     return out
