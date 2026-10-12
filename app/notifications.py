@@ -33,6 +33,7 @@ DEFAULT_ALERT_STRATEGIES = {
 MTF_TABLE_ALERT_LABELS = {"Hourly 34/50", "Daily 20/21", "Daily 50/55"}
 BOUNCE_FRESH_SECONDS = 15 * 60  # older bounce alerts (e.g. app restarted mid-day) are listed, not pushed
 BOUNCE_CACHE_SECONDS = 90
+PUBLIC_URL = "https://dhanam-krutva-production.up.railway.app"
 
 _bounce_cache: dict[str, Any] = {"at": 0.0, "alerts": [], "updated_at": None}
 _bounce_lock = threading.Lock()
@@ -167,6 +168,7 @@ class MtfPushMonitor:
     def check_once(self, manual: bool = False) -> dict[str, Any] | None:
         if self.paused_for_manual_retry and not manual:
             return None
+        resuming = manual and self.paused_for_manual_retry
         if manual:
             self.paused_for_manual_retry = False
             self.last_error = None
@@ -185,6 +187,8 @@ class MtfPushMonitor:
             self.last_error = None
             self.last_error_at = None
             self.last_success_at = utc_now()
+            if resuming:
+                self.telegram_text("\u2705 <b>Alerts back on</b>")
             notifications = [bounce_notification_payload(alert) for alert in new_bounces]
             if new_mtf_quotes and getattr(self.settings, "mtf_touch_push_enabled", False):
                 notifications.append(mtf_notification_payload(new_mtf_quotes))
@@ -202,6 +206,11 @@ class MtfPushMonitor:
             self.paused_for_manual_retry = True
             self.last_error = str(exc)
             self.last_error_at = utc_now()
+            self.telegram_text(
+                "\u26A0\uFE0F <b>Alerts paused</b>: Webull check failed\n"
+                f"<code>{html.escape(str(exc)[:300])}</code>\n"
+                f"Fix it, then open {html.escape(PUBLIC_URL)}/api/notifications/check to resume."
+            )
             raise
 
     def new_bounce_alerts(self, alerts: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -233,6 +242,14 @@ class MtfPushMonitor:
             "last_telegram_at": self.last_telegram_at,
             "last_telegram_error": self.last_telegram_error,
         }
+
+    def telegram_text(self, text: str) -> None:
+        if not getattr(self.settings, "telegram_configured", False):
+            return
+        try:
+            send_telegram(self.settings, text)
+        except Exception as exc:
+            self.last_telegram_error = str(exc)
 
     def telegram(self, alerts: list[dict[str, Any]]) -> bool:
         """One Telegram message for this scan's new bounce alerts. A send failure never stops the push loop."""

@@ -485,3 +485,32 @@ def test_monitor_telegram_failure_is_recorded_not_raised(monkeypatch):
     assert monitor.telegram([alert]) is False
     assert monitor.last_telegram_error == "telegram down"
     assert monitor.telegram([]) is False
+
+
+def test_monitor_telegrams_when_paused_and_when_back_on(tmp_path, monkeypatch):
+    settings = SimpleNamespace(
+        telegram_configured=True,
+        alert_history_file=tmp_path / "alerts.json",
+        push_subscription_file=tmp_path / "push.json",
+    )
+    monitor = MtfPushMonitor(settings)
+    texts = []
+    monkeypatch.setattr(notifications, "send_telegram", lambda _settings, text: texts.append(text))
+
+    def webull_down(_settings):
+        raise RuntimeError("Webull rate limit <429>")
+
+    monkeypatch.setattr(notifications, "build_monitored_quotes", webull_down)
+    try:
+        monitor.check_once()
+    except RuntimeError:
+        pass
+    assert monitor.paused_for_manual_retry
+    assert "Alerts paused" in texts[0] and "&lt;429&gt;" in texts[0] and "/api/notifications/check" in texts[0]
+
+    assert monitor.check_once() is None  # paused: no Webull call, no message
+    assert len(texts) == 1
+
+    monkeypatch.setattr(notifications, "build_monitored_quotes", lambda _settings: [])
+    monitor.check_once(manual=True)
+    assert texts[1] == "\u2705 <b>Alerts back on</b>"

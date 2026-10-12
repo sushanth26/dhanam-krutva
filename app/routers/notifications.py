@@ -52,7 +52,7 @@ def notification_config(request: Request):
     }
 
 
-@router.post("/check")
+@router.api_route("/check", methods=["GET", "POST"])  # GET so the Telegram "resume" link works
 def check_notifications(request: Request):
     settings = get_settings()
     monitor = getattr(request.app.state, "mtf_push_monitor", None)
