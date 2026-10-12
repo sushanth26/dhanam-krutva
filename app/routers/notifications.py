@@ -140,7 +140,7 @@ def test_notification():
     return {"ok": True, **result}
 
 
-@router.post("/test-telegram")
+@router.api_route("/test-telegram", methods=["GET", "POST"])  # GET so the link can be opened in a browser
 def test_telegram():
     settings = get_settings()
     if not settings.telegram_configured:
