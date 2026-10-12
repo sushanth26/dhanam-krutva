@@ -3,20 +3,19 @@ import re
 from pathlib import Path
 from typing import Any
 
-from app.market_data import LIVE_WATCHLIST
-
 
 OG_WATCHLIST_ID = "og"
 
 
 def default_watchlists() -> list[dict[str, Any]]:
+    """An empty OG list: the app only ever watches tickers the user added."""
     return [
         {
             "id": OG_WATCHLIST_ID,
             "name": "OG list",
-            "symbols": LIVE_WATCHLIST,
+            "symbols": [],
             "locked": True,
-            "auto_trade_enabled": True,
+            "auto_trade_enabled": False,
         }
     ]
 

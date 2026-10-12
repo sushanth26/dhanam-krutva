@@ -36,11 +36,6 @@ const OG_WATCHLIST_ID = "og";
 const SPY_SYMBOL = "SPY";
 const TRADINGVIEW_WIDGET_URL = "https://www.tradingview-widget.com/embed-widget/advanced-chart/";
 const CHART_GROUP_COLORS = ["#f59e0b", "#38bdf8", "#22c55e", "#f43f5e", "#a78bfa", "#14b8a6"];
-const OG_SYMBOLS = [
-  "BE", "CRDO", "AAOI", "SNDK", "MU", "GLW", "MRVL", "COHR", "RKLB",
-  "ASTS", "AMD", "ARM", "AVGO", "DELL", "INTC", "APP", "LLY",
-  "APLD", "CIFR", "CRWV", "HUT", "IREN", "NBIS", "WULF",
-];
 const SECTOR_SYMBOLS = ["SOXL", "XLV", "CIBR", "XLF", "XLK"];
 const APP_TABS = [
   { id: "bounces", label: "Bounces", data: "bounces" },
@@ -72,7 +67,7 @@ function loadWatchlists() {
   }
   const dailySymbols = loadDailySymbols();
   return normalizeWatchlists([
-    { id: OG_WATCHLIST_ID, name: "OG list", symbols: OG_SYMBOLS, locked: true },
+    { id: OG_WATCHLIST_ID, name: "OG list", symbols: [], locked: true },
     ...(dailySymbols.length ? [{ id: "daily", name: "Daily list", symbols: dailySymbols }] : []),
   ]);
 }
@@ -148,7 +143,7 @@ function normalizeWatchlists(watchlists) {
     });
   }
   if (!normalized.some((item) => item.id === OG_WATCHLIST_ID)) {
-    normalized.unshift({ id: OG_WATCHLIST_ID, name: "OG list", symbols: OG_SYMBOLS, locked: true, autoTradeEnabled: true });
+    normalized.unshift({ id: OG_WATCHLIST_ID, name: "OG list", symbols: [], locked: true, autoTradeEnabled: false });
   }
   return normalized;
 }
@@ -225,11 +220,11 @@ function emptyAutoTradeOrders() {
 }
 
 function shouldPromoteLocalWatchlists(serverWatchlists, localWatchlists) {
+  // The server forgot the lists (e.g. a redeploy wiped its storage): restore this browser's copy.
   const serverOnlyDefaultOg = serverWatchlists.length === 1
     && serverWatchlists[0]?.id === OG_WATCHLIST_ID
-    && serverWatchlists[0]?.symbols?.join(",") === OG_SYMBOLS.join(",");
-  const localHasCustomState = localWatchlists.length > 1
-    || localWatchlists[0]?.symbols?.join(",") !== OG_SYMBOLS.join(",");
+    && !serverWatchlists[0]?.symbols?.length;
+  const localHasCustomState = localWatchlists.some((watchlist) => watchlist.symbols?.length);
   return serverOnlyDefaultOg && localHasCustomState;
 }
 

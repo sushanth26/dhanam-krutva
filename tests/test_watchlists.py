@@ -1,12 +1,13 @@
 from app.watchlists import OG_WATCHLIST_ID, WatchlistStore, normalize_watchlists
 
 
-def test_watchlist_store_defaults_to_og_list(tmp_path):
+def test_watchlist_store_defaults_to_empty_og_list(tmp_path):
     watchlists = WatchlistStore(tmp_path / "watchlists.json").all()
 
     assert watchlists[0]["id"] == OG_WATCHLIST_ID
     assert watchlists[0]["locked"] is True
-    assert "BE" in watchlists[0]["symbols"]
+    assert watchlists[0]["symbols"] == []  # never watch tickers the user didn't add
+    assert watchlists[0]["auto_trade_enabled"] is False
 
 
 def test_watchlist_store_saves_normalized_lists(tmp_path):

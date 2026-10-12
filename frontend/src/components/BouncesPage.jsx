@@ -1,16 +1,122 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { getJson } from "../lib/api";
+import { showDeviceNotification } from "../lib/notifications";
 
 const REFRESH_MS = 60 * 1000;
+const SEEN_KEY = "dhanam-bounce-seen";
+const FRESH_MS = 15 * 60 * 1000; // only ping for alerts whose candle closed in the last 15 min
+const NEW_HIGHLIGHT_MS = 10 * 60 * 1000;
+
+// Cloud colors: 1H 34/50 orange, D 20/21 yellow, D 50/55 blue
+const CLOUD_CLASS = { "1H 34/50": "cloud-h1", "D 20/21": "cloud-d20", "D 50/55": "cloud-d50" };
+
+function loadSeen() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(SEEN_KEY) || "null");
+    return Array.isArray(saved) ? new Set(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSeen(ids) {
+  try {
+    window.localStorage.setItem(SEEN_KEY, JSON.stringify([...ids].slice(-500)));
+  } catch {
+    // storage unavailable: alerts still show, just no memory across reloads
+  }
+}
+
+function beep() {
+  try {
+    const context = new (window.AudioContext || window.webkitAudioContext)();
+    const tone = context.createOscillator();
+    const gain = context.createGain();
+    tone.frequency.value = 880;
+    gain.gain.setValueAtTime(0.15, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.4);
+    tone.connect(gain).connect(context.destination);
+    tone.start();
+    tone.stop(context.currentTime + 0.4);
+  } catch {
+    // audio blocked until the page has been interacted with
+  }
+}
+
+function notifyNewAlert(alert) {
+  // Same tag as the server push, so a device that gets both shows it once.
+  showDeviceNotification({
+    title: `${alert.symbol} ${alert.alert}`,
+    body: `Entry ${price(alert.entry)} · SL ${price(alert.stop)}`,
+    tag: `bounce-${alert.id}`,
+    url: "/#bounces",
+  }).catch(() => {});
+}
 
 function price(value) {
   return value == null ? "–" : Number(value).toFixed(2);
 }
 
+function BounceTable({ title, side, alerts, newIds }) {
+  // Phones show just the names: one per stock, colored by its most recent alert's cloud.
+  const latest = [];
+  for (const alert of alerts) {
+    if (!latest.some((item) => item.symbol === alert.symbol)) latest.push(alert);
+  }
+
+  return (
+    <section className={`bounces-group ${side}`}>
+      <h2>
+        {title} <span>{latest.length}</span>
+      </h2>
+      <div className="bounces-names">
+        {latest.length
+          ? latest.map((alert) => (
+            <b key={alert.symbol} className={`${CLOUD_CLASS[alert.cloud]} ${newIds.has(alert.id) ? "is-new" : ""}`}>
+              {alert.symbol}
+            </b>
+          ))
+          : <em>None yet</em>}
+      </div>
+      <div className="bounces-wrap">
+        <table className="bounces-table">
+          <thead>
+            <tr>
+              <th>Alert</th>
+              <th>Stock</th>
+              <th>Entry</th>
+              <th>SL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {alerts.length ? alerts.map((alert) => (
+              <tr key={alert.id} className={newIds.has(alert.id) ? "is-new" : ""}>
+                <td className="bounces-alert">
+                  <span>{alert.time}</span>
+                  <b className={CLOUD_CLASS[alert.cloud]}>{alert.cloud}</b>
+                </td>
+                <td className="bounces-symbol">{alert.symbol}</td>
+                <td>{price(alert.entry)}</td>
+                <td>{price(alert.stop)}</td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={4} className="bounces-empty">None yet</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export function BouncesPage() {
   const [alerts, setAlerts] = useState([]);
   const [error, setError] = useState("");
+  const [newIds, setNewIds] = useState(() => new Set());
+  const seenRef = useRef(loadSeen());
 
   useEffect(() => {
     let alive = true;
@@ -18,12 +124,32 @@ export function BouncesPage() {
       try {
         const body = await getJson("/api/strategy/bounces");
         if (!alive) return;
-        setAlerts(body.alerts || []);
+        const next = body.alerts || [];
+        setAlerts(next);
         setError(body.error ? `Showing last update (${body.error})` : "");
+        markNew(next);
       } catch (err) {
         if (alive) setError(err.message);
       }
     }
+    function markNew(next) {
+      const seen = seenRef.current;
+      seenRef.current = new Set([...(seen || []), ...next.map((alert) => alert.id)]);
+      saveSeen(seenRef.current);
+      if (!seen) return; // first visit on this device: everything is the baseline
+      const fresh = next.filter((alert) => !seen.has(alert.id));
+      if (!fresh.length) return;
+      setNewIds((current) => new Set([...current, ...fresh.map((alert) => alert.id)]));
+      window.setTimeout(() => {
+        setNewIds((current) => new Set([...current].filter((id) => !fresh.some((alert) => alert.id === id))));
+      }, NEW_HIGHLIGHT_MS);
+      const recent = fresh.filter((alert) => Date.now() - Date.parse(alert.bar_close) < FRESH_MS);
+      if (recent.length) {
+        beep();
+        recent.forEach(notifyNewAlert);
+      }
+    }
+
     load();
     const timer = window.setInterval(load, REFRESH_MS);
     return () => {
@@ -35,44 +161,11 @@ export function BouncesPage() {
   return (
     <section className="bounces-page">
       {error ? <p className="bounces-error">{error}</p> : null}
-      <div className="bounces-wrap">
-        <table className="bounces-table">
-          <thead>
-            <tr>
-              <th>Alert</th>
-              <th className="bounces-symbol">Stock</th>
-              <th>Entry</th>
-              <th>SL</th>
-              <th>S1</th>
-              <th>S2</th>
-              <th>R1</th>
-              <th>R2</th>
-            </tr>
-          </thead>
-          <tbody>
-            {alerts.length ? alerts.map((alert) => (
-              <tr key={alert.id} className={alert.side}>
-                <td className="bounces-alert">
-                  <span><em>{alert.symbol}</em> {alert.time}</span>
-                  <i>{alert.side === "long" ? "▲" : "▼"}</i>
-                  <b>{alert.side === "long" ? "Bounce" : "Reject"}</b> {alert.cloud}
-                </td>
-                <td className="bounces-symbol">{alert.symbol}</td>
-                <td>{price(alert.entry)}</td>
-                <td>{price(alert.stop)}</td>
-                <td>{price(alert.s1)}</td>
-                <td>{price(alert.s2)}</td>
-                <td>{price(alert.r1)}</td>
-                <td>{price(alert.r2)}</td>
-              </tr>
-            )) : (
-              <tr>
-                <td colSpan={8} className="bounces-empty">No alerts yet</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className="bounces-legend">
+        {Object.entries(CLOUD_CLASS).map(([cloud, className]) => <b key={cloud} className={className}>{cloud}</b>)}
       </div>
+      <BounceTable title="Bullish" side="long" alerts={alerts.filter((alert) => alert.side === "long")} newIds={newIds} />
+      <BounceTable title="Bearish" side="short" alerts={alerts.filter((alert) => alert.side === "short")} newIds={newIds} />
     </section>
   );
 }

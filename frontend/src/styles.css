@@ -9899,15 +9899,55 @@ select {
   }
 }
 
-/* Bounce / reject alerts: alert, stock, entry, SL, S1 S2 R1 R2 only */
+/* Bounce / reject alerts: Bullish and Bearish tables; phones show just the names */
 .bounces-page {
-  max-width: 980px;
+  max-width: 1200px;
   margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 24px;
 }
 
 .bounces-error {
+  grid-column: 1 / -1;
   color: #fca5a5;
-  margin: 0 0 10px;
+  margin: 0;
+}
+
+.bounces-legend {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+}
+
+.bounces-legend b {
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bounces-group h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.bounces-group.long h2 {
+  color: #4ade80;
+}
+
+.bounces-group.short h2 {
+  color: #f87171;
+}
+
+.bounces-group h2 span {
+  color: #8b9aad;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .bounces-wrap {
@@ -9923,7 +9963,7 @@ select {
 
 .bounces-table th,
 .bounces-table td {
-  padding: 10px 12px;
+  padding: 9px 12px;
   border-bottom: 1px solid #1f2a37;
   text-align: right;
 }
@@ -9941,33 +9981,9 @@ select {
   text-align: left;
 }
 
-.bounces-table tr.long .bounces-alert {
-  color: #4ade80;
-}
-
-.bounces-table tr.short .bounces-alert {
-  color: #f87171;
-}
-
 .bounces-alert span {
   color: #8b9aad;
   margin-right: 6px;
-}
-
-.bounces-alert em {
-  display: none;
-  font-style: normal;
-  font-weight: 700;
-  color: #f8fafc;
-}
-
-.bounces-alert i {
-  display: none;
-  font-style: normal;
-}
-
-.bounces-alert b {
-  font-weight: 500;
 }
 
 .bounces-symbol {
@@ -9975,42 +9991,91 @@ select {
   color: #f8fafc;
 }
 
+.bounces-alert b {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bounces-page .cloud-h1 {
+  color: #fdba74;
+  background: rgba(249, 115, 22, 0.16);
+  border: 1px solid rgba(249, 115, 22, 0.5);
+}
+
+.bounces-page .cloud-d20 {
+  color: #fde047;
+  background: rgba(234, 179, 8, 0.16);
+  border: 1px solid rgba(234, 179, 8, 0.5);
+}
+
+.bounces-page .cloud-d50 {
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.16);
+  border: 1px solid rgba(59, 130, 246, 0.5);
+}
+
 .bounces-empty {
   text-align: center !important;
   color: #8b9aad;
-  padding: 28px 12px !important;
+}
+
+.bounces-names {
+  display: none;
+}
+
+/* New alerts glow for 10 minutes */
+@keyframes bounces-new {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248, 250, 252, 0); }
+  50% { box-shadow: 0 0 0 3px rgba(248, 250, 252, 0.35); }
+}
+
+.bounces-table tr.is-new td {
+  background: rgba(248, 250, 252, 0.07);
+}
+
+.bounces-table tr.is-new .bounces-symbol::after {
+  content: " NEW";
+  color: #f8fafc;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.bounces-names b.is-new {
+  animation: bounces-new 1.6s ease-in-out infinite;
 }
 
 @media (max-width: 640px) {
-  .bounces-table {
-    font-size: 10.5px;
+  .bounces-page {
+    gap: 12px;
   }
 
-  .bounces-table th,
-  .bounces-table td {
-    padding: 7px 2px;
-  }
-
-  .bounces-table td.bounces-alert {
-    white-space: normal;
-    min-width: 64px;
-  }
-
-  .bounces-alert span {
-    display: block;
-    margin: 0;
-  }
-
-  .bounces-alert i,
-  .bounces-alert em {
-    display: inline;
-  }
-
-  .bounces-table .bounces-symbol {
+  .bounces-wrap {
     display: none;
   }
 
-  .bounces-alert b {
-    display: none;
+  .bounces-names {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .bounces-names {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .bounces-names b {
+    padding: 7px 10px;
+    border-radius: 8px;
+    font-size: 14px;
+    text-align: center;
+  }
+
+  .bounces-names em {
+    color: #8b9aad;
+    font-style: normal;
   }
 }
