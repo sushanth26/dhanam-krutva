@@ -1,4 +1,5 @@
 import asyncio
+import html
 import json
 import threading
 import urllib.parse
@@ -397,17 +398,25 @@ def bounce_notification_payload(alert: dict[str, Any]) -> dict[str, Any]:
 
 
 def bounce_message(alerts: list[dict[str, Any]]) -> str:
-    """Alert / Stock / Entry / SL / S1 S2 R1 R2, one line per alert."""
-    lines = []
+    """Telegram HTML: green dot for bounces (long), red for rejects (short); Stock, Alert, Entry / SL, levels."""
+    blocks = []
     for alert in alerts:
-        payload = bounce_notification_payload(alert)
-        lines.append(f"{payload['title']}  {payload['body']}")
-    return "\n".join(lines)
+        dot = "\U0001F7E2" if alert.get("side", "long") == "long" else "\U0001F534"
+        lines = [
+            f"{dot} <b>{html.escape(alert['symbol'])}</b>  {html.escape(alert['alert'])}",
+            f"Entry <code>{format_price(alert['entry'])}</code>  \U0001F6D1 SL <code>{format_price(alert['stop'])}</code>",
+        ]
+        support = "  ".join(f"{label} {format_price(alert[key])}" for label, key in (("S1", "s1"), ("S2", "s2")) if alert.get(key) is not None)
+        resistance = "  ".join(f"{label} {format_price(alert[key])}" for label, key in (("R1", "r1"), ("R2", "r2")) if alert.get(key) is not None)
+        if support or resistance:
+            lines.append("  |  ".join(part for part in (f"\u2B07 {support}" if support else "", f"\u2B06 {resistance}" if resistance else "") if part))
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
 
 
 def send_telegram(settings: Settings, text: str) -> None:
     url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
-    data = urllib.parse.urlencode({"chat_id": settings.telegram_chat_id, "text": text}).encode()
+    data = urllib.parse.urlencode({"chat_id": settings.telegram_chat_id, "text": text, "parse_mode": "HTML"}).encode()
     with urllib.request.urlopen(url, data=data, timeout=15) as response:
         if response.status != 200:
             raise RuntimeError(f"Telegram returned HTTP {response.status}")

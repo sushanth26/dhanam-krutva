@@ -454,16 +454,22 @@ def test_filter_payload_by_strategies_keeps_generic_test_payloads():
     assert filter_payload_by_strategies(payload, {"hourly-cloud": False}) == payload
 
 
-def test_bounce_message_lists_one_line_per_alert():
+def test_bounce_message_colors_by_side_and_escapes_html():
     alerts = [
-        {"id": "a", "symbol": "NVDA", "alert": "1H Bounce", "entry": 180.25, "stop": 178.9, "s1": 178.5, "r1": 182},
-        {"id": "b", "symbol": "AMD", "alert": "D Reject", "entry": 150, "stop": 151.2},
+        {"id": "a", "symbol": "NVDA", "alert": "Bounce 1H 34/50", "side": "long", "entry": 180.25, "stop": 178.9,
+         "s1": 178.5, "r1": 182},
+        {"id": "b", "symbol": "AMD", "alert": "Reject D <20/21>", "side": "short", "entry": 150, "stop": 151.2},
     ]
 
-    assert notifications.bounce_message(alerts).splitlines() == [
-        "NVDA 1H Bounce  Entry 180.25 · SL 178.90 · S1 178.50 R1 182.00",
-        "AMD D Reject  Entry 150.00 · SL 151.20",
+    long_block, short_block = notifications.bounce_message(alerts).split("\n\n")
+
+    assert long_block.splitlines() == [
+        "\U0001F7E2 <b>NVDA</b>  Bounce 1H 34/50",
+        "Entry <code>180.25</code>  \U0001F6D1 SL <code>178.90</code>",
+        "\u2B07 S1 178.50  |  \u2B06 R1 182.00",
     ]
+    assert short_block.splitlines()[0] == "\U0001F534 <b>AMD</b>  Reject D &lt;20/21&gt;"
+    assert len(short_block.splitlines()) == 2
 
 
 def test_monitor_telegram_failure_is_recorded_not_raised(monkeypatch):
