@@ -10017,6 +10017,13 @@ select {
   border: 1px solid rgba(59, 130, 246, 0.5);
 }
 
+.bounces-table td.bounces-list,
+.bounces-table th:nth-child(3) {
+  text-align: left;
+  color: #8b9aad;
+  font-size: 12px;
+}
+
 .bounces-empty {
   text-align: center !important;
   color: #8b9aad;
@@ -10079,6 +10086,14 @@ select {
     font-weight: 500;
     opacity: 0.8;
     margin-right: 4px;
+  }
+
+  .bounces-names b i {
+    display: block;
+    font-style: normal;
+    font-size: 10px;
+    font-weight: 500;
+    opacity: 0.75;
   }
 
   .bounces-names em {

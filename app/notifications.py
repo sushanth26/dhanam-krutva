@@ -313,7 +313,24 @@ def remember_bounce_alerts(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 def latest_bounce_alerts(settings: Settings) -> dict[str, Any]:
-    """Bounce / reject alerts for the monitored watchlists (shared with the push monitor's last poll)."""
+    """Bounce / reject alerts for the monitored watchlists, each tagged with the lists it's in."""
+    result = _latest_bounce_alerts(settings)
+    lists_by_symbol = watchlist_names_by_symbol(settings)
+    return {
+        **result,
+        "alerts": [{**alert, "watchlists": lists_by_symbol.get(alert["symbol"], [])} for alert in result["alerts"]],
+    }
+
+
+def watchlist_names_by_symbol(settings: Settings) -> dict[str, list[str]]:
+    names: dict[str, list[str]] = {}
+    for watchlist in WatchlistStore(settings.watchlist_file).all():
+        for symbol in watchlist.get("symbols", []):
+            names.setdefault(str(symbol).upper(), []).append(watchlist.get("name") or "Watchlist")
+    return names
+
+
+def _latest_bounce_alerts(settings: Settings) -> dict[str, Any]:
     with _bounce_lock:
         if time_module.time() - _bounce_cache["at"] < BOUNCE_CACHE_SECONDS:
             return {"updated_at": _bounce_cache["updated_at"], "alerts": _bounce_cache["alerts"]}

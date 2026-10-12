@@ -52,3 +52,22 @@ def test_levels_pick_nearest_two_each_side():
     chans = [(95, 96, 60), (104, 105, 60)]
     levels = levels_around(100, chans, [98, 102, 99.95])
     assert levels == {"s1": 99.95, "s2": 98, "r1": 102, "r2": 104}
+
+
+def test_bounce_alerts_are_tagged_with_their_watchlists(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from app import notifications
+    from app.watchlists import WatchlistStore
+
+    path = tmp_path / "watchlists.json"
+    WatchlistStore(path).replace([
+        {"id": "og", "name": "OG list", "symbols": ["MU", "BE"]},
+        {"name": "Memory", "symbols": ["MU"]},
+    ])
+    monkeypatch.setattr(notifications, "_bounce_cache", {"at": 0.0, "alerts": [], "updated_at": None})
+    monkeypatch.setattr(notifications, "build_monitored_quotes", lambda settings: [
+        {"symbol": "MU", "bounce_alerts": [{"id": "a", "symbol": "MU", "bar_close": "2026-10-12T10:00:00-04:00"}]},
+    ])
+    result = notifications.latest_bounce_alerts(SimpleNamespace(watchlist_file=path))
+    assert result["alerts"][0]["watchlists"] == ["OG list", "Memory"]

@@ -54,6 +54,10 @@ function notifyNewAlert(alert) {
   }).catch(() => {});
 }
 
+function lists(alert) {
+  return (alert.watchlists || []).join(", ");
+}
+
 function price(value) {
   return value == null ? "–" : Number(value).toFixed(2);
 }
@@ -71,6 +75,7 @@ function BounceTable({ title, side, alerts, newIds }) {
           ? alerts.map((alert) => (
             <b key={alert.id} className={`${CLOUD_CLASS[alert.cloud]} ${newIds.has(alert.id) ? "is-new" : ""}`}>
               <small>{alert.time}</small> {alert.symbol}
+              {lists(alert) ? <i>{lists(alert)}</i> : null}
             </b>
           ))
           : <em>None yet</em>}
@@ -81,6 +86,7 @@ function BounceTable({ title, side, alerts, newIds }) {
             <tr>
               <th>Alert</th>
               <th>Stock</th>
+              <th>List</th>
               <th>Entry</th>
               <th>SL</th>
             </tr>
@@ -93,12 +99,13 @@ function BounceTable({ title, side, alerts, newIds }) {
                   <b className={CLOUD_CLASS[alert.cloud]}>{alert.cloud}</b>
                 </td>
                 <td className="bounces-symbol">{alert.symbol}</td>
+                <td className="bounces-list">{lists(alert)}</td>
                 <td>{price(alert.entry)}</td>
                 <td>{price(alert.stop)}</td>
               </tr>
             )) : (
               <tr>
-                <td colSpan={4} className="bounces-empty">None yet</td>
+                <td colSpan={5} className="bounces-empty">None yet</td>
               </tr>
             )}
           </tbody>
