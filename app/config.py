@@ -46,6 +46,8 @@ class Settings:
     insider_push_poll_seconds: int = 120
     insider_seen_file: Path = Path(".insider-filings-seen.json")
     mtf_touch_push_enabled: bool = False
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
 
     @property
     def endpoint(self) -> str:
@@ -62,6 +64,10 @@ class Settings:
     @property
     def push_configured(self) -> bool:
         return bool(self.vapid_public_key and self.vapid_private_key)
+
+    @property
+    def telegram_configured(self) -> bool:
+        return bool(self.telegram_bot_token and self.telegram_chat_id)
 
 
 def get_settings() -> Settings:
@@ -100,6 +106,8 @@ def get_settings() -> Settings:
         insider_push_poll_seconds=max(60, int(os.getenv("INSIDER_PUSH_POLL_SECONDS", "120") or "120")),
         insider_seen_file=Path(os.getenv("INSIDER_SEEN_FILE", "").strip() or default_insider_seen_file()),
         mtf_touch_push_enabled=env_bool("MTF_TOUCH_PUSH_ENABLED", False),
+        telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", "").strip() or None,
+        telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID", "").strip() or None,
     )
 
 

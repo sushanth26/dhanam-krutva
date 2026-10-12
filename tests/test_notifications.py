@@ -452,3 +452,30 @@ def test_filter_payload_by_strategies_keeps_generic_test_payloads():
     payload = {"title": "MTF notification test", "body": "Testing"}
 
     assert filter_payload_by_strategies(payload, {"hourly-cloud": False}) == payload
+
+
+def test_bounce_message_lists_one_line_per_alert():
+    alerts = [
+        {"id": "a", "symbol": "NVDA", "alert": "1H Bounce", "entry": 180.25, "stop": 178.9, "s1": 178.5, "r1": 182},
+        {"id": "b", "symbol": "AMD", "alert": "D Reject", "entry": 150, "stop": 151.2},
+    ]
+
+    assert notifications.bounce_message(alerts).splitlines() == [
+        "NVDA 1H Bounce  Entry 180.25 · SL 178.90 · S1 178.50 R1 182.00",
+        "AMD D Reject  Entry 150.00 · SL 151.20",
+    ]
+
+
+def test_monitor_telegram_failure_is_recorded_not_raised(monkeypatch):
+    settings = SimpleNamespace(telegram_configured=True, push_subscription_file="unused.json")
+    monitor = MtfPushMonitor(settings)
+
+    def boom(*_args):
+        raise OSError("telegram down")
+
+    monkeypatch.setattr(notifications, "send_telegram", boom)
+    alert = {"id": "a", "symbol": "NVDA", "alert": "1H Bounce", "entry": 1, "stop": 1}
+
+    assert monitor.telegram([alert]) is False
+    assert monitor.last_telegram_error == "telegram down"
+    assert monitor.telegram([]) is False

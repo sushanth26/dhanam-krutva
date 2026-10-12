@@ -1,6 +1,8 @@
 import asyncio
 import json
 import threading
+import urllib.parse
+import urllib.request
 import time as time_module
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -128,9 +130,13 @@ class MtfPushMonitor:
         self.last_error_at: str | None = None
         self.last_notification_at: str | None = None
         self.last_send_result: dict[str, int] = {"sent": 0, "removed": 0, "skipped": 0, "failed": 0}
+        self.last_telegram_at: str | None = None
+        self.last_telegram_error: str | None = None
 
     def start(self) -> None:
-        if self.task or not self.settings.mtf_push_enabled or not self.settings.push_configured:
+        if self.task or not self.settings.mtf_push_enabled:
+            return
+        if not (self.settings.push_configured or self.settings.telegram_configured):
             return
         self.task = asyncio.create_task(self._run())
 
@@ -149,7 +155,7 @@ class MtfPushMonitor:
             try:
                 if (
                     not self.paused_for_manual_retry
-                    and self.store.all()
+                    and (self.store.all() or self.settings.telegram_configured)
                     and is_market_refresh_window(self.settings.mtf_push_timezone)
                 ):
                     await asyncio.to_thread(self.check_once)
@@ -188,6 +194,7 @@ class MtfPushMonitor:
             for notification in notifications:
                 history.append(alert_history_entries_from_push(notification))
                 self.last_send_result = self.send(notification)
+            self.telegram(new_bounces)
             self.last_notification_at = utc_now()
             return notifications[0] if len(notifications) == 1 else {"ok": True, "notifications": notifications}
         except Exception as exc:
@@ -221,7 +228,23 @@ class MtfPushMonitor:
             "last_error_at": self.last_error_at,
             "last_notification_at": self.last_notification_at,
             "last_send_result": self.last_send_result,
+            "telegram_configured": bool(getattr(self.settings, "telegram_configured", False)),
+            "last_telegram_at": self.last_telegram_at,
+            "last_telegram_error": self.last_telegram_error,
         }
+
+    def telegram(self, alerts: list[dict[str, Any]]) -> bool:
+        """One Telegram message for this scan's new bounce alerts. A send failure never stops the push loop."""
+        if not alerts or not getattr(self.settings, "telegram_configured", False):
+            return False
+        try:
+            send_telegram(self.settings, bounce_message(alerts))
+        except Exception as exc:
+            self.last_telegram_error = str(exc)
+            return False
+        self.last_telegram_at = utc_now()
+        self.last_telegram_error = None
+        return True
 
     def send(self, payload: dict[str, Any]) -> dict[str, int]:
         if not self.settings.push_configured:
@@ -371,6 +394,23 @@ def bounce_notification_payload(alert: dict[str, Any]) -> dict[str, Any]:
         "url": "/#bounces",
         "matches": [{"symbol": symbol, "labels": [alert["alert"]], "details": [alert]}],
     }
+
+
+def bounce_message(alerts: list[dict[str, Any]]) -> str:
+    """Alert / Stock / Entry / SL / S1 S2 R1 R2, one line per alert."""
+    lines = []
+    for alert in alerts:
+        payload = bounce_notification_payload(alert)
+        lines.append(f"{payload['title']}  {payload['body']}")
+    return "\n".join(lines)
+
+
+def send_telegram(settings: Settings, text: str) -> None:
+    url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+    data = urllib.parse.urlencode({"chat_id": settings.telegram_chat_id, "text": text}).encode()
+    with urllib.request.urlopen(url, data=data, timeout=15) as response:
+        if response.status != 200:
+            raise RuntimeError(f"Telegram returned HTTP {response.status}")
 
 
 def bos_state_from_quotes(quotes: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:

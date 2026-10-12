@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.notifications import AlertHistoryStore, MtfPushMonitor, PushSubscriptionStore
+from app.notifications import AlertHistoryStore, MtfPushMonitor, PushSubscriptionStore, send_telegram
 
 
 router = APIRouter(prefix="/api/notifications")
@@ -37,6 +37,7 @@ def notification_config(request: Request):
     }
     return {
         "web_push_configured": settings.push_configured,
+        "telegram_configured": settings.telegram_configured,
         "push_polling_enabled": settings.mtf_push_enabled,
         "vapid_public_key": settings.vapid_public_key,
         "poll_seconds": settings.mtf_push_poll_seconds,
@@ -137,3 +138,17 @@ def test_notification():
         }
     )
     return {"ok": True, **result}
+
+
+@router.post("/test-telegram")
+def test_telegram():
+    settings = get_settings()
+    if not settings.telegram_configured:
+        raise HTTPException(status_code=400, detail="Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to enable Telegram alerts.")
+    try:
+        send_telegram(settings, "NVDA 1H Bounce (test)  Entry 180.25 · SL 178.90 · S1 178.50 R1 182.00")
+    except Exception as exc:
+        # urllib errors include the URL, which carries the bot token
+        detail = str(exc).replace(settings.telegram_bot_token or "", "***")
+        raise HTTPException(status_code=502, detail=f"Telegram send failed: {detail}") from exc
+    return {"ok": True}
