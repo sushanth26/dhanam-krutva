@@ -10,3 +10,4 @@ webull_trade_sdk.log*
 .webull-guard*.json
 .web-push-subscriptions.json
 .insider-filings-seen.json
+.bounce-feedback.json

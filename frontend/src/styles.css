@@ -10054,6 +10054,57 @@ select {
   animation: bounces-new 1.6s ease-in-out infinite;
 }
 
+/* End-of-day marks: worked / failed / choppy */
+.bounces-verdict {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.bounces-verdict button {
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 6px;
+  background: transparent;
+  color: #8b9aad;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bounces-verdict button.worked.on {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #fff;
+}
+
+.bounces-verdict button.failed.on {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+}
+
+.bounces-verdict button.choppy.on {
+  background: #ca8a04;
+  border-color: #ca8a04;
+  color: #fff;
+}
+
+.bounces-names .bounces-verdict {
+  display: flex;
+  justify-content: center;
+  margin-top: 6px;
+  gap: 10px;
+}
+
+.bounces-names .bounces-verdict button {
+  width: 40px;
+  height: 30px;
+  background: rgba(15, 23, 42, 0.55);
+  color: #e2e8f0;
+}
+
 @media (max-width: 640px) {
   .bounces-page {
     gap: 12px;

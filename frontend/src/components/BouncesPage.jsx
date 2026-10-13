@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { getJson } from "../lib/api";
+import { getJson, postJson } from "../lib/api";
 import { showDeviceNotification } from "../lib/notifications";
 
 const REFRESH_MS = 60 * 1000;
@@ -54,6 +54,34 @@ function notifyNewAlert(alert) {
   }).catch(() => {});
 }
 
+// End-of-day review: how each alert actually played out
+const VERDICTS = [
+  ["worked", "✓", "Worked"],
+  ["failed", "✗", "Failed"],
+  ["choppy", "~", "Choppy"],
+];
+
+function VerdictButtons({ alert, onMark }) {
+  return (
+    <span className="bounces-verdict">
+      {VERDICTS.map(([value, icon, label]) => (
+        <button
+          key={value}
+          type="button"
+          title={label}
+          className={`${value} ${alert.verdict === value ? "on" : ""}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onMark(alert, alert.verdict === value ? null : value);
+          }}
+        >
+          {icon}
+        </button>
+      ))}
+    </span>
+  );
+}
+
 function lists(alert) {
   return (alert.watchlists || []).join(", ");
 }
@@ -62,7 +90,7 @@ function price(value) {
   return value == null ? "–" : Number(value).toFixed(2);
 }
 
-function BounceTable({ title, side, alerts, newIds }) {
+function BounceTable({ title, side, alerts, newIds, onMark }) {
 
   return (
     <section className={`bounces-group ${side}`}>
@@ -76,6 +104,7 @@ function BounceTable({ title, side, alerts, newIds }) {
             <b key={alert.id} className={`${CLOUD_CLASS[alert.cloud]} ${newIds.has(alert.id) ? "is-new" : ""}`}>
               <small>{alert.time}</small> {alert.symbol}
               {lists(alert) ? <i>{lists(alert)}</i> : null}
+              <VerdictButtons alert={alert} onMark={onMark} />
             </b>
           ))
           : <em>None yet</em>}
@@ -89,6 +118,7 @@ function BounceTable({ title, side, alerts, newIds }) {
               <th>List</th>
               <th>Entry</th>
               <th>SL</th>
+              <th>Result</th>
             </tr>
           </thead>
           <tbody>
@@ -102,10 +132,11 @@ function BounceTable({ title, side, alerts, newIds }) {
                 <td className="bounces-list">{lists(alert)}</td>
                 <td>{price(alert.entry)}</td>
                 <td>{price(alert.stop)}</td>
+                <td><VerdictButtons alert={alert} onMark={onMark} /></td>
               </tr>
             )) : (
               <tr>
-                <td colSpan={5} className="bounces-empty">None yet</td>
+                <td colSpan={6} className="bounces-empty">None yet</td>
               </tr>
             )}
           </tbody>
@@ -161,14 +192,26 @@ export function BouncesPage() {
     };
   }, []);
 
+  async function mark(alert, verdict) {
+    const apply = (value) => setAlerts((current) => current.map((item) => (item.id === alert.id ? { ...item, verdict: value } : item)));
+    apply(verdict);
+    try {
+      const { verdict: _ignored, ...snapshot } = alert;
+      await postJson("/api/strategy/bounces/feedback", { alert: snapshot, verdict });
+    } catch (err) {
+      apply(alert.verdict ?? null);
+      setError(`Couldn't save: ${err.message}`);
+    }
+  }
+
   return (
     <section className="bounces-page">
       {error ? <p className="bounces-error">{error}</p> : null}
       <div className="bounces-legend">
         {Object.entries(CLOUD_CLASS).map(([cloud, className]) => <b key={cloud} className={className}>{cloud}</b>)}
       </div>
-      <BounceTable title="Bullish" side="long" alerts={alerts.filter((alert) => alert.side === "long")} newIds={newIds} />
-      <BounceTable title="Bearish" side="short" alerts={alerts.filter((alert) => alert.side === "short")} newIds={newIds} />
+      <BounceTable title="Bullish" side="long" alerts={alerts.filter((alert) => alert.side === "long")} newIds={newIds} onMark={mark} />
+      <BounceTable title="Bearish" side="short" alerts={alerts.filter((alert) => alert.side === "short")} newIds={newIds} onMark={mark} />
     </section>
   );
 }

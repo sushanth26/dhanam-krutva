@@ -98,3 +98,24 @@ def test_bounce_alerts_are_tagged_with_their_watchlists(tmp_path, monkeypatch):
     ])
     result = notifications.latest_bounce_alerts(SimpleNamespace(watchlist_file=path))
     assert result["alerts"][0]["watchlists"] == ["OG list", "Memory"]
+
+
+def test_feedback_marks_keep_the_alert_and_can_be_cleared(tmp_path):
+    from app.feedback import FeedbackStore
+
+    store = FeedbackStore(tmp_path / "feedback.json")
+    alert = {"id": "MU|2026-10-09T11:00:00-04:00|long|1H 34/50", "symbol": "MU", "entry": 101.5, "verdict": None}
+    store.mark(alert, "choppy")
+    item = store.all()[alert["id"]]
+    assert item["verdict"] == "choppy"
+    assert item["alert"]["entry"] == 101.5 and "verdict" not in item["alert"]
+    assert store.verdicts() == {alert["id"]: "choppy"}
+
+    store.mark(alert, None)
+    assert store.all() == {}
+    try:
+        store.mark(alert, "great")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("bad verdict accepted")
