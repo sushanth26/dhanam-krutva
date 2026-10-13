@@ -4,7 +4,6 @@ import { AlertStrategies } from "./components/AlertStrategies";
 import { BouncesPage } from "./components/BouncesPage";
 import { Header } from "./components/Header";
 import { HiddenLegacyPanels } from "./components/HiddenLegacyPanels";
-import { InsiderBuyingPage } from "./components/InsiderBuying";
 import { MtfTable, PreMarketScannerTable, PriceBucket, SpyComparisonTable } from "./components/PriceTables";
 import { deleteJson, getJson, postJson } from "./lib/api";
 import { ALERT_STRATEGIES, MTF_ALERT_STRATEGIES, filterMtfTableQuotes, loadStrategyState, saveStrategyState, strategyIdForMatch } from "./lib/alertStrategies";
@@ -12,7 +11,6 @@ import { cloudStatus, confirmedMtfQuotes, displayMtfLabel, flattenAccounts, form
 import { disableNotifications, enableNotifications, loadNotificationState, setAppBadgeCount, showDeviceNotification, syncNotificationPreferences } from "./lib/notifications";
 
 const PASSIVE_MARKET_REFRESH_INTERVAL_MS = 60 * 1000;
-const INSIDER_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
 const MAX_NOTIFICATIONS = 20;
 const MAX_ALERT_LOG = 500;
 const DAILY_SYMBOLS_KEY = "dhanam-daily-symbols";
@@ -25,10 +23,7 @@ const RETAINED_MTF_QUOTES_KEY = "dhanam-retained-mtf-quotes";
 const AUTO_TRADE_KEY = "dhanam-auto-trade";
 const AUTO_TRADE_EXECUTIONS_KEY = "dhanam-auto-trade-executions";
 const BOS_STATE_KEY = "dhanam-bos-state";
-const INSIDER_SEEN_KEY = "dhanam-insider-seen-records";
-const INSIDER_BASELINE_SENTINEL = "__INSIDER_BASELINE__";
 const MAX_AUTO_TRADE_EXECUTIONS = 500;
-const MAX_INSIDER_SEEN_RECORDS = 1000;
 const WATCHLIST_REFRESH_CONCURRENCY = 1;
 const MAX_WATCHLIST_SYMBOLS = 25;
 const ALL_WATCHLISTS_TAB_ID = "__all-watchlists";
@@ -42,7 +37,6 @@ const APP_TABS = [
   { id: "mtfs", label: "MTFs", data: "watchlists" },
   { id: "watchlist", label: "Watchlist", data: "watchlists" },
   { id: "sectors", label: "Sectors", data: "sectors" },
-  { id: "insiders", label: "Insiders", data: "insiders" },
   { id: "alerts", label: "Alerts", data: "alerts" },
   { id: "charts", label: "Charts", data: "watchlists" },
 ];
@@ -616,57 +610,6 @@ function saveBosState(items) {
   window.localStorage.setItem(BOS_STATE_KEY, JSON.stringify(items || {}));
 }
 
-function loadInsiderSeenRecords() {
-  try {
-    const saved = JSON.parse(window.localStorage.getItem(INSIDER_SEEN_KEY) || "[]");
-    return Array.isArray(saved) ? saved.map(String).filter(Boolean) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveInsiderSeenRecords(keys) {
-  const uniqueKeys = [...new Set((keys || []).map(String).filter(Boolean))].slice(0, MAX_INSIDER_SEEN_RECORDS);
-  window.localStorage.setItem(INSIDER_SEEN_KEY, JSON.stringify(uniqueKeys));
-  return uniqueKeys;
-}
-
-function insiderRecordKey(record) {
-  if (record?.recordId) return String(record.recordId).trim().toUpperCase();
-  return [
-    record?.accessionNumber,
-    record?.ticker,
-    record?.transactionDate || record?.filingDate,
-    record?.insider,
-    record?.shares,
-    Number(record?.price || 0).toFixed(4),
-  ].map((value) => String(value || "").trim().toUpperCase()).join(":");
-}
-
-function insiderNotificationDetails(records) {
-  const sortedRecords = [...records].sort((left, right) => Number(right.value || 0) - Number(left.value || 0));
-  const topRecord = sortedRecords[0] || {};
-  const symbols = [...new Set(sortedRecords.map((record) => String(record.ticker || "").toUpperCase()).filter(Boolean))];
-  const symbolText = symbols.slice(0, 4).join(", ");
-  const extraText = symbols.length > 4 ? ` +${symbols.length - 4}` : "";
-  const count = sortedRecords.length;
-  const title = count === 1
-    ? `New insider buy: ${topRecord.ticker || "QQQ"}`
-    : `${count} new insider buys`;
-  const body = count === 1
-    ? `${topRecord.insider || "An insider"} bought ${topRecord.ticker || "a Nasdaq-100 stock"} on ${topRecord.transactionDate || "the reported date"}; filed ${topRecord.filedAt || topRecord.filingDate || "now"}.`
-    : `${symbolText}${extraText} have new SEC open-market purchase filings.`;
-  return {
-    kind: "insider",
-    title,
-    body,
-    badgeCount: count,
-    tag: "insider-buy-update",
-    targetSymbol: topRecord.ticker || symbols[0] || "",
-    url: "/#insiders",
-  };
-}
-
 function normalizeAlertHistoryItems(items) {
   const byId = new Map();
   for (const item of items || []) {
@@ -1169,7 +1112,6 @@ export default function App() {
     trades: false,
   });
   const passiveMarketTimer = useRef(null);
-  const insiderRefreshTimer = useRef(null);
   const initialMarketLoadStarted = useRef(false);
   const lastMtfSignature = useRef(initialTabState(loadWatchlists(), null));
   const lastMtfRows = useRef(initialTabState(loadWatchlists(), {}));
@@ -1181,7 +1123,6 @@ export default function App() {
   const autoTradeRef = useRef(autoTrade);
   const autoTradeExecutionsRef = useRef(new Set(loadAutoTradeExecutions()));
   const alertLogRef = useRef(alertLog);
-  const insiderSeenRecordsRef = useRef(loadInsiderSeenRecords());
   const selectedAccountIdRef = useRef(selectedAccountId);
   const accountsRef = useRef(accounts);
   const accountsConfirmedRef = useRef(false);
@@ -1774,43 +1715,6 @@ export default function App() {
     showScannerDeviceNotification(notification);
   }
 
-  function handleInsiderData(payload) {
-    if (payload?.secPending) return;
-    const records = Array.isArray(payload?.alertRecords)
-      ? payload.alertRecords
-      : Array.isArray(payload?.records)
-        ? payload.records
-        : [];
-    const nextKeys = records.map(insiderRecordKey).filter(Boolean);
-
-    const previousKeys = new Set(insiderSeenRecordsRef.current);
-    const unseenRecords = records.filter((record) => !previousKeys.has(insiderRecordKey(record)));
-    insiderSeenRecordsRef.current = saveInsiderSeenRecords([
-      INSIDER_BASELINE_SENTINEL,
-      ...nextKeys,
-      ...insiderSeenRecordsRef.current,
-    ]);
-    if (!previousKeys.size || !unseenRecords.length) return;
-
-    const notification = insiderNotificationDetails(unseenRecords);
-    appendAlertLog([
-      notificationHistoryEntry({
-        title: notification.title,
-        message: notification.body,
-        kind: "notification",
-        symbol: notification.targetSymbol,
-        source: "insider-monitor",
-        payload: notification,
-      }),
-    ]);
-    addNotification({
-      title: notification.title,
-      message: notification.body,
-      kind: "insider",
-    });
-    showInsiderDeviceNotification(notification);
-  }
-
   function appendAlertLog(entries) {
     if (!entries.length) return;
     setAlertLog((current) => {
@@ -1847,9 +1751,7 @@ export default function App() {
         ? "#mtfs"
         : nextPage === "sectors"
           ? "#sectors"
-          : nextPage === "insiders"
-            ? "#insiders"
-            : nextPage === "charts"
+          : nextPage === "charts"
               ? "#charts"
               : nextPage === "watchlist"
                 ? "#watchlist"
@@ -2344,18 +2246,6 @@ export default function App() {
     }).catch((error) => setLiveAlert(error.message));
   }
 
-  function showInsiderDeviceNotification(notification) {
-    if (!notificationState.appEnabled || notificationState.permission !== "granted") return;
-    showDeviceNotification({
-      title: notification.title,
-      body: notification.body,
-      badgeCount: notification.badgeCount,
-      tag: notification.tag,
-      targetSymbol: notification.targetSymbol,
-      url: notification.url,
-    }).catch((error) => setLiveAlert(error.message));
-  }
-
   function showBosDeviceNotification(notification) {
     if (!notificationState.appEnabled || notificationState.permission !== "granted") return;
     showDeviceNotification({
@@ -2389,7 +2279,7 @@ export default function App() {
         addNotification({
           title: "Push notifications enabled",
           message: nextState.webPushConfigured && nextState.subscribed
-            ? "Railway can send MTF and insider push alerts."
+            ? "Railway can send MTF push alerts."
             : "Device notifications are enabled. Add VAPID keys for closed-app push alerts.",
           kind: "system",
         });
@@ -2469,20 +2359,6 @@ export default function App() {
         if (isMarketRefreshWindow()) refreshAppMarketData({ showLoading: false, force: true });
       }, PASSIVE_MARKET_REFRESH_INTERVAL_MS);
     }
-    if (isTabDataEnabled("insiders") && !insiderRefreshTimer.current) {
-      checkRecentInsiderFilings();
-      insiderRefreshTimer.current = setInterval(checkRecentInsiderFilings, INSIDER_REFRESH_INTERVAL_MS);
-    }
-  }
-
-  async function checkRecentInsiderFilings() {
-    if (!isTabDataEnabled("insiders")) return;
-    try {
-      const payload = await getJson("/api/insiders/qqq/recent");
-      handleInsiderData(payload);
-    } catch {
-      // The next polling cycle retries transient SEC failures.
-    }
   }
 
   async function confirmAccountsAndStart() {
@@ -2502,7 +2378,6 @@ export default function App() {
     confirmAccountsAndStart();
     return () => {
       if (passiveMarketTimer.current) clearInterval(passiveMarketTimer.current);
-      if (insiderRefreshTimer.current) clearInterval(insiderRefreshTimer.current);
     };
   }, []);
 
@@ -2558,10 +2433,6 @@ export default function App() {
     saveVisibleTabs(visibleTabs);
     if (visibleTabs[activePage] === false) {
       navigatePage(firstVisibleTab(visibleTabs));
-    }
-    if (!isTabDataEnabled("insiders") && insiderRefreshTimer.current) {
-      clearInterval(insiderRefreshTimer.current);
-      insiderRefreshTimer.current = null;
     }
     if (!isTabDataEnabled("watchlists") && passiveMarketTimer.current) {
       clearInterval(passiveMarketTimer.current);
@@ -2720,8 +2591,6 @@ export default function App() {
             loading={loading.prices}
             onRefresh={() => refreshSectorPrices({ force: true })}
           />
-        ) : activePage === "insiders" ? (
-          <InsiderBuyingPage onDataLoaded={handleInsiderData} />
         ) : activePage === "charts" ? (
           <ChartsPage quotesByTab={quotesByTab} watchlists={watchlists} />
         ) : activePage === "watchlist" ? (
@@ -4030,7 +3899,6 @@ function VisibleTabsPanel({ disabled, onChange, visibleTabs }) {
 function tabDataLabel(data) {
   if (data === "watchlists") return "Watchlist prices";
   if (data === "sectors") return "Sector movers";
-  if (data === "insiders") return "Insider feed";
   if (data === "alerts") return "Alert history";
   return "App view";
 }

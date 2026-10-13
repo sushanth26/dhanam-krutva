@@ -132,18 +132,6 @@ export function Header({
                 <span>Sectors</span>
               </button>
             ) : null}
-            {visibleTabs.insiders !== false ? (
-              <button
-                type="button"
-                className={`account-menu-button secondary-button ${activePage === "insiders" ? "active" : ""}`}
-                disabled={pageLoading}
-                onClick={() => onNavigate("insiders")}
-                aria-label="Open insider buying"
-                title="Insider Buying"
-              >
-                <span>Insiders</span>
-              </button>
-            ) : null}
             {visibleTabs.alerts !== false ? (
               <button
                 type="button"
