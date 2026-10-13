@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from webull.data.common.category import Category
 
 from app.config import get_settings
+from app.cache_util import cache_put
 from app.dependencies import service
 from app.market_data import LIVE_WATCHLIST, build_live_prices, build_sector_movers
 from app.watchlists import WatchlistStore
@@ -51,7 +52,7 @@ def webull_live_prices(
             fixed_stop_buffer=fixed_stop_buffer,
         )
         if payload.get("ok"):
-            _live_price_cache[cache_key] = (time.time(), payload)
+            cache_put(_live_price_cache, cache_key, payload, max_age=10 * 60, max_items=20)
         return payload
     except WebullConfigurationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -81,7 +82,7 @@ def webull_sector_movers(
             fixed_stop_buffer=fixed_stop_buffer,
         )
         if payload.get("ok"):
-            _live_price_cache[cache_key] = (time.time(), payload)
+            cache_put(_live_price_cache, cache_key, payload, max_age=10 * 60, max_items=20)
         return payload
     except WebullConfigurationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

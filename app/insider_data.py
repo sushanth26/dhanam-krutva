@@ -11,6 +11,8 @@ from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 from zoneinfo import ZoneInfo
 
+from app.cache_util import cache_put
+
 
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
@@ -61,7 +63,7 @@ async def _fetch_sec_bytes(url: str, user_agent: str, ttl_seconds: int) -> bytes
     if cached and time.time() - cached[0] < ttl_seconds:
         return cached[1]
     value = await asyncio.to_thread(_sec_request_sync, url, user_agent)
-    _cache[cache_key] = (time.time(), value)
+    cache_put(_cache, cache_key, value, max_age=SEC_DOCUMENT_TTL_SECONDS, max_items=300)
     return value
 
 

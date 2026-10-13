@@ -10,6 +10,7 @@ import json
 from fastapi import APIRouter, HTTPException, Query
 
 from app.config import get_settings
+from app.cache_util import cache_put
 from app.insider_data import load_recent_sec_records, load_sec_records_for_targets, merge_insider_records
 
 
@@ -62,7 +63,7 @@ async def _fetch_json(url: str, ttl_seconds: int = CACHE_TTL_SECONDS) -> Any:
     if cached and time.time() - cached[0] < ttl_seconds:
         return cached[1]
     value = await asyncio.to_thread(_fetch_json_sync, url)
-    _cache[cache_key] = (time.time(), value)
+    cache_put(_cache, cache_key, value, max_age=24 * 60 * 60, max_items=100)
     return value
 
 
@@ -173,7 +174,7 @@ async def _load_nasdaq_history(days: int) -> dict[str, Any]:
         "holdingsAsOf": datetime.now().strftime("%b %-d, %Y"),
         "totalFilingsFound": len(records),
     }
-    _cache[cache_key] = (time.time(), payload)
+    cache_put(_cache, cache_key, payload, max_age=24 * 60 * 60, max_items=100)
     return payload
 
 
@@ -243,7 +244,7 @@ async def qqq_insider_filing_details(days: int = Query(default=365, ge=30, le=36
                 "historicalFilingsMatched": len(sec_records),
                 "historicalCompaniesScanned": companies_scanned,
             }
-            _cache[cache_key] = (time.time(), payload)
+            cache_put(_cache, cache_key, payload, max_age=24 * 60 * 60, max_items=100)
             return payload
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Unable to match historical SEC filings: {exc}") from exc
