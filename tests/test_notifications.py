@@ -467,9 +467,10 @@ def test_bounce_message_colors_by_side_and_escapes_html():
         "\U0001F7E2 <b>NVDA</b>  Bounce 1H 34/50",
         "Entry <code>180.25</code>  \U0001F6D1 SL <code>178.90</code>",
         "\u2B07 S1 178.50  |  \u2B06 R1 182.00",
+        "\U0001F6AA Exit: 10m close below 5/12",
     ]
     assert short_block.splitlines()[0] == "\U0001F534 <b>AMD</b>  Reject D &lt;20/21&gt;"
-    assert len(short_block.splitlines()) == 2
+    assert len(short_block.splitlines()) == 3
 
 
 def test_monitor_telegram_failure_is_recorded_not_raised(monkeypatch):
@@ -557,3 +558,20 @@ def test_exit_message_lists_reason_price_and_r():
     text = exit_message([{"symbol": "MU", "alert": "Bounce 1H 34/50",
                           "exit": {"reason": "512", "label": "5/12 lost", "price": 103.456, "r": 1.84}}])
     assert "EXIT MU" in text and "5/12 lost" in text and "103.46" in text and "+1.8R" in text
+
+
+def test_bounce_message_shows_the_exit_rule_for_regular_session_alerts():
+    from app.notifications import bounce_message
+    base = {"symbol": "MU", "alert": "Bounce 1H 34/50", "entry": 100, "stop": 99}
+    assert "10m close below 5/12" in bounce_message([{**base, "side": "long"}])
+    assert "10m close above 5/12" in bounce_message([{**base, "side": "short"}])
+    assert "5/12" not in bounce_message([{**base, "side": "long", "premarket": True}])
+
+
+def test_restart_does_not_resend_alerts_the_old_instance_sent():
+    from datetime import UTC, datetime, timedelta
+    monitor = MtfPushMonitor(SimpleNamespace(push_subscription_file="unused.json"))
+    now = datetime.now(UTC)
+    old = {"id": "a", "bar_close": (now - timedelta(minutes=5)).isoformat()}
+    new = {"id": "b", "bar_close": now.isoformat()}
+    assert monitor.new_bounce_alerts([old, new]) == [new]

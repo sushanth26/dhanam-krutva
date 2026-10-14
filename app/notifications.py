@@ -32,7 +32,8 @@ DEFAULT_ALERT_STRATEGIES = {
 }
 
 MTF_TABLE_ALERT_LABELS = {"Hourly 34/50", "Daily 20/21", "Daily 50/55"}
-BOUNCE_FRESH_SECONDS = 15 * 60  # older bounce alerts (e.g. app restarted mid-day) are listed, not pushed
+BOUNCE_FRESH_SECONDS = 15 * 60
+RESTART_GRACE_SECONDS = 90  # older bounce alerts (e.g. app restarted mid-day) are listed, not pushed
 BOUNCE_CACHE_SECONDS = 90
 RETRY_SECONDS = (180, 360, 720, 900)  # after a failed scan: 3, 6, 12, then every 15 min until one works
 PUBLIC_URL = "https://dhanam-krutva-production.up.railway.app"
@@ -129,6 +130,9 @@ class MtfPushMonitor:
         self.last_bos_state: dict[str, dict[str, Any]] | None = None
         self.seen_bounce_ids: set[str] = set()
         self.seen_exit_ids: set[str] = set()
+        # after a restart (deploy), alerts that closed before this instance started were already
+        # sent by the previous one; only a short grace covers the gap while it was down
+        self.started_at = datetime.now(UTC) - timedelta(seconds=RESTART_GRACE_SECONDS)
         self.paused_for_manual_retry = False
         self.failures = 0  # failed scans in a row
         self.retry_at: datetime | None = None  # while paused: when the next automatic retry runs
@@ -227,7 +231,7 @@ class MtfPushMonitor:
             raise
 
     def new_bounce_alerts(self, alerts: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        cutoff = datetime.now(UTC) - timedelta(seconds=BOUNCE_FRESH_SECONDS)
+        cutoff = max(datetime.now(UTC) - timedelta(seconds=BOUNCE_FRESH_SECONDS), self.started_at)
         fresh = [
             alert for alert in alerts
             if alert["id"] not in self.seen_bounce_ids and datetime.fromisoformat(alert["bar_close"]) >= cutoff
@@ -237,7 +241,7 @@ class MtfPushMonitor:
 
     def new_exits(self, alerts: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Alerts whose trade just ended (5/12 lost, stopped, or the close), each sent once."""
-        cutoff = datetime.now(UTC) - timedelta(seconds=BOUNCE_FRESH_SECONDS)
+        cutoff = max(datetime.now(UTC) - timedelta(seconds=BOUNCE_FRESH_SECONDS), self.started_at)
         done = [alert for alert in alerts if alert.get("exit")]
         fresh = [
             alert for alert in done
@@ -453,6 +457,8 @@ def bounce_message(alerts: list[dict[str, Any]]) -> str:
         resistance = "  ".join(f"{label} {format_price(alert[key])}" for label, key in (("R1", "r1"), ("R2", "r2")) if alert.get(key) is not None)
         if support or resistance:
             lines.append("  |  ".join(part for part in (f"\u2B07 {support}" if support else "", f"\u2B06 {resistance}" if resistance else "") if part))
+        if not alert.get("premarket"):
+            lines.append(f"\U0001F6AA Exit: 10m close {'below' if alert.get('side', 'long') == 'long' else 'above'} 5/12")
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 
