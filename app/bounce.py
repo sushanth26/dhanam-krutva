@@ -4,9 +4,13 @@ Setup: price comes back to a higher-timeframe cloud (1H 34/50, daily 20/21, dail
   Bounce (long): most of the last 6 regular-session 10-min bars closed above the cloud, a candle
   actually reached the cloud (0.05% slack) on this bar or the 2 before it, and this bar closes
   back above the cloud as a green candle. Reject (short) mirrors it.
+Trade plan (Ripster management, confirmed on 2020-2026 in-play backtests in Stock-Intel
+backtest/evolve.py): stop just past the alert candle and the one before it (0.1 x 10-min ATR
+pad, at least 0.15% from entry); skip if that stop is over 3% away. Exit when a 10-min candle
+closes through the 10-min 5/12 cloud (below it for a long, above it for a short), or at the stop.
 Only completed 10-min bars from 9:40 to 15:00 ET. A separate premarket pass (its own bars,
-4:00-9:30 ET) alerts from 8:30 to the open, labelled "PM"; the regular-session pass ignores it. Stop: beyond the far side of the cloud by
-0.1 x 10-min ATR. S1/S2 and R1/R2: nearest support / resistance levels around the entry, from
+4:00-9:30 ET) alerts from 8:30 to the open, labelled "PM"; the regular-session pass ignores it
+(PM alerts get no exit tracking). S1/S2 and R1/R2: nearest support / resistance levels around the entry, from
 30-min SR channels (LonesomeTheBlue settings), prior-day high / low / close, premarket high / low
 and daily swing highs / lows.
 
@@ -31,6 +35,8 @@ TOUCH_BARS = 3
 TOUCH_SLACK = 0.0005
 STOP_PAD_ATR = 0.1
 REPEAT_MINUTES = 60
+MIN_RISK = 0.0015  # stop at least 0.15% from entry
+MAX_RISK = 0.03    # skip alerts whose stop would be more than 3% away
 CLOUDS = (("1H 34/50", "h", 34, 50), ("D 20/21", "d", 20, 21), ("D 50/55", "d", 50, 55))
 
 
@@ -195,6 +201,37 @@ def daily_swings(days: list[tuple]) -> list[float]:
 
 # ------------------------------- detection ------------------------------- #
 
+def trade_exit(bars: list[dict[str, Any]], i: int, side: str, entry: float, stop: float) -> dict[str, Any] | None:
+    """How the alert's trade ends, from completed bars after it: stop hit, a 10-min close through
+    the 5/12 cloud, or the session close. None while it's still open."""
+    session = bars[i]["t"].date()
+    risk = abs(entry - stop)
+    sign = 1 if side == "long" else -1
+    for j in range(i + 1, len(bars)):
+        b = bars[j]
+        if b["t"].date() != session:
+            break
+        hit = b["l"] <= stop if side == "long" else b["h"] >= stop
+        if hit:
+            px = min(b["o"], stop) if side == "long" else max(b["o"], stop)
+            reason, label = "stop", "Stopped"
+        elif (b["c"] < min(b["e5"], b["e12"])) if side == "long" else (b["c"] > max(b["e5"], b["e12"])):
+            px, reason, label = b["c"], "512", "5/12 lost"
+        elif b["end"].time() >= RTH_CLOSE:
+            px, reason, label = b["c"], "close", "Close"
+        else:
+            continue
+        return {
+            "reason": reason,
+            "label": label,
+            "time": b["t"].strftime("%H:%M"),
+            "bar_close": b["end"].isoformat(),
+            "price": round(px, 2),
+            "r": round(sign * (px - entry) / risk, 2) if risk else 0.0,
+        }
+    return None
+
+
 def bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, Any]],
                   h1: list[dict[str, Any]], daily: list[dict[str, Any]],
                   now: datetime | None = None) -> list[dict[str, Any]]:
@@ -238,9 +275,13 @@ def _bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, An
     pmh = max((float(c["high"]) for c in pre), default=None)
     pml = min((float(c["low"]) for c in pre), default=None)
 
-    # attach clouds + 10-min ATR to every RTH bar
+    # attach clouds, 10-min ATR and the 10-min 5/12 cloud to every bar
     atr, prev_c = None, None
+    e5, e12 = _Ema(5), _Ema(12)
     for b in bars:
+        e5.update(b["c"])
+        e12.update(b["c"])
+        b["e5"], b["e12"] = e5.v, e12.v
         tr = b["h"] - b["l"] if prev_c is None else max(b["h"] - b["l"], abs(b["h"] - prev_c), abs(b["l"] - prev_c))
         atr = tr if atr is None else (atr * 13 + tr) / 14
         b["atr"], prev_c = atr, b["c"]
@@ -288,7 +329,15 @@ def _bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, An
                 if prev and (b["end"] - prev) < timedelta(minutes=REPEAT_MINUTES):
                     break  # same cloud + side again within the hour: not a new alert
                 pad = STOP_PAD_ATR * b["atr"]
-                stop = lo - pad if side == "long" else hi + pad
+                pb = bars[i - 1] if i else b
+                if side == "long":
+                    stop = min(b["l"], pb["l"]) - pad
+                    stop = min(stop, b["c"] * (1 - MIN_RISK))
+                else:
+                    stop = max(b["h"], pb["h"]) + pad
+                    stop = max(stop, b["c"] * (1 + MIN_RISK))
+                if abs(b["c"] - stop) > MAX_RISK * b["c"]:
+                    break  # entry too far from a sensible stop: not worth taking
                 k = sum(1 for e in b30_ends if e <= b["end"]) - 1
                 chans = sr_channels(b30, k) if k >= 0 else []
                 out.append({
@@ -298,6 +347,7 @@ def _bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, An
                     "cloud": name,
                     "alert": f"{label}{'Bounce' if side == 'long' else 'Reject'} {name}",
                     "premarket": bool(label),
+                    "exit": None if label else trade_exit(bars, i, side, b["c"], stop),
                     "time": b["t"].strftime("%H:%M"),  # candle open, ET (how charts label it)
                     "bar_start": b["t"].isoformat(),
                     "bar_close": b["end"].isoformat(),

@@ -90,6 +90,19 @@ function price(value) {
   return value == null ? "–" : Number(value).toFixed(2);
 }
 
+// Ripster exit: a 10-min close through the 5/12 cloud, or the stop
+function ExitTag({ alert }) {
+  const ex = alert.exit;
+  if (alert.premarket) return null;
+  if (!ex) return <span className="bounces-exit open">In trade</span>;
+  const r = `${ex.r >= 0 ? "+" : ""}${ex.r.toFixed(1)}R`;
+  return (
+    <span className={`bounces-exit ${ex.r >= 0 ? "win" : "loss"}`} title={`${ex.time} ${ex.label} @ ${price(ex.price)}`}>
+      {ex.label} {r}
+    </span>
+  );
+}
+
 function BounceTable({ title, side, alerts, newIds, onMark }) {
 
   return (
@@ -104,6 +117,7 @@ function BounceTable({ title, side, alerts, newIds, onMark }) {
             <b key={alert.id} className={`${CLOUD_CLASS[alert.cloud]} ${newIds.has(alert.id) ? "is-new" : ""}`}>
               <small>{alert.time}</small> {alert.symbol}
               {lists(alert) ? <i>{lists(alert)}</i> : null}
+              <ExitTag alert={alert} />
               <VerdictButtons alert={alert} onMark={onMark} />
             </b>
           ))
@@ -118,6 +132,7 @@ function BounceTable({ title, side, alerts, newIds, onMark }) {
               <th>List</th>
               <th>Entry</th>
               <th>SL</th>
+              <th>Exit</th>
               <th>Result</th>
             </tr>
           </thead>
@@ -132,11 +147,12 @@ function BounceTable({ title, side, alerts, newIds, onMark }) {
                 <td className="bounces-list">{lists(alert)}</td>
                 <td>{price(alert.entry)}</td>
                 <td>{price(alert.stop)}</td>
+                <td><ExitTag alert={alert} /></td>
                 <td><VerdictButtons alert={alert} onMark={onMark} /></td>
               </tr>
             )) : (
               <tr>
-                <td colSpan={6} className="bounces-empty">None yet</td>
+                <td colSpan={7} className="bounces-empty">None yet</td>
               </tr>
             )}
           </tbody>

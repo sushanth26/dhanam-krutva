@@ -128,6 +128,7 @@ class MtfPushMonitor:
         self.last_mtf_touch_keys: set[str] | None = None
         self.last_bos_state: dict[str, dict[str, Any]] | None = None
         self.seen_bounce_ids: set[str] = set()
+        self.seen_exit_ids: set[str] = set()
         self.paused_for_manual_retry = False
         self.failures = 0  # failed scans in a row
         self.retry_at: datetime | None = None  # while paused: when the next automatic retry runs
@@ -178,7 +179,9 @@ class MtfPushMonitor:
         self.last_checked_at = utc_now()
         try:
             quotes = build_monitored_quotes(self.settings)
-            new_bounces = self.new_bounce_alerts(remember_bounce_alerts(quotes))
+            all_bounces = remember_bounce_alerts(quotes)
+            new_bounces = self.new_bounce_alerts(all_bounces)
+            new_exits = self.new_exits(all_bounces)
             mtf_quotes = mtf_table_quotes(confirmed_mtf_quotes(quotes))
             signature = mtf_signature(mtf_quotes)
             new_mtf_quotes, next_mtf_touch_keys = new_mtf_touch_quotes(self.last_mtf_touch_keys, mtf_quotes)
@@ -192,6 +195,8 @@ class MtfPushMonitor:
             self.last_success_at = utc_now()
             if resuming:
                 self.telegram_text("\u2705 <b>Alerts back on</b>")
+            if new_exits:
+                self.telegram_text(exit_message(new_exits))
             notifications = [bounce_notification_payload(alert) for alert in new_bounces]
             if new_mtf_quotes and getattr(self.settings, "mtf_touch_push_enabled", False):
                 notifications.append(mtf_notification_payload(new_mtf_quotes))
@@ -228,6 +233,17 @@ class MtfPushMonitor:
             if alert["id"] not in self.seen_bounce_ids and datetime.fromisoformat(alert["bar_close"]) >= cutoff
         ]
         self.seen_bounce_ids.update(alert["id"] for alert in alerts)
+        return fresh
+
+    def new_exits(self, alerts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Alerts whose trade just ended (5/12 lost, stopped, or the close), each sent once."""
+        cutoff = datetime.now(UTC) - timedelta(seconds=BOUNCE_FRESH_SECONDS)
+        done = [alert for alert in alerts if alert.get("exit")]
+        fresh = [
+            alert for alert in done
+            if alert["id"] not in self.seen_exit_ids and datetime.fromisoformat(alert["exit"]["bar_close"]) >= cutoff
+        ]
+        self.seen_exit_ids.update(alert["id"] for alert in done)
         return fresh
 
     def status(self) -> dict[str, Any]:
@@ -439,6 +455,19 @@ def bounce_message(alerts: list[dict[str, Any]]) -> str:
             lines.append("  |  ".join(part for part in (f"\u2B07 {support}" if support else "", f"\u2B06 {resistance}" if resistance else "") if part))
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
+
+
+def exit_message(alerts: list[dict[str, Any]]) -> str:
+    """Telegram HTML, one line per trade that ended: stock, alert, why, price, result in R."""
+    lines = []
+    for alert in alerts:
+        ex = alert["exit"]
+        icon = "\U0001F6D1" if ex["reason"] == "stop" else "\U0001F6AA"
+        lines.append(
+            f"{icon} <b>EXIT {html.escape(alert['symbol'])}</b>  {html.escape(alert['alert'])}: "
+            f"{html.escape(ex['label'])} <code>{format_price(ex['price'])}</code>  {ex['r']:+.1f}R"
+        )
+    return "\n".join(lines)
 
 
 def send_telegram(settings: Settings, text: str) -> None:

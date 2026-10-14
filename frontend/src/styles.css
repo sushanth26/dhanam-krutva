@@ -10152,3 +10152,19 @@ select {
     font-style: normal;
   }
 }
+
+/* Exit: 10-min close through the 5/12, or the stop */
+.bounces-exit {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.bounces-exit.win { color: #16a34a; }
+.bounces-exit.loss { color: #dc2626; }
+.bounces-exit.open { color: #8b9aad; font-weight: 600; }
+
+.bounces-names .bounces-exit {
+  display: block;
+  margin-top: 4px;
+}

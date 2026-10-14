@@ -550,3 +550,10 @@ def test_monitor_retries_by_itself_with_backoff_and_keeps_the_error(tmp_path, mo
     assert not status["paused_for_manual_retry"] and status["retry_at"] is None and status["failures_in_a_row"] == 0
     assert status["last_error"] == "Too many requests"  # kept for diagnosis
     assert texts[1] == "✅ <b>Alerts back on</b>"
+
+
+def test_exit_message_lists_reason_price_and_r():
+    from app.notifications import exit_message
+    text = exit_message([{"symbol": "MU", "alert": "Bounce 1H 34/50",
+                          "exit": {"reason": "512", "label": "5/12 lost", "price": 103.456, "r": 1.84}}])
+    assert "EXIT MU" in text and "5/12 lost" in text and "103.46" in text and "+1.8R" in text

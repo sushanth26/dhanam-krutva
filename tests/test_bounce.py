@@ -119,3 +119,43 @@ def test_feedback_marks_keep_the_alert_and_can_be_cleared(tmp_path):
         pass
     else:
         raise AssertionError("bad verdict accepted")
+
+
+def test_stop_sits_just_past_the_alert_candle():
+    session = datetime(2026, 10, 9, tzinfo=ET)
+    ten, hourly, daily = setup_history(session)
+    ten.append(bar(session.replace(hour=10, minute=50), 101.2, 101.6, 100.05, 101.5))
+    alert = bounce_alerts("MU", ten, ten, hourly, daily, now=session.replace(hour=11, minute=5))[0]
+    assert 99.9 < alert["stop"] < 100.05  # below the candle low by a small ATR pad
+    assert alert["exit"] is None  # still in the trade
+
+
+def test_exit_when_a_candle_closes_below_the_512():
+    session = datetime(2026, 10, 9, tzinfo=ET)
+    ten, hourly, daily = setup_history(session)
+    ten.append(bar(session.replace(hour=10, minute=50), 101.2, 101.6, 100.05, 101.5))
+    ten.append(bar(session.replace(hour=11, minute=0), 101.5, 103.0, 101.4, 102.9))  # runs
+    ten.append(bar(session.replace(hour=11, minute=10), 102.9, 103.0, 101.0, 101.2))  # closes below the 5/12
+    alert = bounce_alerts("MU", ten, ten, hourly, daily, now=session.replace(hour=11, minute=25))[0]
+    ex = alert["exit"]
+    assert ex["reason"] == "512" and ex["label"] == "5/12 lost"
+    assert ex["time"] == "11:10" and ex["price"] == 101.2
+    assert ex["r"] < 0
+
+
+def test_stop_hit_ends_the_trade_at_the_stop():
+    session = datetime(2026, 10, 9, tzinfo=ET)
+    ten, hourly, daily = setup_history(session)
+    ten.append(bar(session.replace(hour=10, minute=50), 101.2, 101.6, 100.05, 101.5))
+    ten.append(bar(session.replace(hour=11, minute=0), 101.5, 101.6, 99.0, 99.5))
+    alert = bounce_alerts("MU", ten, ten, hourly, daily, now=session.replace(hour=11, minute=15))[0]
+    assert alert["exit"]["reason"] == "stop"
+    assert alert["exit"]["price"] == alert["stop"]
+    assert alert["exit"]["r"] == -1.0
+
+
+def test_alert_skipped_when_stop_would_be_over_3pct_away():
+    session = datetime(2026, 10, 9, tzinfo=ET)
+    ten, hourly, daily = setup_history(session)
+    ten.append(bar(session.replace(hour=10, minute=50), 99.0, 101.6, 95.0, 101.5))  # huge wick through the cloud
+    assert bounce_alerts("MU", ten, ten, hourly, daily, now=session.replace(hour=11, minute=5)) == []
