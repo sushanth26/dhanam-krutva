@@ -57,7 +57,8 @@ def test_premarket_bounce_alerts_from_830_with_pm_label():
     ten = [bar(start + timedelta(minutes=10 * k), 102, 102.4, 101.8, 102.2) for k in range(5)]  # 07:40-08:20
     ten.append(bar(session.replace(hour=8, minute=30), 101.2, 101.6, 100.05, 101.5))
 
-    alerts = bounce_alerts("MU", ten, ten, hourly, daily, now=session.replace(hour=8, minute=45))
+    assert bounce_alerts("MU", ten, ten, hourly, daily, now=session.replace(hour=8, minute=45)) == []  # off by default
+    alerts = bounce_alerts("MU", ten, ten, hourly, daily, now=session.replace(hour=8, minute=45), premarket=True)
 
     assert [a["alert"] for a in alerts] == ["PM Bounce 1H 34/50"]
     assert alerts[0]["premarket"] is True
@@ -72,7 +73,7 @@ def test_no_premarket_alert_before_830():
     ten = [bar(start + timedelta(minutes=10 * k), 102, 102.4, 101.8, 102.2) for k in range(5)]  # 07:20-08:00
     ten.append(bar(session.replace(hour=8, minute=10), 101.2, 101.6, 100.05, 101.5))  # closes 08:20
 
-    assert bounce_alerts("MU", ten, ten, hourly, daily, now=session.replace(hour=8, minute=45)) == []
+    assert bounce_alerts("MU", ten, ten, hourly, daily, now=session.replace(hour=8, minute=45), premarket=True) == []
 
 
 def test_levels_pick_nearest_two_each_side():

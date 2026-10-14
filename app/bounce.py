@@ -20,6 +20,7 @@ daily EMAs as of each 10-min bar's close, with the still-open hourly / daily bar
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -35,6 +36,9 @@ TOUCH_BARS = 3
 TOUCH_SLACK = 0.0005
 STOP_PAD_ATR = 0.1
 REPEAT_MINUTES = 60
+# Premarket alerts are off unless BOUNCE_PREMARKET_ENABLED=true: the trade plan was only
+# backtested on regular-session alerts (9:40 on), and premarket ones have no exit tracking.
+PREMARKET_ENABLED = os.getenv("BOUNCE_PREMARKET_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
 MIN_RISK = 0.0015  # stop at least 0.15% from entry
 MAX_RISK = 0.03    # skip alerts whose stop would be more than 3% away
 CLOUDS = (("1H 34/50", "h", 34, 50), ("D 20/21", "d", 20, 21), ("D 50/55", "d", 50, 55))
@@ -234,11 +238,14 @@ def trade_exit(bars: list[dict[str, Any]], i: int, side: str, entry: float, stop
 
 def bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, Any]],
                   h1: list[dict[str, Any]], daily: list[dict[str, Any]],
-                  now: datetime | None = None) -> list[dict[str, Any]]:
-    """Bounce / reject alerts for the latest session in `ten` (ETH 10-min bars): premarket + regular."""
+                  now: datetime | None = None, premarket: bool | None = None) -> list[dict[str, Any]]:
+    """Bounce / reject alerts for the latest session in `ten` (ETH 10-min bars): regular session,
+    plus premarket when enabled."""
     now = (now or datetime.now(ET)).astimezone(ET)
+    if premarket is None:
+        premarket = PREMARKET_ENABLED
     premarket = _bounce_alerts(symbol, m5, ten, h1, daily, now, (PREMARKET_OPEN, RTH_OPEN),
-                               (PREMARKET_FIRST_ALERT, RTH_OPEN), "PM ")
+                               (PREMARKET_FIRST_ALERT, RTH_OPEN), "PM ") if premarket else []
     regular = _bounce_alerts(symbol, m5, ten, h1, daily, now, (RTH_OPEN, RTH_CLOSE), (FIRST_ALERT, LAST_ALERT), "")
     return premarket + regular
 
