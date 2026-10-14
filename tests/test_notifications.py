@@ -514,3 +514,39 @@ def test_monitor_telegrams_when_paused_and_when_back_on(tmp_path, monkeypatch):
     monkeypatch.setattr(notifications, "build_monitored_quotes", lambda _settings: [])
     monitor.check_once(manual=True)
     assert texts[1] == "\u2705 <b>Alerts back on</b>"
+
+
+def test_monitor_retries_by_itself_with_backoff_and_keeps_the_error(tmp_path, monkeypatch):
+    settings = SimpleNamespace(
+        telegram_configured=True,
+        alert_history_file=tmp_path / "alerts.json",
+        push_subscription_file=tmp_path / "push.json",
+    )
+    monitor = MtfPushMonitor(settings)
+    texts = []
+    monkeypatch.setattr(notifications, "send_telegram", lambda _settings, text: texts.append(text))
+    calls = {"count": 0}
+
+    def webull_down(_settings):
+        calls["count"] += 1
+        raise RuntimeError("Too many requests")
+
+    monkeypatch.setattr(notifications, "build_monitored_quotes", webull_down)
+    for expected_wait in (3, 6, 12, 15, 15):
+        try:
+            monitor.check_once()
+        except RuntimeError:
+            pass
+        left = (monitor.retry_at - notifications.datetime.now(notifications.UTC)).total_seconds()
+        assert expected_wait * 60 - 5 < left <= expected_wait * 60
+        assert monitor.check_once() is None  # not due yet: no Webull call
+        monitor.retry_at = notifications.datetime.now(notifications.UTC)  # jump to the retry time
+    assert calls["count"] == 5
+    assert len(texts) == 1 and "Retrying by itself in 3 min" in texts[0]  # one message per outage
+
+    monkeypatch.setattr(notifications, "build_monitored_quotes", lambda _settings: [])
+    monitor.check_once()
+    status = monitor.status()
+    assert not status["paused_for_manual_retry"] and status["retry_at"] is None and status["failures_in_a_row"] == 0
+    assert status["last_error"] == "Too many requests"  # kept for diagnosis
+    assert texts[1] == "✅ <b>Alerts back on</b>"

@@ -1,6 +1,7 @@
 import asyncio
 import html
 import json
+import logging
 import threading
 import urllib.parse
 import urllib.request
@@ -33,11 +34,13 @@ DEFAULT_ALERT_STRATEGIES = {
 MTF_TABLE_ALERT_LABELS = {"Hourly 34/50", "Daily 20/21", "Daily 50/55"}
 BOUNCE_FRESH_SECONDS = 15 * 60  # older bounce alerts (e.g. app restarted mid-day) are listed, not pushed
 BOUNCE_CACHE_SECONDS = 90
+RETRY_SECONDS = (180, 360, 720, 900)  # after a failed scan: 3, 6, 12, then every 15 min until one works
 PUBLIC_URL = "https://dhanam-krutva-production.up.railway.app"
 
 _bounce_cache: dict[str, Any] = {"at": 0.0, "alerts": [], "updated_at": None}
 _bounce_lock = threading.Lock()
 _bounce_fetch_lock = threading.Lock()  # one Webull fetch at a time; concurrent requests share its result
+logger = logging.getLogger(__name__)
 
 
 class PushSubscriptionStore:
@@ -126,7 +129,9 @@ class MtfPushMonitor:
         self.last_bos_state: dict[str, dict[str, Any]] | None = None
         self.seen_bounce_ids: set[str] = set()
         self.paused_for_manual_retry = False
-        self.last_error: str | None = None
+        self.failures = 0  # failed scans in a row
+        self.retry_at: datetime | None = None  # while paused: when the next automatic retry runs
+        self.last_error: str | None = None  # kept after recovery so a pause can be diagnosed later
         self.last_checked_at: str | None = None
         self.last_success_at: str | None = None
         self.last_error_at: str | None = None
@@ -166,13 +171,10 @@ class MtfPushMonitor:
             await asyncio.sleep(self.settings.mtf_push_poll_seconds)
 
     def check_once(self, manual: bool = False) -> dict[str, Any] | None:
-        if self.paused_for_manual_retry and not manual:
+        now = datetime.now(UTC)
+        if self.paused_for_manual_retry and not manual and not (self.retry_at and now >= self.retry_at):
             return None
-        resuming = manual and self.paused_for_manual_retry
-        if manual:
-            self.paused_for_manual_retry = False
-            self.last_error = None
-            self.last_error_at = None
+        resuming = self.paused_for_manual_retry
         self.last_checked_at = utc_now()
         try:
             quotes = build_monitored_quotes(self.settings)
@@ -184,8 +186,9 @@ class MtfPushMonitor:
             self.last_mtf_touch_keys = next_mtf_touch_keys
             next_bos_state, _bos_changes = bos_state_changes(self.last_bos_state, quotes)
             self.last_bos_state = next_bos_state
-            self.last_error = None
-            self.last_error_at = None
+            self.paused_for_manual_retry = False
+            self.failures = 0
+            self.retry_at = None
             self.last_success_at = utc_now()
             if resuming:
                 self.telegram_text("\u2705 <b>Alerts back on</b>")
@@ -204,13 +207,18 @@ class MtfPushMonitor:
             return notifications[0] if len(notifications) == 1 else {"ok": True, "notifications": notifications}
         except Exception as exc:
             self.paused_for_manual_retry = True
+            self.failures += 1
+            wait = RETRY_SECONDS[min(self.failures, len(RETRY_SECONDS)) - 1]
+            self.retry_at = now + timedelta(seconds=wait)
             self.last_error = str(exc)
             self.last_error_at = utc_now()
-            self.telegram_text(
-                "\u26A0\uFE0F <b>Alerts paused</b>: Webull check failed\n"
-                f"<code>{html.escape(str(exc)[:300])}</code>\n"
-                f"Fix it, then open {html.escape(PUBLIC_URL)}/api/notifications/check to resume."
-            )
+            logger.exception("Alert scan failed (%d in a row); retrying in %d min", self.failures, wait // 60)
+            if not resuming:  # one message per outage, not one per failed retry
+                self.telegram_text(
+                    "\u26A0\uFE0F <b>Alerts paused</b>: scan failed\n"
+                    f"<code>{html.escape(str(exc)[:300])}</code>\n"
+                    f"Retrying by itself in {wait // 60} min, or open {html.escape(PUBLIC_URL)}/api/notifications/check now."
+                )
             raise
 
     def new_bounce_alerts(self, alerts: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -232,6 +240,8 @@ class MtfPushMonitor:
             "market_window_open": is_market_refresh_window(getattr(self.settings, "mtf_push_timezone", "America/Chicago")),
             "poll_seconds": getattr(self.settings, "mtf_push_poll_seconds", 60),
             "paused_for_manual_retry": self.paused_for_manual_retry,
+            "failures_in_a_row": self.failures,
+            "retry_at": self.retry_at.isoformat() if self.retry_at else None,
             "last_error": self.last_error,
             "last_checked_at": self.last_checked_at,
             "last_success_at": self.last_success_at,
