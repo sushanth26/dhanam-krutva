@@ -465,7 +465,7 @@ def test_bounce_message_colors_by_side_and_escapes_html():
 
     assert long_block.splitlines() == [
         "\U0001F7E2 <b>NVDA</b>  Bounce 1H 34/50",
-        "Entry <code>180.25</code>  \U0001F6D1 SL <code>178.90</code>",
+        "Entry <code>180.25</code>  SL <code>178.90</code>",
     ]
     assert short_block.splitlines()[0] == "\U0001F534 <b>AMD</b>  Reject D &lt;20/21&gt;"
     assert len(short_block.splitlines()) == 2

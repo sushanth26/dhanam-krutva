@@ -473,7 +473,7 @@ def bounce_message(alerts: list[dict[str, Any]]) -> str:
             )
             continue
         dot = "\U0001F7E2" if alert.get("side", "long") == "long" else "\U0001F534"
-        prices = f"Entry <code>{format_price(alert['entry'])}</code>  \U0001F6D1 SL <code>{format_price(alert['stop'])}</code>"
+        prices = f"Entry <code>{format_price(alert['entry'])}</code>  SL <code>{format_price(alert['stop'])}</code>"
         if alert.get("pb") is not None:
             prices += f"  PB <code>{format_price(alert['pb'])}</code>"
         blocks.append(f"{dot} <b>{html.escape(alert['symbol'])}</b>  {html.escape(alert['alert'])}\n{prices}")
