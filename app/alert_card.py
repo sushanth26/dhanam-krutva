@@ -1,5 +1,5 @@
-"""Eye-catching image for a Telegram alert: the company logo and the ticker on a coloured card
-(green bounce, red reject, amber watch). Any failure returns None and the alert goes out as text."""
+"""Eye-catching image for a Telegram alert: the company logo, the ticker and a direction arrow
+(green up for a bounce, red down for a reject) on a coloured card (green / red, amber for watch). Any failure returns None and the alert goes out as text."""
 
 from __future__ import annotations
 
@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 
 LOGO_URL = "https://assets.parqet.com/logos/symbol/{symbol}?format=png"
 COLORS = {"long": (22, 163, 74), "short": (220, 38, 38), "watch": (217, 119, 6)}
-WIDTH, HEIGHT = 900, 360
+WIDTH, HEIGHT = 1040, 360
+ARROW = {"long": (22, 163, 74), "short": (220, 38, 38)}
 _logos: dict[str, bytes | None] = {}
 
 
@@ -50,6 +51,17 @@ def alert_card(alert: dict[str, Any]) -> bytes | None:
         size = 150 if len(symbol) <= 4 else 120
         draw.text((x, 70), symbol, fill="white", font=ImageFont.load_default(size=size))
         draw.text((x + 4, 240), alert.get("alert", ""), fill="white", font=ImageFont.load_default(size=44))
+        # direction badge: white disc, green up arrow (bounce) / red down arrow (reject)
+        side = alert.get("side", "long")
+        cx, cy, r = WIDTH - 120, HEIGHT // 2, 80
+        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill="white")
+        up = side == "long"
+        d = 1 if up else -1
+        head = [(cx, cy - d * 56), (cx - 46, cy - d * 6), (cx + 46, cy - d * 6)]
+        shaft = (cx - 18, min(cy - d * 8, cy + d * 54), cx + 18, max(cy - d * 8, cy + d * 54))
+        fill = ARROW["long" if up else "short"]
+        draw.polygon(head, fill=fill)
+        draw.rectangle(shaft, fill=fill)
         out = io.BytesIO()
         img.save(out, format="PNG")
         return out.getvalue()
