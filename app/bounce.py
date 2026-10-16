@@ -8,6 +8,11 @@ Trade plan (Ripster management, confirmed on 2020-2026 in-play backtests in Stoc
 backtest/evolve.py): stop just past the alert candle and the one before it (0.1 x 10-min ATR
 pad, at least 0.15% from entry); skip if that stop is over 3% away. Exit when a 10-min candle
 closes through the 10-min 5/12 cloud (below it for a long, above it for a short), or at the stop.
+PB: optional pullback limit at the cloud edge the candle bounced off (Stock-Intel
+backtest/early_bounce.py: better R on gap days but fills only ~40%, missing the runners).
+Watch: during the first 10-min candle (9:30-9:40) a heads-up, not a trade, the moment the live
+price tags a cloud and is back above (below) it; the backtest showed these in-candle triggers
+are mostly fakeouts, so the trade still waits for the 10-min close.
 Only completed 10-min bars from 9:40 to 15:00 ET. A separate premarket pass (its own bars,
 4:00-9:30 ET) alerts from 8:30 to the open, labelled "PM"; the regular-session pass ignores it
 (PM alerts get no exit tracking). S1/S2 and R1/R2: nearest support / resistance levels around the entry, from
@@ -36,6 +41,7 @@ TOUCH_BARS = 3
 TOUCH_SLACK = 0.0005
 STOP_PAD_ATR = 0.1
 REPEAT_MINUTES = 60
+WATCH_LAST_END = time(9, 40)  # watch pings only while the first 10-min candle is forming
 # Premarket alerts are off unless BOUNCE_PREMARKET_ENABLED=true: the trade plan was only
 # backtested on regular-session alerts (9:40 on), and premarket ones have no exit tracking.
 PREMARKET_ENABLED = os.getenv("BOUNCE_PREMARKET_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
@@ -250,22 +256,46 @@ def bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, Any
     return premarket + regular
 
 
+def watch_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, Any]],
+                 h1: list[dict[str, Any]], daily: list[dict[str, Any]], price: float | None = None,
+                 now: datetime | None = None) -> list[dict[str, Any]]:
+    """Heads-up while the first regular-session 10-min candle is still forming: it tagged an MTF
+    cloud and the live price is back above (below) it. Not a trade signal."""
+    now = (now or datetime.now(ET)).astimezone(ET)
+    if not (RTH_OPEN <= now.time() < WATCH_LAST_END):
+        return []
+    return _bounce_alerts(symbol, m5, ten, h1, daily, now, (RTH_OPEN, RTH_CLOSE), (FIRST_ALERT, WATCH_LAST_END),
+                          "Watch ", live_price=price)
+
+
 def _bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, Any]],
                    h1: list[dict[str, Any]], daily: list[dict[str, Any]], now: datetime,
                    bar_window: tuple[time, time], alert_window: tuple[time, time],
-                   label: str) -> list[dict[str, Any]]:
-    """One pass: bars inside `bar_window` (start inclusive), alerts on bars closing inside `alert_window`."""
+                   label: str, live_price: float | None = None) -> list[dict[str, Any]]:
+    """One pass: bars inside `bar_window` (start inclusive), alerts on bars closing inside `alert_window`.
+    Watch pass (label "Watch "): the still-forming candle is included, with the live price as its close."""
+    watch = label == "Watch "
     bars = []
     for c in ten:
         t = _dt(c)
         if t is None or c.get("close") is None:
             continue
         end = t + timedelta(minutes=10)
-        if end > now or (c.get("source_count") or 2) < 2:
+        forming = t <= now < end
+        if watch and forming:
+            pass  # the candle being watched
+        elif end > now or (c.get("source_count") or 2) < 2:
             continue  # completed bars only
         if bar_window[0] <= t.time() < bar_window[1]:
             bars.append({"t": t, "end": end, "o": float(c["open"]), "h": float(c["high"]),
-                         "l": float(c["low"]), "c": float(c["close"])})
+                         "l": float(c["low"]), "c": float(c["close"]), "forming": forming})
+    if watch:
+        if not bars or not bars[-1]["forming"]:
+            return []
+        if live_price:
+            b = bars[-1]
+            b["c"] = float(live_price)
+            b["h"], b["l"] = max(b["h"], b["c"]), min(b["l"], b["c"])
     if len(bars) < 4:
         return []
     session = bars[-1]["t"].date()
@@ -309,6 +339,8 @@ def _bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, An
     for i, b in enumerate(bars):
         if b["t"].date() != session or not (alert_window[0] <= b["end"].time() <= alert_window[1]):
             continue
+        if watch and not b["forming"]:
+            continue
         prior = [x for x in bars[max(0, i - 6): i] if x["t"].date() == session]
         if len(prior) < 3:
             prior = bars[max(0, i - 6): i]  # first bars: include yesterday's last bars
@@ -324,17 +356,31 @@ def _bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, An
                 if side == "long":
                     tol = hi * TOUCH_SLACK
                     came_from = sum(x["c"] > x["clouds"][name][1] for x in prior) * 2 >= len(prior)
-                    ok = came_from and min(x["l"] for x in recent) <= hi + tol and b["c"] > hi and b["c"] > b["o"]
+                    ok = came_from and min(x["l"] for x in recent) <= hi + tol and b["c"] > hi and (watch or b["c"] > b["o"])
                 else:
                     tol = lo * TOUCH_SLACK
                     came_from = sum(x["c"] < x["clouds"][name][0] for x in prior) * 2 >= len(prior)
-                    ok = came_from and max(x["h"] for x in recent) >= lo - tol and b["c"] < lo and b["c"] < b["o"]
+                    ok = came_from and max(x["h"] for x in recent) >= lo - tol and b["c"] < lo and (watch or b["c"] < b["o"])
                 if not ok:
                     continue
                 prev = last_fired.get((name, side))
                 last_fired[(name, side)] = b["end"]
                 if prev and (b["end"] - prev) < timedelta(minutes=REPEAT_MINUTES):
                     break  # same cloud + side again within the hour: not a new alert
+                if watch:
+                    out.append({
+                        "id": f"{symbol}|{b['t'].isoformat()}|{side}|{name}|watch",
+                        "symbol": symbol,
+                        "side": side,
+                        "cloud": name,
+                        "alert": f"Watch {'Bounce' if side == 'long' else 'Reject'} {name}",
+                        "watch": True,
+                        "time": b["t"].strftime("%H:%M"),
+                        "bar_start": b["t"].isoformat(),
+                        "price": round(b["c"], 2),
+                        "pb": round(hi if side == "long" else lo, 2),
+                    })
+                    break
                 pad = STOP_PAD_ATR * b["atr"]
                 pb = bars[i - 1] if i else b
                 if side == "long":
@@ -360,6 +406,7 @@ def _bounce_alerts(symbol: str, m5: list[dict[str, Any]], ten: list[dict[str, An
                     "bar_close": b["end"].isoformat(),
                     "entry": round(b["c"], 2),
                     "stop": round(stop, 2),
+                    "pb": round(hi if side == "long" else lo, 2),  # optional pullback limit at the cloud edge
                     **{k2: (round(v, 2) if v is not None else None)
                        for k2, v in levels_around(b["c"], chans, [pdh, pdl, pdc, pmh, pml, *swings]).items()},
                 })

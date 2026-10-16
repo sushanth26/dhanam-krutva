@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from app.bounce import ET, bounce_alerts, levels_around
+from app.bounce import ET, bounce_alerts, levels_around, watch_alerts
 
 
 def bar(start: datetime, o: float, h: float, l: float, c: float) -> dict:
@@ -33,6 +33,32 @@ def test_bounce_off_hourly_cloud_alerts_with_entry_stop_and_levels():
     assert alert["entry"] == 101.5
     assert alert["stop"] < 100  # beyond the cloud
     assert set(alert) >= {"s1", "s2", "r1", "r2"}
+    assert 100 < alert["pb"] < alert["entry"]  # pullback limit at the cloud top
+
+
+def first_candle_setup():
+    session = datetime(2026, 10, 9, tzinfo=ET)
+    _ten, hourly, daily = setup_history(session)
+    yday = (session - timedelta(days=1)).replace(hour=15)
+    ten = [bar(yday + timedelta(minutes=10 * k), 102, 102.4, 101.8, 102.2) for k in range(6)]  # closed above the cloud
+    ten.append({**bar(session.replace(hour=9, minute=30), 101.5, 101.6, 100.05, 100.3), "source_count": 1})  # forming
+    return session, ten, hourly, daily
+
+
+def test_watch_pings_while_the_first_candle_reclaims_the_cloud():
+    session, ten, hourly, daily = first_candle_setup()
+    watch = watch_alerts("META", ten, ten, hourly, daily, price=101.4, now=session.replace(hour=9, minute=33))
+    assert len(watch) == 1
+    assert watch[0]["alert"] == "Watch Bounce 1H 34/50"
+    assert watch[0]["watch"] is True and watch[0]["price"] == 101.4
+    # the regular alert still waits for the 10-min close
+    assert bounce_alerts("META", ten, ten, hourly, daily, now=session.replace(hour=9, minute=33)) == []
+
+
+def test_no_watch_while_still_inside_the_cloud_or_after_the_first_candle():
+    session, ten, hourly, daily = first_candle_setup()
+    assert watch_alerts("META", ten, ten, hourly, daily, price=99.9, now=session.replace(hour=9, minute=33)) == []
+    assert watch_alerts("META", ten, ten, hourly, daily, price=101.4, now=session.replace(hour=9, minute=41)) == []
 
 
 def test_near_miss_is_not_a_tag():

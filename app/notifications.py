@@ -5,6 +5,7 @@ import logging
 import threading
 import urllib.parse
 import urllib.request
+import uuid
 import time as time_module
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -13,6 +14,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pywebpush import WebPushException, webpush
 
+from app.alert_card import alert_card
 from app.config import Settings
 from app.dependencies import service
 from app.market_data import WEBULL_BATCH_BAR_LIMIT, build_live_prices, symbol_chunks
@@ -130,6 +132,7 @@ class MtfPushMonitor:
         self.last_bos_state: dict[str, dict[str, Any]] | None = None
         self.seen_bounce_ids: set[str] = set()
         self.seen_exit_ids: set[str] = set()
+        self.seen_watch_ids: set[str] = set()
         # after a restart (deploy), alerts that closed before this instance started were already
         # sent by the previous one; only a short grace covers the gap while it was down
         self.started_at = datetime.now(UTC) - timedelta(seconds=RESTART_GRACE_SECONDS)
@@ -186,6 +189,7 @@ class MtfPushMonitor:
             all_bounces = remember_bounce_alerts(quotes)
             new_bounces = self.new_bounce_alerts(all_bounces)
             new_exits = self.new_exits(all_bounces)
+            new_watch = self.new_watch_alerts(quotes)
             mtf_quotes = mtf_table_quotes(confirmed_mtf_quotes(quotes))
             signature = mtf_signature(mtf_quotes)
             new_mtf_quotes, next_mtf_touch_keys = new_mtf_touch_quotes(self.last_mtf_touch_keys, mtf_quotes)
@@ -201,6 +205,8 @@ class MtfPushMonitor:
                 self.telegram_text("\u2705 <b>Alerts back on</b>")
             if new_exits:
                 self.telegram_text(exit_message(new_exits))
+            if new_watch:
+                self.telegram(new_watch)
             notifications = [bounce_notification_payload(alert) for alert in new_bounces]
             if new_mtf_quotes and getattr(self.settings, "mtf_touch_push_enabled", False):
                 notifications.append(mtf_notification_payload(new_mtf_quotes))
@@ -237,6 +243,13 @@ class MtfPushMonitor:
             if alert["id"] not in self.seen_bounce_ids and datetime.fromisoformat(alert["bar_close"]) >= cutoff
         ]
         self.seen_bounce_ids.update(alert["id"] for alert in alerts)
+        return fresh
+
+    def new_watch_alerts(self, quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """First-candle heads-ups (tagged a cloud, live price back across it), each sent once."""
+        alerts = [alert for quote in quotes for alert in quote.get("bounce_watch") or []]
+        fresh = [alert for alert in alerts if alert["id"] not in self.seen_watch_ids]
+        self.seen_watch_ids.update(alert["id"] for alert in alerts)
         return fresh
 
     def new_exits(self, alerts: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -282,11 +295,18 @@ class MtfPushMonitor:
             self.last_telegram_error = str(exc)
 
     def telegram(self, alerts: list[dict[str, Any]]) -> bool:
-        """One Telegram message for this scan's new bounce alerts. A send failure never stops the push loop."""
+        """One Telegram photo per new alert (logo + ticker card, details in the caption), or text if the
+        image can't be made. A send failure never stops the push loop."""
         if not alerts or not getattr(self.settings, "telegram_configured", False):
             return False
         try:
-            send_telegram(self.settings, bounce_message(alerts))
+            for alert in alerts:
+                caption = bounce_message([alert])
+                image = alert_card(alert)
+                if image:
+                    send_telegram_photo(self.settings, image, caption)
+                else:
+                    send_telegram(self.settings, caption)
         except Exception as exc:
             self.last_telegram_error = str(exc)
             return False
@@ -427,14 +447,10 @@ def _refresh_bounce_alerts(settings: Settings) -> dict[str, Any]:
 
 def bounce_notification_payload(alert: dict[str, Any]) -> dict[str, Any]:
     symbol = alert["symbol"]
-    levels = " ".join(
-        f"{label} {format_price(alert.get(key))}"
-        for label, key in (("S1", "s1"), ("S2", "s2"), ("R1", "r1"), ("R2", "r2"))
-        if alert.get(key) is not None
-    )
+    pb = f" · PB {format_price(alert['pb'])}" if alert.get("pb") is not None else ""
     return {
         "title": f"{symbol} {alert['alert']}",
-        "body": f"Entry {format_price(alert['entry'])} · SL {format_price(alert['stop'])}" + (f" · {levels}" if levels else ""),
+        "body": f"Entry {format_price(alert['entry'])} · SL {format_price(alert['stop'])}{pb}",
         "badgeCount": 1,
         "badge_count": 1,
         "tag": f"bounce-{alert['id']}",
@@ -445,21 +461,22 @@ def bounce_notification_payload(alert: dict[str, Any]) -> dict[str, Any]:
 
 
 def bounce_message(alerts: list[dict[str, Any]]) -> str:
-    """Telegram HTML: green dot for bounces (long), red for rejects (short); Stock, Alert, Entry / SL, levels."""
+    """Telegram HTML: green dot for bounces (long), red for rejects (short), eyes for first-candle
+    watch pings; Stock, Alert, then Entry / SL / PB (pullback limit at the cloud edge)."""
     blocks = []
     for alert in alerts:
+        if alert.get("watch"):
+            blocks.append(
+                f"\U0001F440 <b>{html.escape(alert['symbol'])}</b>  {html.escape(alert['alert'])}\n"
+                f"Now <code>{format_price(alert['price'])}</code>  Cloud <code>{format_price(alert['pb'])}</code>  "
+                "- wait for the 10m close"
+            )
+            continue
         dot = "\U0001F7E2" if alert.get("side", "long") == "long" else "\U0001F534"
-        lines = [
-            f"{dot} <b>{html.escape(alert['symbol'])}</b>  {html.escape(alert['alert'])}",
-            f"Entry <code>{format_price(alert['entry'])}</code>  \U0001F6D1 SL <code>{format_price(alert['stop'])}</code>",
-        ]
-        support = "  ".join(f"{label} {format_price(alert[key])}" for label, key in (("S1", "s1"), ("S2", "s2")) if alert.get(key) is not None)
-        resistance = "  ".join(f"{label} {format_price(alert[key])}" for label, key in (("R1", "r1"), ("R2", "r2")) if alert.get(key) is not None)
-        if support or resistance:
-            lines.append("  |  ".join(part for part in (f"\u2B07 {support}" if support else "", f"\u2B06 {resistance}" if resistance else "") if part))
-        if not alert.get("premarket"):
-            lines.append(f"\U0001F6AA Exit: 10m close {'below' if alert.get('side', 'long') == 'long' else 'above'} 5/12")
-        blocks.append("\n".join(lines))
+        prices = f"Entry <code>{format_price(alert['entry'])}</code>  \U0001F6D1 SL <code>{format_price(alert['stop'])}</code>"
+        if alert.get("pb") is not None:
+            prices += f"  PB <code>{format_price(alert['pb'])}</code>"
+        blocks.append(f"{dot} <b>{html.escape(alert['symbol'])}</b>  {html.escape(alert['alert'])}\n{prices}")
     return "\n\n".join(blocks)
 
 
@@ -474,6 +491,24 @@ def exit_message(alerts: list[dict[str, Any]]) -> str:
             f"{html.escape(ex['label'])} <code>{format_price(ex['price'])}</code>  {ex['r']:+.1f}R"
         )
     return "\n".join(lines)
+
+
+def send_telegram_photo(settings: Settings, image: bytes, caption: str) -> None:
+    url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendPhoto"
+    boundary = uuid.uuid4().hex
+    parts = []
+    for name, value in (("chat_id", str(settings.telegram_chat_id)), ("caption", caption), ("parse_mode", "HTML")):
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
+    parts.append(
+        f'--{boundary}\r\nContent-Disposition: form-data; name="photo"; filename="alert.png"\r\n'
+        "Content-Type: image/png\r\n\r\n".encode() + image + b"\r\n"
+    )
+    parts.append(f"--{boundary}--\r\n".encode())
+    request = urllib.request.Request(url, data=b"".join(parts),
+                                     headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        if response.status != 200:
+            raise RuntimeError(f"Telegram returned HTTP {response.status}")
 
 
 def send_telegram(settings: Settings, text: str) -> None:

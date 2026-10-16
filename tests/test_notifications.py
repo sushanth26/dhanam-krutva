@@ -466,11 +466,9 @@ def test_bounce_message_colors_by_side_and_escapes_html():
     assert long_block.splitlines() == [
         "\U0001F7E2 <b>NVDA</b>  Bounce 1H 34/50",
         "Entry <code>180.25</code>  \U0001F6D1 SL <code>178.90</code>",
-        "\u2B07 S1 178.50  |  \u2B06 R1 182.00",
-        "\U0001F6AA Exit: 10m close below 5/12",
     ]
     assert short_block.splitlines()[0] == "\U0001F534 <b>AMD</b>  Reject D &lt;20/21&gt;"
-    assert len(short_block.splitlines()) == 3
+    assert len(short_block.splitlines()) == 2
 
 
 def test_monitor_telegram_failure_is_recorded_not_raised(monkeypatch):
@@ -481,6 +479,7 @@ def test_monitor_telegram_failure_is_recorded_not_raised(monkeypatch):
         raise OSError("telegram down")
 
     monkeypatch.setattr(notifications, "send_telegram", boom)
+    monkeypatch.setattr(notifications, "alert_card", lambda _alert: None)
     alert = {"id": "a", "symbol": "NVDA", "alert": "1H Bounce", "entry": 1, "stop": 1}
 
     assert monitor.telegram([alert]) is False
@@ -560,12 +559,38 @@ def test_exit_message_lists_reason_price_and_r():
     assert "EXIT MU" in text and "5/12 lost" in text and "103.46" in text and "+1.8R" in text
 
 
-def test_bounce_message_shows_the_exit_rule_for_regular_session_alerts():
+def test_bounce_message_is_entry_sl_and_pullback_only():
     from app.notifications import bounce_message
-    base = {"symbol": "MU", "alert": "Bounce 1H 34/50", "entry": 100, "stop": 99}
-    assert "10m close below 5/12" in bounce_message([{**base, "side": "long"}])
-    assert "10m close above 5/12" in bounce_message([{**base, "side": "short"}])
-    assert "5/12" not in bounce_message([{**base, "side": "long", "premarket": True}])
+    text = bounce_message([{"symbol": "MU", "alert": "Bounce 1H 34/50", "side": "long", "entry": 100, "stop": 99,
+                            "pb": 99.6, "s1": 98, "r1": 103}])
+    assert "PB <code>99.60</code>" in text
+    assert "S1" not in text and "R1" not in text and "Exit" not in text
+
+
+def test_watch_message_says_to_wait_for_the_close():
+    from app.notifications import bounce_message
+    text = bounce_message([{"symbol": "META", "alert": "Watch Bounce D 20/21", "side": "long", "watch": True,
+                            "price": 719.6, "pb": 718.88}])
+    assert text.startswith("\U0001F440 <b>META</b>  Watch Bounce D 20/21")
+    assert "719.60" in text and "718.88" in text and "10m close" in text
+
+
+def test_telegram_sends_one_photo_per_alert_with_the_text_as_caption(monkeypatch):
+    monitor = MtfPushMonitor(SimpleNamespace(telegram_configured=True, push_subscription_file="unused.json"))
+    photos = []
+    monkeypatch.setattr(notifications, "alert_card", lambda alert: b"png-" + alert["symbol"].encode())
+    monkeypatch.setattr(notifications, "send_telegram_photo", lambda _s, image, caption: photos.append((image, caption)))
+    alerts = [{"id": s, "symbol": s, "alert": "Bounce D 20/21", "side": "long", "entry": 1, "stop": 0.9} for s in ("MU", "BE")]
+    assert monitor.telegram(alerts) is True
+    assert [p[0] for p in photos] == [b"png-MU", b"png-BE"]
+    assert "<b>MU</b>" in photos[0][1]
+
+
+def test_watch_pings_are_sent_once_per_candle():
+    monitor = MtfPushMonitor(SimpleNamespace(push_subscription_file="unused.json"))
+    quotes = [{"bounce_watch": [{"id": "META|09:30|long|D 20/21|watch"}]}]
+    assert len(monitor.new_watch_alerts(quotes)) == 1
+    assert monitor.new_watch_alerts(quotes) == []
 
 
 def test_restart_does_not_resend_alerts_the_old_instance_sent():

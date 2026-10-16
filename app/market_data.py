@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from webull.data.common.category import Category
 from webull.data.common.timespan import Timespan
 
-from app.bounce import bounce_alerts
+from app.bounce import bounce_alerts, watch_alerts
 from app.strategy import find_snapshot_list, normalize_bars, snapshot_price
 from app.webull_service import WebullService
 
@@ -206,6 +206,7 @@ def build_live_prices(
                 "ema_daily": ema_daily,
                 "structure_10m": market_structure(ten_minute_candles),
                 "bounce_alerts": bounce_alerts(symbol, m5_candles, ten_minute_candles, h1_candles, daily_candles),
+                "bounce_watch": watch_alerts(symbol, m5_candles, ten_minute_candles, h1_candles, daily_candles, price),
                 "mtf_touches_today": session_mtf_touch_matches(
                     ten_minute_candles,
                     ten_minute_ema,
